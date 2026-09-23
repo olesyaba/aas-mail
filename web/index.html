@@ -1,0 +1,1032 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="tok" content="__TOKEN__">
+<title>AAS mail</title>
+<style>
+:root{
+  --bg:#f5f6f8;--panel:#fff;--panel2:#fafbfc;--line:#e3e6ea;--text:#1f2328;--muted:#66707a;
+  --accent:#0f6cbd;--accent-bg:#e6f0fa;--unread:#0f6cbd;--danger:#c4314b;--ok:#107c41;
+  --busy:#0f6cbd;--tent:#8a6fd1;--free:#7aa6d6;--oof:#b4485c;--shadow:0 8px 32px rgba(0,0,0,.18);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#181a1d;--panel:#212428;--panel2:#1c1f22;--line:#33383e;--text:#e6e8ea;--muted:#9aa3ac;
+  --accent:#4da3ff;--accent-bg:#1f3346;--unread:#6db3ff;--danger:#ff7a8f;--ok:#5cc98b;--shadow:0 8px 32px rgba(0,0,0,.5);}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+.btn{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 12px}
+.btn:hover{background:var(--accent-bg)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.1)}
+.btn.danger{color:var(--danger)}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.sm{padding:2px 9px;font-size:12.5px}
+.btn:disabled{opacity:.5;cursor:default}
+input[type=text],input[type=search],input[type=datetime-local],input[type=date],select,textarea{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+header{display:flex;flex-wrap:nowrap;align-items:center;gap:8px;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line);min-width:0}
+header>*{flex:none}
+header h1{font-size:15px;margin:0 6px 0 0;font-weight:600;white-space:nowrap}
+.tabs{display:flex;flex-wrap:nowrap;gap:2px;white-space:nowrap}
+.tab{background:none;border:0;padding:6px 11px;border-radius:6px;color:var(--muted);white-space:nowrap}
+.tab.on{background:var(--accent-bg);color:var(--accent);font-weight:600}
+.spacer{flex:1}
+#search{flex:1 1 140px;min-width:90px;max-width:300px}
+#syncbtn{display:flex;align-items:center;gap:6px;white-space:nowrap}
+#syncbtn .ic{display:inline-block}
+#syncbtn.busy .ic{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#synctxt{color:var(--muted);font-size:12px;white-space:nowrap}
+@media (max-width:1320px){#synctxt{display:none}}
+@media (max-width:1180px){#syncbtn .lbl{display:none}#brand{display:none}}
+#dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+#dot.ok{background:var(--ok)}#dot.err{background:var(--danger)}
+main{flex:1;min-height:0;display:flex}
+.view{display:none;flex:1;min-width:0}
+.view.on{display:flex}
+/* mail */
+#folders{width:220px;background:var(--panel2);border-right:1px solid var(--line);overflow:auto;padding:8px;flex:none}
+.folder{display:flex;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.folder:hover{background:var(--accent-bg)}
+.folder.on{background:var(--accent-bg);color:var(--accent);font-weight:600}
+#list{width:380px;flex:none;border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column}
+#listbar{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);color:var(--muted)}
+#listbar select{width:auto}
+#listbar label{display:flex;gap:4px;align-items:center;white-space:nowrap;cursor:pointer}
+#listtitle{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
+#rows{flex:1;overflow:auto}
+.row{padding:9px 14px;border-bottom:1px solid var(--line);cursor:pointer;border-left:3px solid transparent}
+.row:hover{background:var(--panel2)}
+.row.on{background:var(--accent-bg);border-left-color:var(--accent)}
+.row .top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.row .from{flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row.unread .from,.row.unread .subj{font-weight:700;color:var(--unread)}
+.row .read-ico{flex:none;width:16px;text-align:center;font-size:13px;line-height:1;opacity:.85}
+.row.unread .read-ico{color:var(--unread);opacity:1}
+.row:not(.unread) .read-ico{color:var(--muted)}
+.row .date{color:var(--muted);font-size:12px;white-space:nowrap}
+.row .subj{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .prev{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cnt{display:inline-block;min-width:20px;text-align:center;font-size:11px;padding:0 6px;border-radius:10px;background:var(--accent-bg);color:var(--accent);margin-left:6px;font-weight:600}
+.more{padding:12px;text-align:center}
+#reader{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--panel)}
+#rtools{display:flex;gap:6px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line);align-items:center}
+#conv{flex:1;overflow:auto;padding:0 0 30px}
+#chead{padding:14px 18px 6px}
+#chead h2{margin:0 0 4px;font-size:18px}
+#chead .meta{color:var(--muted);font-size:13px}
+.mc{margin:10px 16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden}
+.mc.unread{border-color:var(--accent)}
+.mc .mh{display:flex;gap:10px;align-items:baseline;padding:9px 14px;cursor:pointer;background:var(--panel2)}
+.mc .mh:hover{background:var(--accent-bg)}
+.mc .who{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
+.mc .snip{flex:1;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+.mc .when{color:var(--muted);font-size:12px;white-space:nowrap}
+.mc .mb{display:none;padding:0 0 4px}
+.mc.open .mb{display:block}
+.mc.open .snip{display:none}
+.mc.open .mh{background:var(--panel)}
+.mc .mm{padding:8px 14px 2px;color:var(--muted);font-size:13px}
+.mc .macts{padding:6px 14px;display:flex;gap:6px;flex-wrap:wrap}
+.atts{padding:2px 14px 6px;display:flex;gap:8px;flex-wrap:wrap}
+.atts a{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 10px;color:var(--text);text-decoration:none;font-size:13px}
+.atts a:hover{background:var(--accent-bg)}
+.imgbar{margin:4px 14px;padding:6px 10px;background:var(--accent-bg);border-radius:6px;font-size:13px;display:none}
+.mc iframe{border:0;width:100%;background:#fff;min-height:60px;display:block}
+.empty{margin:auto;color:var(--muted);text-align:center;padding:40px}
+/* calendar */
+#cal{flex-direction:column;background:var(--panel)}
+#calbar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+#calbar h2{font-size:16px;margin:0 12px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;background:var(--panel);padding:5px 12px;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--accent);color:#fff}
+#weekwrap{flex:1;overflow:auto;position:relative;--n:7}
+#weekhead,.allday,#grid{display:grid;grid-template-columns:56px repeat(var(--n),1fr)}
+#weekhead{position:sticky;top:0;background:var(--panel);z-index:5;border-bottom:1px solid var(--line)}
+.dh{padding:6px 8px;text-align:center;border-left:1px solid var(--line)}
+.dh.today b{background:var(--accent);color:#fff;border-radius:12px;padding:1px 8px}
+.allday{position:sticky;top:53px;background:var(--panel);z-index:4;border-bottom:1px solid var(--line);min-height:6px}
+.allday .cell{border-left:1px solid var(--line);padding:2px}
+.chip{background:var(--accent);color:#fff;border-radius:4px;padding:1px 6px;font-size:12px;margin:1px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+#grid{position:relative}
+.hours div{height:var(--hp,48px);font-size:11px;color:var(--muted);text-align:right;padding-right:6px;transform:translateY(-7px)}
+.col{position:relative;border-left:1px solid var(--line);background-image:linear-gradient(var(--line) 1px,transparent 1px);background-size:100% var(--hp,48px)}
+.ev{position:absolute;border-radius:4px;padding:2px 5px;font-size:12px;overflow:hidden;cursor:pointer;color:#fff;border-left:3px solid rgba(0,0,0,.25);background:var(--busy)}
+.ev.tentative{background:var(--tent)}.ev.free{background:var(--free)}.ev.oof{background:var(--oof)}
+.ev small{display:block;opacity:.88}
+.ev.wide{font-size:13.5px;padding:3px 10px}
+.ev.wide .l1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev.wide .l1 small{display:inline;margin-left:10px;font-size:12px}
+.ev.wide>small{font-size:12px}
+.nowline{position:absolute;left:0;right:0;height:2px;background:var(--danger);z-index:3;pointer-events:none}
+/* modal */
+#ov{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+#ov.on{display:flex}
+#modal{background:var(--panel);border-radius:10px;box-shadow:var(--shadow);width:min(680px,100%);max-height:92vh;overflow:auto;padding:18px}
+#modal h3{margin:0 0 12px}
+.f{margin-bottom:10px}.f label{display:block;color:var(--muted);font-size:12px;margin-bottom:3px}
+.f label.chk{display:flex;gap:8px;align-items:center;color:var(--text);font-size:14px}
+.frow{display:flex;gap:10px}.frow>*{flex:1}
+.acts2{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+.acct-block{border-left:3px solid var(--line);background:var(--panel2);border-radius:0 8px 8px 0;padding:10px 12px 2px;margin-bottom:14px}
+.acct-title{font-weight:700;margin-bottom:8px}
+.acct-block.bank{border-color:#501820}.acct-block.bank .acct-title{color:#501820}
+.acct-block.seller{border-color:#003830}.acct-block.seller .acct-title{color:#003830}
+@media (prefers-color-scheme:dark){
+  .acct-block.bank{border-color:#c47a84}.acct-block.bank .acct-title{color:#c47a84}
+  .acct-block.seller{border-color:#3d8f7a}.acct-block.seller .acct-title{color:#3d8f7a}
+}
+.att{display:inline-flex;gap:6px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:2px 8px;margin:2px 4px 2px 0;font-size:13px}
+.att button{border:0;background:none;color:var(--muted)}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:9px 16px;border-radius:8px;display:none;z-index:99;max-width:80vw}
+#toast.err{background:var(--danger)}
+.att-list li{margin:2px 0}
+.badge{display:inline-block;font-size:11px;padding:1px 6px;border-radius:10px;background:var(--accent-bg);color:var(--accent);margin-left:6px}
+.hint{color:var(--muted);font-size:12px;margin-top:3px}
+#modal a{color:var(--accent);word-break:break-all}
+/* palette: Verde Esmeralda #003830 + Vinho #501820 */
+body.green{--accent:#003830;--accent-bg:#e4efec;--unread:#003830;--busy:#003830;--tent:#2a5c4a;--free:#6a9a88;--oof:#501820}
+@media (prefers-color-scheme:dark){body.green{--accent:#3d8f7a;--accent-bg:#142822;--unread:#5cb89e;--busy:#2a6b58;--tent:#4a7a5e;--free:#3d6e5c}}
+body.green header{border-bottom:2px solid var(--accent);background:linear-gradient(90deg,#e4efec,var(--panel) 45%)}
+body.green #folders{background:color-mix(in srgb,var(--accent) 5%,var(--panel2))}
+body.green header h1{color:#003830}
+.tab.g{color:var(--g,#003830)}
+.tab.g::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#003830;margin-right:6px;vertical-align:1px}
+.tab.g.on{background:#003830;color:#fff}
+@media (prefers-color-scheme:dark){.tab.g{--g:#3d8f7a}.tab.g::before{background:#3d8f7a}.tab.g.on{background:#003830;color:#a8e0d0}
+body.green header{background:linear-gradient(90deg,#142822,var(--panel) 45%)}body.green header h1{color:#5cb89e}}
+.tab.r{color:var(--r,#501820)}
+.tab.r::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#501820;margin-right:6px;vertical-align:1px}
+.tab.r.on{background:#501820;color:#fff}
+body:not(.green){--accent:#501820;--accent-bg:#f3e8ea;--unread:#501820;--busy:#501820;--tent:#8a4a55;--free:#b07a82;--oof:#501820}
+body:not(.green) header{background:linear-gradient(90deg,#f3e8ea,var(--panel) 45%);border-bottom:2px solid #501820}
+body:not(.green) header h1{color:#501820}
+@media (prefers-color-scheme:dark){.tab.r{--r:#c47a84}.tab.r.on{background:#501820;color:#f0c8cd}.tab.r::before{background:#c47a84}
+body:not(.green){--accent:#c47a84;--accent-bg:#2b1e20;--unread:#e39aa0;--busy:#8a4a55}
+body:not(.green) header{background:linear-gradient(90deg,#2b1e20,var(--panel) 45%);border-bottom-color:#501820}body:not(.green) header h1{color:#e39aa0}}
+.sep{width:1px;height:20px;background:var(--line);margin:0 6px;align-self:center}
+
+.tab-badge,.folder-badge{display:inline-block;min-width:16px;padding:0 5px;border-radius:8px;font-size:11px;font-weight:700;line-height:16px;text-align:center;margin-left:6px;background:var(--accent);color:#fff}
+.tab:not(.on) .tab-badge{background:var(--accent-bg);color:var(--accent)}
+.folder{align-items:center}
+.folder .fname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.folder .pin{border:0;background:none;color:var(--muted);padding:0 4px;font-size:12px;opacity:.55}
+.folder .pin.on,.folder .pin:hover{opacity:1;color:var(--accent)}
+.folder-sec{font-size:11px;color:var(--muted);padding:10px 10px 4px;text-transform:uppercase;letter-spacing:.04em}
+.folder-tools{display:flex;gap:4px;padding:6px 8px;border-top:1px solid var(--line)}
+.folder-tools .btn{flex:1;font-size:12px;padding:4px 6px}
+.settings-tabs{display:flex;gap:4px;margin:0 0 12px}
+.settings-tabs .btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.about-box{padding:8px 0}
+.about-box h4{margin:0 0 6px;font-size:18px}
+.about-box .ver{color:var(--muted);font-size:13px;margin-bottom:10px}
+.about-box a{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="brand">AAS mail</h1>
+  <div class="tabs">
+    <button class="tab r on" data-view="mail" data-acct="main">Alfa почта<span class="tab-badge" hidden></span></button>
+    <button class="tab r" data-view="cal" data-acct="main">Alfa календарь</button>
+  </div>
+  <div class="spacer"></div>
+  <input id="search" type="search" placeholder="Поиск по почте">
+  <span id="synctxt"></span>
+  <button class="btn" id="syncbtn" title="Принудительная синхронизация почты и календаря с сервером"><span class="ic">⟳</span><span class="lbl">Синхронизировать</span></button>
+  <button class="btn primary" id="newbtn">Создать</button>
+  <button class="btn ghost" id="setbtn" title="Настройки">⚙</button>
+  <span id="dot" title="Соединение с Exchange"></span>
+</header>
+<main>
+  <section class="view on" id="mail">
+    <nav id="folders"></nav>
+    <div id="list">
+      <div id="listbar"><span id="listtitle">Входящие</span><span class="spacer"></span>
+        <label title="Группировать письма в диалоги"><input type="checkbox" id="thr"> Цепочки</label>
+        <select id="window" title="За какой период показывать письма">
+          <option value="3">1 нед.</option><option value="4">2 нед.</option>
+          <option value="5" selected>1 мес.</option><option value="0">Все</option></select></div>
+      <div id="rows"></div>
+    </div>
+    <div id="reader"><div class="empty">Выберите письмо</div></div>
+  </section>
+  <section class="view" id="cal">
+    <div id="calbar">
+      <button class="btn" id="prev">‹</button><button class="btn" id="today">Сегодня</button><button class="btn" id="next">›</button>
+      <h2 id="caltitle"></h2><span class="spacer"></span>
+      <div class="seg" id="calmode"><button data-m="day">День</button><button data-m="work">Раб. неделя</button><button data-m="week">Неделя</button></div>
+    </div>
+    <div id="weekwrap">
+      <div id="weekhead"></div><div class="allday" id="allday"></div><div id="grid"></div>
+    </div>
+  </section>
+</main>
+<div id="ov"><div id="modal"></div></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const TOK = document.querySelector('meta[name=tok]').content;
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let ACCT = 'main', accounts = [{id: 'main', name: 'Alfa-Bank', green: false}];
+async function api(domain, body) {
+  const r = await fetch('/api/' + domain, {method: 'POST', headers: {'X-Tok': TOK, 'Content-Type': 'application/json'}, body: JSON.stringify({...body, acct: ACCT})});
+  const j = await r.json();
+  if (j.ok === false) { const err = new Error(j.message || j.error || 'Ошибка'); err.code = j.error; throw err; }
+  return j;
+}
+let toastT;
+function toast(msg, err) {
+  const t = $('#toast'); t.textContent = msg; t.className = err ? 'err' : ''; t.style.display = 'block';
+  clearTimeout(toastT); toastT = setTimeout(() => t.style.display = 'none', err ? 7000 : 2500);
+}
+const guard = fn => async (...a) => { try { return await fn(...a); } catch (e) { toast(e.message, true); } };
+const who = a => !a ? '' : (a.name || a.address || '');
+const whoFull = a => !a ? '' : (a.name && a.address ? `${a.name} <${a.address}>` : (a.address || a.name || ''));
+// Turn URLs in already-escaped text into links that open outside the app window.
+const linkify = h => h.replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+const fmtSize = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' МБ' : n > 1024 ? Math.round(n / 1024) + ' КБ' : n + ' Б';
+const pad = n => String(n).padStart(2, '0');
+const isoLocal = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const isoDay = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+function fmtDate(s) {  // "YYYY-MM-DD HH:MM" local from the API
+  if (!s) return '';
+  const [d, t] = s.split(' '); const now = new Date();
+  return d === isoDay(now) ? t : `${d.slice(8)}.${d.slice(5, 7)}` + (d.slice(0, 4) !== String(now.getFullYear()) ? '.' + d.slice(0, 4) : '') + ' ' + t;
+}
+
+/* ---------- preferences (kept on the server) ---------- */
+let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 2, cal_view: 'week', links: [], favorite_folders: []};
+let unreadByAcct = {}; // acctId -> {folders: {id:n}, total:n}
+let aboutMeta = {name: 'AAS mail', version: '1.1.0', description: '', contact_mm: '@olesya_ba'};
+async function savePrefs(patch) { Object.assign(prefs, patch); try { await api('prefs', {set: patch}); } catch (e) { toast('Не удалось сохранить настройки', true); } }
+
+/* ---------- modal ---------- */
+function openModal(html) { $('#modal').innerHTML = html; $('#ov').classList.add('on'); return $('#modal'); }
+function closeModal() { $('#ov').classList.remove('on'); $('#modal').innerHTML = ''; }
+$('#ov').addEventListener('mousedown', e => { if (e.target.id === 'ov') closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+/* ---------- tabs ---------- */
+let view = 'mail';
+const bindTab = b => b.onclick = () => showView(b.dataset.view, b.dataset.acct || 'main');
+document.querySelectorAll('.tab').forEach(bindTab);
+function buildAccountTabs() {
+  const box = $('.tabs');
+  accounts.filter(a => a.green).forEach(a => {
+    const sep = document.createElement('span'); sep.className = 'sep'; box.appendChild(sep);
+    [['mail', 'Почта'], ['cal', 'Календарь']].forEach(([v, t]) => {
+      const b = document.createElement('button'); b.className = 'tab g'; b.dataset.view = v; b.dataset.acct = a.id;
+      b.innerHTML = `${esc(a.name)} · ${t}` + (v === 'mail' ? '<span class="tab-badge" hidden></span>' : '');
+      bindTab(b); box.appendChild(b);
+    });
+  });
+  paintTabBadges();
+}
+function setBrand() {
+  const a = accounts.find(x => x.id === ACCT) || accounts[0];
+  $('#brand').textContent = aboutMeta.name || 'AAS mail';
+  document.title = aboutMeta.name + (view === 'cal' ? ' · календарь' : ' · почта') + (a?.green ? ' · ' + a.name : '');
+}
+function paintTabBadges() {
+  document.querySelectorAll('.tab[data-view=mail]').forEach(b => {
+    const badge = b.querySelector('.tab-badge'); if (!badge) return;
+    const n = unreadByAcct[b.dataset.acct || 'main']?.total || 0;
+    badge.hidden = !n; badge.textContent = n > 99 ? '99+' : String(n);
+  });
+}
+async function refreshUnread(acct = ACCT, force = false) {
+  try {
+    const j = await api('unread', force ? {refresh: true} : {});
+    unreadByAcct[acct] = {folders: j.folders || {}, total: j.total || 0};
+    if (acct === ACCT) renderFolders(folderItems);
+    paintTabBadges();
+  } catch (e) { /* counts are best-effort */ }
+}
+function favKey(fid, acct = ACCT) { return `${acct}:${fid}`; }
+function isFav(fid) { return (prefs.favorite_folders || []).includes(favKey(fid)); }
+async function toggleFav(fid) {
+  const k = favKey(fid); const set = new Set(prefs.favorite_folders || []);
+  if (set.has(k)) set.delete(k); else set.add(k);
+  await savePrefs({favorite_folders: [...set]});
+  renderFolders(folderItems);
+}
+function showView(v, acctId = 'main') {
+  switchAccount(acctId);
+  view = v; setBrand();
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.view === v && (b.dataset.acct || 'main') === ACCT));
+  document.querySelectorAll('.view').forEach(s => s.classList.toggle('on', s.id === v));
+  $('#search').style.display = v === 'mail' ? '' : 'none';
+  $('#newbtn').textContent = v === 'cal' ? 'Новое событие' : 'Создать';
+  if (v === 'cal') loadCal();
+}
+$('#newbtn').onclick = () => view === 'cal' ? eventForm() : composeForm();
+
+/* ---------- sync ---------- */
+let syncing = false, lastSync = null, autoTimer = null;
+function setSyncText() { $('#synctxt').textContent = syncing ? 'Синхронизация…' : lastSync ? 'Обновлено ' + pad(lastSync.getHours()) + ':' + pad(lastSync.getMinutes()) : ''; }
+async function syncAll() {
+  if (syncing) return;
+  syncing = true; $('#syncbtn').classList.add('busy'); setSyncText();
+  try {
+    const jobs = [refreshFolders(), loadList(true)];
+    jobs.push(api('sync', {calendar: true}).then(() => { if (view === 'cal') return loadCal(); }));
+    // Unread across every mail folder (current + other accounts).
+    jobs.push(refreshUnread(ACCT, true));
+    accounts.filter(a => a.id !== ACCT).forEach(a => {
+      jobs.push((async () => {
+        const prev = ACCT;
+        try {
+          const j = await fetch('/api/unread', {method:'POST', headers:{'X-Tok':TOK,'Content-Type':'application/json'},
+            body: JSON.stringify({acct: a.id, refresh: true})}).then(r => r.json());
+          unreadByAcct[a.id] = {folders: j.folders || {}, total: j.total || 0};
+        } catch (e) {}
+      })());
+    });
+    const res = await Promise.allSettled(jobs);
+    paintTabBadges();
+    const bad = res.find(r => r.status === 'rejected');
+    lastSync = new Date();
+    if (bad) toast('Синхронизация: ' + (bad.reason?.message || 'ошибка'), true); else toast('Синхронизировано');
+  } finally { syncing = false; $('#syncbtn').classList.remove('busy'); setSyncText(); }
+}
+$('#syncbtn').onclick = guard(syncAll);
+function armAutoSync() {
+  clearInterval(autoTimer);
+  if (prefs.auto_sync > 0) autoTimer = setInterval(() => {
+    if (view === 'mail' && !searchQ && curFolder && !document.hidden && !syncing && !$('#ov').classList.contains('on')) loadListQuiet();
+  }, prefs.auto_sync * 60000);
+}
+
+/* ---------- mail list ---------- */
+const MAIL_TYPES = new Set(['1', '2', '3', '4', '5', '6', '12']);
+const ORDER = {'2': 0, '3': 1, '5': 2, '4': 3, '6': 4};
+let folderItems = [], folders = [], curFolder = null, nextCursor = null, searchQ = '', allItems = [], curKey = null, curGroup = null, openToken = 0;
+const LIST_FIELDS = ['subject', 'from', 'received', 'is_read', 'has_attachments', 'preview', 'thread_topic'];
+
+// Each account keeps its own folders, list, calendar window and position; switching swaps them.
+const acctStates = {};
+const freshState = () => ({folderItems: [], curFolder: null, nextCursor: null, searchQ: '', allItems: [], curKey: null, curGroup: null, cards: [], events: [], anchor: new Date(), lastSync: null, win: '5'});
+const snapshot = () => ({folderItems, curFolder, nextCursor, searchQ, allItems, curKey, curGroup, cards, events, anchor, lastSync, win: $('#window').value});
+function restore(s) { ({folderItems, curFolder, nextCursor, searchQ, allItems, curKey, curGroup, cards, events, anchor, lastSync} = s); $('#window').value = s.win; }
+function switchAccount(id) {
+  if (id === ACCT) return;
+  acctStates[ACCT] = snapshot(); ACCT = id; openToken++;
+  const a = accounts.find(x => x.id === id) || accounts[0];
+  document.body.classList.toggle('green', !!a.green);
+  const saved = acctStates[id];
+  restore(saved || freshState());
+  $('#search').value = searchQ; $('#reader').innerHTML = '<div class="empty">Выберите письмо</div>';
+  if (saved) {
+    renderFolders(folderItems); $('#listtitle').textContent = folders.find(f => f.folder_id === curFolder)?.name || ''; renderList(!!nextCursor);
+  } else {
+    $('#folders').innerHTML = ''; $('#listtitle').textContent = ''; $('#rows').innerHTML = '<div class="empty">Загрузка…</div>'; loadFolders();
+  }
+  $('#dot').className = ''; setSyncText();
+}
+function showAcctError(e) {
+  $('#dot').className = 'err';
+  const a = accounts.find(x => x.id === ACCT);
+  $('#folders').innerHTML = '';
+  $('#rows').innerHTML = `<div class="empty"><b>Не удалось подключиться${a?.green ? ' к «' + esc(a.name) + '»' : ''}</b><br><span style="font-size:13px">${esc(e.message)}</span><br><br>
+    <button class="btn primary" id="retrybtn">Повторить вход</button><div class="hint">Если менялся пароль или включали VPN, нажмите «Повторить вход».</div></div>`;
+  $('#retrybtn').onclick = guard(async () => { $('#rows').innerHTML = '<div class="empty">Подключение…</div>'; await api('retry', {}); loadFolders(); });
+}
+function renderFolders(items) {
+  folderItems = items;
+  folders = items.filter(f => MAIL_TYPES.has(String(f.type)));
+  const counts = unreadByAcct[ACCT]?.folders || {};
+  const kids = p => folders.filter(f => (f.parent_id || '0') === p)
+    .sort((a, b) => (ORDER[a.type] ?? 9) - (ORDER[b.type] ?? 9) || a.name.localeCompare(b.name, 'ru'));
+  const out = [];
+  const walk = (p, depth) => kids(p).forEach(f => { out.push([f, depth]); walk(f.folder_id, depth + 1); });
+  walk('0', 0);
+  const known = new Set(out.map(([f]) => f.folder_id));
+  folders.filter(f => !known.has(f.folder_id)).forEach(f => out.push([f, 0]));
+  const favs = out.filter(([f]) => isFav(f.folder_id));
+  const rest = out.filter(([f]) => !isFav(f.folder_id));
+  const row = ([f, d]) => {
+    const n = counts[f.folder_id] || 0;
+    const badge = n ? `<span class="folder-badge">${n > 99 ? '99+' : n}</span>` : '';
+    const pin = `<button class="pin ${isFav(f.folder_id) ? 'on' : ''}" data-pin="${esc(f.folder_id)}" title="Избранное">${isFav(f.folder_id) ? '★' : '☆'}</button>`;
+    return `<div class="folder ${f.folder_id === curFolder ? 'on' : ''}" data-id="${esc(f.folder_id)}" style="padding-left:${10 + d * 16}px" title="${esc(f.name)}"><span class="fname">${esc(f.name)}</span>${badge}${pin}</div>`;
+  };
+  let html = '';
+  if (favs.length) html += `<div class="folder-sec">Избранные</div>` + favs.map(row).join('');
+  if (rest.length) html += (favs.length ? `<div class="folder-sec">Папки</div>` : '') + rest.map(row).join('');
+  html += `<div class="folder-tools"><button class="btn" id="newfolder">＋ Папка</button></div>`;
+  $('#folders').innerHTML = html;
+  document.querySelectorAll('.folder[data-id]').forEach(el => el.onclick = e => {
+    if (e.target.closest('[data-pin]')) return;
+    openFolder(el.dataset.id);
+  });
+  document.querySelectorAll('[data-pin]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleFav(b.dataset.pin); });
+  const nf = $('#newfolder');
+  if (nf) nf.onclick = guard(async () => {
+    const name = prompt('Имя новой папки');
+    if (!name || !name.trim()) return;
+    await api('folders', {action: 'create', name: name.trim(), parent_id: '0'});
+    toast('Папка создана');
+    await refreshFolders();
+    await refreshUnread(ACCT, true);
+  });
+}
+async function loadFolders() {
+  const acct = ACCT;
+  try {
+    const j = await api('folders', {action: 'list'});
+    if (acct !== ACCT) return;
+    renderFolders(j.items);
+    const inbox = folders.find(f => String(f.type) === '2') || folders[0];
+    if (inbox) openFolder(inbox.folder_id);
+    $('#dot').className = 'ok';
+    refreshUnread(ACCT);
+  } catch (e) { if (acct === ACCT) showAcctError(e); }
+}
+async function refreshFolders() { const acct = ACCT; const j = await api('folders', {action: 'list', refresh: true}); if (acct === ACCT) renderFolders(j.items); }
+
+function openFolder(id) {
+  curFolder = id; searchQ = ''; $('#search').value = '';
+  document.querySelectorAll('.folder').forEach(el => el.classList.toggle('on', el.dataset.id === id));
+  $('#listtitle').textContent = folders.find(f => f.folder_id === id)?.name || '';
+  loadListGuarded(true);
+}
+
+const normSubj = s => (s || '').replace(/^\s*((re|fwd?|fw|отв|ответ|пер|переслано)\s*:\s*)+/i, '').replace(/\s+/g, ' ').trim().toLowerCase();
+const keyOf = m => (prefs.threads ? 't:' + normSubj(m.thread_topic || m.subject) : 'i:' + m.item_id);
+
+async function loadList(reset) {
+  const acct = ACCT, box = $('#rows');
+  if (reset) { box.innerHTML = '<div class="empty">Загрузка…</div>'; nextCursor = null; }
+  let j;
+  try {
+    if (searchQ) j = await api('mail', {action: 'search', query: searchQ, limit: 40, fields: LIST_FIELDS});
+    else j = await api('mail', nextCursor && !reset
+      ? {action: 'list', cursor: nextCursor, limit: 40, fields: LIST_FIELDS}
+      : {action: 'list', folder: curFolder, limit: 40, filter: +$('#window').value, fields: LIST_FIELDS});
+  } catch (e) { if (reset && acct === ACCT) box.innerHTML = ''; throw e; }
+  if (acct !== ACCT) return;
+  nextCursor = j.next_cursor || null;
+  allItems = reset ? j.items : allItems.concat(j.items);
+  renderList(!!(nextCursor || (searchQ && j.has_more)));
+  $('#dot').className = 'ok';
+}
+const loadListGuarded = guard(loadList);
+
+function groupItems(items) {
+  const map = new Map(), order = [];
+  items.forEach(m => {
+    const k = keyOf(m);
+    if (!map.has(k)) { map.set(k, {key: k, items: []}); order.push(k); }
+    map.get(k).items.push(m);
+  });
+  return order.map(k => {
+    const g = map.get(k); g.items.sort((a, b) => (b.received || '').localeCompare(a.received || '')); return g;
+  });
+}
+function renderList(hasMore) {
+  const box = $('#rows'); box.innerHTML = '';
+  if (!allItems.length) box.innerHTML = '<div class="empty">Писем нет</div>';
+  groupItems(allItems).sort((a, b) => (b.items[0].received || '').localeCompare(a.items[0].received || ''))
+    .forEach(g => box.appendChild(rowEl(g)));
+  if (hasMore) {
+    const more = document.createElement('div'); more.className = 'more';
+    more.innerHTML = '<button class="btn">Ещё</button>'; more.firstChild.onclick = () => loadListGuarded(false); box.appendChild(more);
+  }
+}
+function rowEl(g) {
+  const m = g.items[0], n = g.items.length, unread = g.items.some(x => !x.is_read);
+  const senders = [...new Set(g.items.map(x => who(x.from)))].slice(0, 3).join(', ');
+  const el = document.createElement('div');
+  el.className = 'row' + (unread ? ' unread' : '') + (g.key === curKey ? ' on' : '');
+  el.dataset.key = g.key;
+  const ico = unread
+    ? `<span class="read-ico" title="Непрочитано">✉</span>`
+    : `<span class="read-ico" title="Прочитано">✓</span>`;
+  el.innerHTML = `<div class="top">${ico}<span class="from">${esc(senders)}${n > 1 ? `<span class="cnt">${n}</span>` : ''}</span><span class="date">${g.items.some(x => x.has_attachments) ? '📎 ' : ''}${esc(fmtDate(m.received))}</span></div>
+    <div class="subj">${esc((prefs.threads ? m.thread_topic || m.subject : m.subject) || '(без темы)')}</div><div class="prev">${esc((m.preview || '').replace(/\s+/g, ' '))}</div>`;
+  el.onclick = () => openGroup(g);
+  return el;
+}
+
+/* ---------- conversation reader ---------- */
+let cards = [];  // {m, j, el, open}
+const cardOf = id => cards.find(c => c.m.item_id === id);
+
+function openGroup(g) {
+  curKey = g.key; curGroup = g; const token = ++openToken;
+  document.querySelectorAll('.row').forEach(r => r.classList.toggle('on', r.dataset.key === g.key));
+  const subject = g.items[0].thread_topic || g.items[0].subject || '(без темы)';
+  cards = [];
+  $('#reader').innerHTML = `
+    <div id="rtools">
+      <button class="btn" data-a="reply">Ответить</button><button class="btn" data-a="replyall">Ответить всем</button>
+      <button class="btn" data-a="fwd">Переслать</button><button class="btn danger" data-a="del">Удалить</button>
+      <button class="btn" data-a="unread">Непрочитано</button><button class="btn ghost" data-a="all">Развернуть все</button>
+      <select id="mv" style="width:auto"><option value="">Переместить в…</option>${folders.map(f => `<option value="${esc(f.folder_id)}">${esc(f.name)}</option>`).join('')}</select>
+    </div>
+    <div id="conv"><div id="chead"><h2>${esc(subject)}</h2><div class="meta" id="cmeta"></div></div><div id="cards"></div></div>`;
+  g.items.forEach(m => addCard(m));
+  layoutCards();
+  const last = cards[cards.length - 1];
+  cards.filter(c => c === last || !c.m.is_read).slice(-5).forEach(c => toggleCard(c, true));
+  $('#rtools').onclick = guard(toolbar);
+  $('#mv').onchange = guard(async e => {
+    if (!e.target.value) return;
+    await api('mail', {action: 'move', item_ids: g.items.map(m => m.item_id), folder: e.target.value}); afterRemove(g); toast('Перемещено');
+  });
+  // The rest of the conversation (other folders, e.g. Sent) comes from a thread lookup.
+  if (prefs.threads) api('mail', {action: 'thread', item_id: g.items[0].item_id, limit: 30,
+      fields: ['subject', 'from', 'received', 'is_read', 'has_attachments', 'preview']}).then(j => {
+    if (token !== openToken) return;
+    let added = 0;
+    j.items.forEach(m => { if (!cardOf(m.item_id)) { addCard(m); added++; } });
+    if (added) layoutCards();
+  }).catch(() => {});
+}
+function addCard(m) {
+  const c = {m, j: null, open: false, el: document.createElement('div')};
+  c.el.className = 'mc' + (m.is_read ? '' : ' unread');
+  c.el.innerHTML = `<div class="mh"><span class="who">${esc(who(m.from))}</span><span class="snip">${esc((m.preview || '').replace(/\s+/g, ' '))}</span><span class="when">${m.has_attachments ? '📎 ' : ''}${esc(m.received || '')}</span></div><div class="mb"></div>`;
+  c.el.querySelector('.mh').onclick = () => toggleCard(c);
+  cards.push(c);
+}
+function layoutCards() {
+  cards.sort((a, b) => (a.m.received || '').localeCompare(b.m.received || ''));
+  const host = $('#cards'); cards.forEach(c => host.appendChild(c.el));
+  $('#cmeta').textContent = cards.length > 1 ? `${cards.length} писем в цепочке` : '';
+}
+const toggleCard = guard(async (c, force) => {
+  const open = force ?? !c.open;
+  c.open = open; c.el.classList.toggle('open', open);
+  if (open && !c.j) await loadCard(c);
+});
+async function loadCard(c) {
+  const mb = c.el.querySelector('.mb'); mb.innerHTML = '<div class="mm">Загрузка…</div>';
+  let j;
+  try { j = await api('message', {item_id: c.m.item_id, has_att: !!c.m.has_attachments}); }
+  catch (e) {
+    if (e.code !== 'gone') throw e;
+    // A stale hit (deleted or moved message): drop it from the conversation quietly.
+    cards = cards.filter(x => x !== c); c.el.remove(); curGroup.items = curGroup.items.filter(x => x.item_id !== c.m.item_id);
+    const meta = $('#cmeta'); if (meta) meta.textContent = cards.length > 1 ? `${cards.length} писем в цепочке` : '';
+    return;
+  }
+  c.j = j;
+  renderCard(c);
+  if (!c.m.is_read) {
+    c.m.is_read = true; c.el.classList.remove('unread');
+    api('mail', {action: 'mark_read', item_ids: [c.m.item_id], read: true}).catch(() => {});
+    document.querySelector(`.row[data-key="${CSS.escape(curKey || '')}"]`)?.classList.toggle('unread', curGroup.items.some(x => !x.is_read));
+  }
+}
+function renderCard(c) {
+  const j = c.j, m = c.m, mb = c.el.querySelector('.mb');
+  const to = j.to.map(whoFull).join(', '), cc = j.cc.map(whoFull).join(', ');
+  mb.innerHTML = `<div class="mm"><b>${esc(j.from.map(whoFull).join(', '))}</b><br>Кому: ${esc(to)}${cc ? `<br>Копия: ${esc(cc)}` : ''}</div>
+    <div class="macts"><button class="btn sm" data-a="reply">Ответить</button><button class="btn sm" data-a="replyall">Ответить всем</button><button class="btn sm" data-a="fwd">Переслать</button></div>
+    ${j.attachments.length ? `<div class="atts">${j.attachments.map(a => `<a href="/attachment?id=${encodeURIComponent(m.item_id)}&${a.ref ? 'ref=' + encodeURIComponent(a.ref) + '&n=' + encodeURIComponent(a.name) : 'i=' + a.idx}&a=${ACCT}&t=${TOK}" download>📎 ${esc(a.name)} <small>${fmtSize(a.size)}</small></a>`).join('')}</div>` : ''}
+    ${j.html ? '<div class="imgbar">Внешние картинки заблокированы. <a href="#" class="showimg">Показать</a></div>' : ''}
+    <iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" scrolling="no"></iframe>`;
+  const fr = mb.querySelector('iframe'), bar = mb.querySelector('.imgbar');
+  const setFrame = allowImg => {
+    const csp = `default-src 'none'; style-src 'unsafe-inline'; img-src data: ${allowImg ? 'https: http:' : ''}`;
+    const body = j.html || `<pre style="white-space:pre-wrap;font:14px/1.5 -apple-system,system-ui,sans-serif">${linkify(esc(j.text))}</pre>`;
+    fr.srcdoc = `<meta http-equiv="Content-Security-Policy" content="${csp}"><base target="_blank"><style>body{font:14px/1.5 -apple-system,system-ui,sans-serif;margin:8px 14px;color:#1f2328;background:#fff;overflow-y:hidden}img{max-width:100%;height:auto}</style>${body}`;
+    if (j.html && !allowImg && bar && /<img[^>]+src=["']?https?:/i.test(j.html)) bar.style.display = 'block';
+  };
+  fr.onload = () => { try { fr.style.height = (fr.contentDocument.documentElement.scrollHeight + 6) + 'px'; } catch (e) { fr.style.height = '480px'; } };
+  setFrame(false);
+  const show = mb.querySelector('.showimg'); if (show) show.onclick = e => { e.preventDefault(); bar.style.display = 'none'; setFrame(true); };
+  mb.querySelector('.macts').onclick = guard(e => { const a = e.target.dataset?.a; if (a) return act(a, c); });
+}
+function act(a, c) {
+  const send = c => composeForm({mode: a === 'fwd' ? 'fwd' : 'reply', all: a === 'replyall', m: c.m, j: c.j});
+  if (c.j) return send(c);
+  return loadCard(c).then(() => { if (c.j) send(c); });
+}
+async function toolbar(e) {
+  const a = e.target.dataset?.a; if (!a) return;
+  const last = cards[cards.length - 1];
+  if (a === 'reply' || a === 'replyall' || a === 'fwd') return act(a, last);
+  if (a === 'all') { for (const c of cards) await toggleCard(c, true); return; }
+  if (a === 'del') { await api('mail', {action: 'delete', item_ids: curGroup.items.map(m => m.item_id)}); afterRemove(curGroup); toast('Перемещено в «Удалённые»'); }
+  if (a === 'unread') {
+    await api('mail', {action: 'mark_read', item_ids: curGroup.items.map(m => m.item_id), read: false});
+    curGroup.items.forEach(m => m.is_read = false); renderList(!!nextCursor); toast('Отмечено непрочитанным');
+  }
+}
+function afterRemove(g) {
+  const gone = new Set(g.items.map(m => m.item_id));
+  allItems = allItems.filter(m => !gone.has(m.item_id)); curKey = null; curGroup = null;
+  renderList(!!nextCursor); $('#reader').innerHTML = '<div class="empty">Выберите письмо</div>';
+}
+
+$('#window').onchange = () => loadListGuarded(true);
+$('#thr').onchange = e => { savePrefs({threads: e.target.checked}); if (allItems.length) renderList(!!nextCursor); if (curGroup) { curKey = null; $('#reader').innerHTML = '<div class="empty">Выберите письмо</div>'; } };
+$('#search').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  searchQ = e.target.value.trim();
+  $('#listtitle').textContent = searchQ ? 'Поиск: ' + searchQ : (folders.find(f => f.folder_id === curFolder)?.name || '');
+  loadListGuarded(true);
+});
+async function loadListQuiet() {
+  const acct = ACCT;
+  try {
+    const j = await api('mail', {action: 'list', folder: curFolder, limit: 40, filter: +$('#window').value, fields: LIST_FIELDS});
+    if (acct !== ACCT) return;
+    const have = new Set(allItems.map(m => m.item_id));
+    const fresh = j.items.filter(m => !have.has(m.item_id));
+    if (fresh.length) { allItems = fresh.concat(allItems); renderList(!!nextCursor); lastSync = new Date(); setSyncText(); }
+  } catch (e) { /* quiet */ }
+}
+
+/* ---------- compose ---------- */
+function splitAddrs(s) { return s.split(/[;,]/).map(x => x.trim()).filter(Boolean); }
+const sigText = () => ACCT === 'main' ? prefs.signature : prefs.signature2;
+const sigBlock = mode => sigText() && (mode === 'new' || prefs.sig_replies) ? '\n\n-- \n' + sigText() : '';
+let files = [];
+function composeForm(ctx) {
+  files = [];
+  const mode = ctx?.mode || 'new';
+  const title = {new: 'Новое письмо', reply: ctx?.all ? 'Ответить всем' : 'Ответить', fwd: 'Переслать'}[mode];
+  openModal(`<h3>${title}</h3>
+    ${mode === 'reply' ? `<div class="f"><label>Кому</label><div>${esc(ctx.j.from.map(whoFull).join(', '))}${ctx.all ? ' и остальные адресаты' : ''}</div></div>
+      <div class="f"><label>Тема</label><div>Re: ${esc(ctx.j.subject)}</div></div>` : `
+    <div class="f"><label>Кому (через запятую; можно писать фамилию)</label><input type="text" id="cto" list="dl" autocomplete="off"></div>
+    <div class="f"><label>Копия</label><input type="text" id="ccc" list="dl" autocomplete="off"></div>
+    ${mode === 'fwd' ? `<div class="f"><label>Тема</label><div>Fwd: ${esc(ctx.j.subject)}</div></div>` : '<div class="f"><label>Тема</label><input type="text" id="csub"></div>'}`}
+    <datalist id="dl"></datalist>
+    <div class="f"><label>Текст</label><textarea id="cbody" rows="10"></textarea></div>
+    ${mode === 'reply' ? '' : '<div class="f"><input type="file" id="cfile" multiple> <div id="cfiles"></div></div>'}
+    <div class="acts2"><button class="btn" id="ccancel">Отмена</button><button class="btn primary" id="csend">Отправить</button></div>`);
+  $('#cbody').value = sigBlock(mode);
+  const dl = $('#dl'); let t;
+  for (const id of ['cto', 'ccc']) {
+    const inp = $('#' + id); if (!inp) continue;
+    inp.oninput = () => { clearTimeout(t); t = setTimeout(async () => {
+      const last = inp.value.split(/[;,]/).pop().trim(); if (last.length < 3) return;
+      try { const j = await api('people', {action: 'find', query: last, limit: 8});
+        const pre = inp.value.slice(0, inp.value.length - inp.value.split(/[;,]/).pop().length);
+        dl.innerHTML = j.items.map(p => `<option value="${esc(pre + p.address)}">${esc(p.name)}</option>`).join(''); } catch (e) { /* ignore */ } }, 300); };
+  }
+  const fi = $('#cfile');
+  if (fi) fi.onchange = async () => {
+    for (const f of fi.files) files.push({name: f.name, content_base64: await toB64(f), size: f.size});
+    fi.value = ''; drawFiles();
+  };
+  $('#ccancel').onclick = closeModal;
+  $('#csend').onclick = guard(async () => {
+    const btn = $('#csend'); btn.disabled = true; btn.textContent = 'Отправка…';
+    try {
+      const body = $('#cbody').value, atts = files.map(({name, content_base64}) => ({name, content_base64}));
+      if (mode === 'new') {
+        const to = splitAddrs($('#cto').value); if (!to.length) throw new Error('Укажите получателя');
+        await api('mail', {action: 'send', to, cc: splitAddrs($('#ccc').value), subject: $('#csub').value, body, attachments: atts});
+      } else if (mode === 'fwd') {
+        const to = splitAddrs($('#cto').value); if (!to.length) throw new Error('Укажите получателя');
+        await api('mail', {action: 'forward', item_id: ctx.m.item_id, to, body, attachments: atts});
+      } else await api('mail', {action: 'reply', item_id: ctx.m.item_id, body, reply_all: !!ctx.all});
+      closeModal(); toast('Отправлено');
+    } finally { btn.disabled = false; btn.textContent = 'Отправить'; }
+  });
+  const ta = $('#cbody'); ta.setSelectionRange(0, 0);
+  (mode === 'reply' ? ta : $('#cto')).focus();
+}
+function drawFiles() {
+  $('#cfiles').innerHTML = files.map((f, i) => `<span class="att">${esc(f.name)} <small>${fmtSize(f.size)}</small><button data-i="${i}">✕</button></span>`).join('');
+  $('#cfiles').querySelectorAll('button').forEach(b => b.onclick = () => { files.splice(+b.dataset.i, 1); drawFiles(); });
+}
+const toB64 = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(f); });
+
+/* ---------- settings ---------- */
+const parseLinks = t => t.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+  const m = l.match(/^(.*?)\s*\|\s*(https?:\/\/\S+)$/) || l.match(/^()(https?:\/\/\S+)$/);
+  return m ? {name: m[1] || m[2].replace(/^https?:\/\//, '').slice(0, 40), url: m[2]} : null; }).filter(Boolean);
+function acctFields(prefix, kind, title, v, extra, loginHint, defaultUrl) {
+  const def = defaultUrl || '';
+  return `<div class="acct-block ${kind}"><div class="acct-title">${esc(title)}</div>${extra || ''}
+    <div class="frow">
+      <div class="f"><label>Сервер (EAS URL)</label><input type="text" id="${prefix}_url" value="${esc(v.url || def)}" placeholder="${esc(def)}">
+        <div class="hint">По умолчанию: <code>${esc(def)}</code>${def ? ` · <a href="#" data-fillurl="${prefix}_url" data-url="${esc(def)}">подставить</a>` : ''}</div></div>
+      <div class="f"><label>Логин</label><input type="text" id="${prefix}_user" value="${esc(v.username)}">
+        <div class="hint">${loginHint}</div></div>
+    </div>
+    <div class="frow">
+      <div class="f"><label>Email</label><input type="text" id="${prefix}_email" value="${esc(v.email)}">
+        <div class="hint">Адрес, от которого уходят письма (From)</div></div>
+      <div class="f"><label>Пароль</label><input type="password" id="${prefix}_pass" placeholder="${v.hasPass ? 'не менять' : 'обязательно'}">
+        <div class="hint">${v.hasPass ? 'Оставьте пустым, если не меняется' : 'Обязателен для нового аккаунта'}</div></div>
+    </div></div>`;
+}
+$('#setbtn').onclick = async () => {
+  let acctCfg = {main: {url: '', username: '', email: ''}, seller: null, defaults: {main: '', seller: ''}};
+  try { acctCfg = await api('account-config', {action: 'get'}); } catch (e) { toast('Не удалось загрузить настройки аккаунтов', true); }
+  try { aboutMeta = await api('about', {}); } catch (e) { /* keep defaults */ }
+  const sellerBefore = acctCfg.seller || {name: '', url: '', username: '', email: ''};
+  const defs = acctCfg.defaults || {};
+  openModal(`<h3>Настройки</h3>
+    <div class="settings-tabs"><button class="btn on" data-sp="acct">Аккаунты</button><button class="btn" data-sp="mail">Почта</button><button class="btn" data-sp="about">О приложении</button></div>
+    <div data-pane="acct">
+    ${acctFields('m', 'bank', 'Alfa-Bank', {...acctCfg.main, hasPass: !!acctCfg.main.has_password}, null,
+      'Формат ДОМЕН\\логин, например moscow\\U_M1YX3', defs.main || '')}
+    ${acctFields('s', 'seller', 'Alfa-Seller', {...sellerBefore, hasPass: !!sellerBefore.has_password},
+      `<div class="f"><label>Название</label><input type="text" id="s_name" value="${esc(sellerBefore.name || 'Alfa-Seller')}">
+        <div class="hint">Как аккаунт будет подписан в интерфейсе</div></div>`,
+      'Обычно совпадает с email, например name@alfaseller.ru', defs.seller || '')}
+    <div class="hint">Изменения переподключаются сразу после сохранения. Адреса серверов по умолчанию сохранены в форме.</div>
+    </div>
+    <div data-pane="mail" hidden>
+    <div class="f"><label>Подпись (добавляется в новые письма, ответы и пересылки)</label>
+      <textarea id="ssig" rows="5" placeholder="С уважением,&#10;Олеся Бабакаева">${esc(prefs.signature)}</textarea></div>
+    ${accounts.filter(a => a.green).map(a => `<div class="f"><label>Подпись для «${esc(a.name)}»</label><textarea id="ssig2" rows="4">${esc(prefs.signature2)}</textarea></div>`).join('')}
+    <div class="f"><label class="chk"><input type="checkbox" id="ssigr" ${prefs.sig_replies ? 'checked' : ''}> Подпись в ответах и пересылках</label></div>
+    <div class="f"><label class="chk"><input type="checkbox" id="sthr" ${prefs.threads ? 'checked' : ''}> Показывать письма цепочками (диалогами)</label></div>
+    <div class="frow">
+      <div class="f"><label>Автосинхронизация почты</label><select id="sauto">${[[0, 'Выключена'], [1, 'Каждую минуту'], [2, 'Каждые 2 минуты'], [5, 'Каждые 5 минут'], [10, 'Каждые 10 минут']].map(([v, t]) => `<option value="${v}" ${prefs.auto_sync === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+      <div class="f"><label>Вид календаря по умолчанию</label><select id="scal">${[['day', 'День'], ['work', 'Рабочая неделя'], ['week', 'Неделя']].map(([v, t]) => `<option value="${v}" ${prefs.cal_view === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+    </div>
+    <div class="f"><label>Сохранённые ссылки для встреч (по одной в строке: «Название | https://…»)</label>
+      <textarea id="slinks" rows="4" placeholder="Моя комната Telemost | https://telemost.yandex.ru/j/…">${esc((prefs.links || []).map(l => l.name + ' | ' + l.url).join('\n'))}</textarea></div>
+    <div class="hint">Календарь обновляется автоматически; кнопка «Синхронизировать» перечитывает почту (все папки → непрочитанные) и календарь.</div>
+    </div>
+    <div data-pane="about" hidden class="about-box">
+      <h4>${esc(aboutMeta.name || 'AAS mail')}</h4>
+      <div class="ver">Версия ${esc(aboutMeta.version || '')}</div>
+      <p>${esc(aboutMeta.description || '')}</p>
+      <p>Контакт в Mattermost: <b>${esc(aboutMeta.contact_mm || '@olesya_ba')}</b></p>
+      <p class="hint">Локальный клиент поверх Exchange ActiveSync · данные не уходят с этой машины.</p>
+    </div>
+    <div class="acts2"><button class="btn" id="scancel">Отмена</button><button class="btn primary" id="ssave">Сохранить</button></div>`);
+  document.querySelectorAll('.settings-tabs [data-sp]').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.settings-tabs .btn').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('[data-pane]').forEach(pane => { pane.hidden = pane.dataset.pane !== b.dataset.sp; });
+    $('#ssave').style.display = b.dataset.sp === 'about' ? 'none' : '';
+  });
+  document.querySelectorAll('[data-fillurl]').forEach(a => a.onclick = e => {
+    e.preventDefault(); const inp = document.getElementById(a.dataset.fillurl); if (inp) inp.value = a.dataset.url;
+  });
+  $('#scancel').onclick = closeModal;
+  $('#ssave').onclick = guard(async () => {
+    const jobs = [];
+    const mVals = {url: $('#m_url').value.trim(), username: $('#m_user').value.trim(), email: $('#m_email').value.trim(), password: $('#m_pass').value};
+    if (mVals.url !== acctCfg.main.url || mVals.username !== acctCfg.main.username || mVals.email !== acctCfg.main.email || mVals.password)
+      jobs.push(api('account-config', {action: 'save', target: 'main', ...mVals}).then(r => ({acct: 'Alfa-Bank', r})));
+    const sVals = {name: $('#s_name').value.trim(), url: $('#s_url').value.trim(), username: $('#s_user').value.trim(), email: $('#s_email').value.trim(), password: $('#s_pass').value};
+    if (sVals.url && sVals.username && sVals.email &&
+        (sVals.name !== (sellerBefore.name || 'Alfa-Seller') || sVals.url !== sellerBefore.url || sVals.username !== sellerBefore.username || sVals.email !== sellerBefore.email || sVals.password))
+      jobs.push(api('account-config', {action: 'save', target: 'seller', ...sVals}).then(r => ({acct: sVals.name || 'Alfa-Seller', r})));
+    let accountsChanged = false; const authIssues = [];
+    if (jobs.length) {
+      for (const res of await Promise.allSettled(jobs)) {
+        if (res.status === 'fulfilled') { accountsChanged = true; if (!res.value.r.login_ok) authIssues.push(`${res.value.acct}: ${res.value.r.message}`); }
+        else toast('Не удалось сохранить аккаунт: ' + (res.reason?.message || 'ошибка'), true);
+      }
+    }
+    await savePrefs({signature: $('#ssig')?.value ?? prefs.signature, signature2: $('#ssig2') ? $('#ssig2').value : prefs.signature2,
+      sig_replies: $('#ssigr') ? $('#ssigr').checked : prefs.sig_replies, threads: $('#sthr') ? $('#sthr').checked : prefs.threads,
+      auto_sync: $('#sauto') ? +$('#sauto').value : prefs.auto_sync, cal_view: $('#scal') ? $('#scal').value : prefs.cal_view,
+      links: $('#slinks') ? parseLinks($('#slinks').value) : prefs.links, favorite_folders: prefs.favorite_folders || []});
+    if ($('#thr')) $('#thr').checked = prefs.threads; if (allItems.length) renderList(!!nextCursor);
+    calMode = prefs.cal_view; armAutoSync(); if (view === 'cal') loadCal(); closeModal();
+    if (accountsChanged) {
+      toast(authIssues.length ? 'Сохранено. Проблема входа — ' + authIssues.join('; ') : 'Настройки сохранены, переподключение…', authIssues.length > 0);
+      setTimeout(() => location.reload(), authIssues.length ? 4000 : 800);
+    } else toast('Настройки сохранены');
+  });
+};
+
+/* ---------- calendar ---------- */
+let HP = 48;  // px per hour (taller in day view)
+let calMode = 'week', anchor = new Date();
+const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+/** Parse "YYYY-MM-DD HH:MM" as local time (ActiveSync end timestamps). */
+const localDate = s => new Date(String(s).replace(' ', 'T'));
+function mondayOf(d) { const x = startOfDay(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+function visibleDays() {
+  if (calMode === 'day') return [startOfDay(anchor)];
+  const mon = mondayOf(anchor), n = calMode === 'work' ? 5 : 7;
+  return [...Array(n)].map((_, i) => { const d = new Date(mon); d.setDate(d.getDate() + i); return d; });
+}
+const step = () => calMode === 'day' ? 1 : 7;
+$('#prev').onclick = () => { anchor.setDate(anchor.getDate() - step()); loadCal(); };
+$('#next').onclick = () => { anchor.setDate(anchor.getDate() + step()); loadCal(); };
+$('#today').onclick = () => { anchor = new Date(); loadCal(); };
+$('#calmode').onclick = e => { const m = e.target.dataset?.m; if (!m) return; calMode = m; savePrefs({cal_view: m}); $('#weekwrap')._scrolled = false; loadCal(); };
+let events = [];
+
+const loadCal = guard(async () => {
+  const acct = ACCT;
+  document.querySelectorAll('#calmode button').forEach(b => b.classList.toggle('on', b.dataset.m === calMode));
+  const days = visibleDays(), end = new Date(days[days.length - 1]); end.setDate(end.getDate() + 1);
+  const fmt = d => d.toLocaleDateString('ru-RU', {day: 'numeric', month: 'long'});
+  const title = calMode === 'day' ? days[0].toLocaleDateString('ru-RU', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'})
+    : `${fmt(days[0])} – ${fmt(days[days.length - 1])} ${days[days.length - 1].getFullYear()}`;
+  $('#caltitle').textContent = title + ' — загрузка…';
+  let j;
+  try { j = await api('events', {action: 'list', start: isoDay(days[0]), end: isoDay(end), limit: 300}); }
+  catch (e) { if (acct === ACCT) { $('#caltitle').textContent = title; $('#dot').className = 'err'; } throw e; }
+  if (acct !== ACCT) return;
+  // Stale cache answers instantly and refreshes behind the scenes: look again once it is done.
+  if (j.cached_age > 180 && view === 'cal') setTimeout(() => { if (view === 'cal') loadCal(); }, 40000);
+  events = j.items.map(e => { const s = new Date(e.start_iso); let en = e.end ? localDate(e.end) : s; if (isNaN(en) || en < s) en = s; return {...e, s, e: en}; });
+  $('#caltitle').textContent = title; drawCal();
+});
+
+function drawCal() {
+  const today = isoDay(new Date()), days = visibleDays(), wide = days.length === 1;
+  HP = wide ? 72 : 48;
+  $('#weekwrap').style.setProperty('--n', days.length); $('#weekwrap').style.setProperty('--hp', HP + 'px');
+  $('#weekhead').innerHTML = '<div></div>' + days.map(d => `<div class="dh ${isoDay(d) === today ? 'today' : ''}">${DAYS[(d.getDay() + 6) % 7]} <b>${d.getDate()}</b></div>`).join('');
+  $('#allday').innerHTML = '<div></div>' + days.map(() => '<div class="cell"></div>').join('');
+  const cells = [...$('#allday').children].slice(1);
+  $('#grid').innerHTML = '<div class="hours">' + [...Array(24)].map((_, h) => `<div>${h ? pad(h) + ':00' : ''}</div>`).join('') + '</div>' + days.map(() => '<div class="col"></div>').join('');
+  const cols = [...$('#grid').children].slice(1);
+  days.forEach((d, i) => {
+    const day0 = d.getTime(), day1 = day0 + 864e5;
+    const todays = events.filter(e => e.s.getTime() < day1 && Math.max(e.e.getTime(), e.s.getTime() + 1) > day0);
+    todays.filter(e => e.is_all_day).forEach(e => {
+      const c = document.createElement('div'); c.className = 'chip'; c.textContent = e.subject || '(без темы)'; c.onclick = () => eventView(e); cells[i].appendChild(c);
+    });
+    const timed = todays.filter(e => !e.is_all_day && e.e.getTime() > day0).sort((a, b) => a.s - b.s || b.e - a.e);
+    const lanes = [];  // greedy column packing
+    timed.forEach(e => { let l = lanes.findIndex(end => end <= e.s.getTime()); if (l < 0) { l = lanes.length; lanes.push(0); } lanes[l] = e.e.getTime(); e._l = l; });
+    const n = Math.max(1, lanes.length);
+    timed.forEach(e => {
+      const st = Math.max(e.s.getTime(), day0), en = Math.min(e.e.getTime(), day1);
+      const top = (st - day0) / 36e5 * HP, h = Math.max(18, (en - st) / 36e5 * HP - 2);
+      const el = document.createElement('div');
+      el.className = 'ev ' + (e.busy_status || '') + (wide ? ' wide' : ''); el.style.cssText = `top:${top}px;height:${h}px;left:${e._l * 100 / n}%;width:calc(${100 / n}% - 3px)`;
+      const t1 = `${pad(e.s.getHours())}:${pad(e.s.getMinutes())}–${pad(e.e.getHours())}:${pad(e.e.getMinutes())}`;
+      el.innerHTML = (wide ? `<div class="l1">${esc(e.subject || '(без темы)')}<small>${t1}${e.location ? ' · ' + esc(e.location) : ''}</small></div>`
+        : `${esc(e.subject || '(без темы)')}<small>${t1.slice(0, 5)}${e.location ? ' · ' + esc(e.location) : ''}</small>`) +
+        (wide && h > 46 && e.organizer ? `<small>${esc(who(e.organizer))}${(e.attendees || []).length > 1 ? ' · участников: ' + e.attendees.length : ''}</small>` : '');
+      el.title = `${e.subject}\n${t1}\n${e.location || ''}`; el.onclick = () => eventView(e); cols[i].appendChild(el);
+    });
+    if (isoDay(d) === today) {
+      const now = new Date(), line = document.createElement('div'); line.className = 'nowline';
+      line.style.top = ((now - d) / 36e5 * HP) + 'px'; cols[i].appendChild(line);
+    }
+  });
+  const wrap = $('#weekwrap');
+  if (!wrap._scrolled) { const h = days.some(d => isoDay(d) === today) ? Math.max(0, new Date().getHours() - 2) : 8; wrap.scrollTop = h * HP - 10; wrap._scrolled = true; }
+}
+
+function eventView(e) {
+  const att = e.attendees || [];
+  const me = (accounts.find(a => a.id === ACCT) || {}).email || '';
+  const orgAddr = (e.organizer?.address || '').toLowerCase();
+  const iAmOrg = e.response_type === 'organizer' || (me && orgAddr && orgAddr === me.toLowerCase());
+  const isMeeting = e.meeting_status === 'meeting' || !!e.organizer?.address || att.length > 1;
+  const canRespond = isMeeting && !iAmOrg && e.meeting_status !== 'cancelled' && e.meeting_status !== 'appointment';
+  const my = e.response_type || '';
+  const st = {accepted: 'принял', tentative: 'под вопросом', declined: 'отклонил', not_responded: 'без ответа', none: 'без ответа', organizer: 'организатор'};
+  const rsvpBtn = (code, label, danger) => {
+    const on = (code === 'accept' && my === 'accepted') || (code === 'tentative' && my === 'tentative') || (code === 'decline' && my === 'declined');
+    return `<button class="btn ${danger ? 'danger' : ''} ${on ? 'primary' : ''}" data-r="${code}" ${on ? 'disabled title="Текущий ответ"' : ''}>${label}</button>`;
+  };
+  const el = openModal(`<h3>${esc(e.subject || '(без темы)')}${e.is_recurring ? '<span class="badge">серия</span>' : ''}${canRespond ? '<span class="badge">встреча</span>' : ''}</h3>
+    <div class="f">${e.is_all_day ? 'Весь день, ' + e.s.toLocaleDateString('ru-RU') : `${e.s.toLocaleString('ru-RU', {dateStyle: 'medium', timeStyle: 'short'})} – ${e.e.toLocaleTimeString('ru-RU', {timeStyle: 'short'})}`}</div>
+    ${e.location ? `<div class="f">📍 ${linkify(esc(e.location))}</div>` : ''}
+    ${e.organizer ? `<div class="f"><label>Организатор</label>${esc(whoFull(e.organizer))}</div>` : ''}
+    ${my && canRespond ? `<div class="f"><label>Ваш ответ</label>${esc(st[my] || my)}</div>` : ''}
+    ${isMeeting && att.length ? `<div class="f"><label>Участники (${att.length})</label><ul class="att-list" style="margin:0;padding-left:18px">${att.map(a => `<li>${esc(a.name || a.address)}${a.status ? ` <small style="color:var(--muted)">— ${st[a.status] || esc(a.status)}</small>` : ''}</li>`).join('')}</ul></div>` : ''}
+    ${e.body ? `<div class="f"><label>Описание</label><div style="white-space:pre-wrap;max-height:180px;overflow:auto">${linkify(esc(e.body))}</div></div>` : ''}
+    <div class="acts2 meeting-rsvp">${canRespond ? rsvpBtn('accept','Принять',false) + rsvpBtn('tentative','Под вопросом',false) + rsvpBtn('decline','Отклонить',true) : ''}
+      <button class="btn" id="evedit">Изменить</button><button class="btn danger" id="evdel">${iAmOrg && isMeeting ? 'Отменить' : 'Удалить'}</button><button class="btn" id="evclose">Закрыть</button></div>`);
+  $('#evclose').onclick = closeModal;
+  el.querySelectorAll('[data-r]').forEach(b => b.onclick = guard(async () => {
+    await api('events', {action: 'respond', item_id: e.item_id, response: b.dataset.r, notify: true});
+    closeModal(); toast('Ответ отправлен организатору'); loadCal();
+  }));
+  $('#evedit').onclick = () => eventForm(e);
+  $('#evdel').onclick = guard(async () => {
+    if (!confirm(e.is_recurring ? 'Отменить это событие серии?' : (iAmOrg && isMeeting ? 'Отменить событие? Участникам уйдёт уведомление.' : 'Удалить событие?'))) return;
+    await api('events', {action: 'cancel', item_id: e.item_id}); closeModal(); toast(iAmOrg && isMeeting ? 'Событие отменено' : 'Удалено'); loadCal();
+  });
+}
+
+function eventForm(e) {
+  const editing = !!(e && e.item_id);
+  const now = new Date(); now.setMinutes(0, 0, 0); now.setHours(now.getHours() + 1);
+  const s = e ? e.s : now, en = e ? e.e : new Date(now.getTime() + 36e5);
+  const attStr = e ? (e.attendees || []).filter(a => a.address && a.address !== e.organizer?.address).map(a => a.address).join(', ') : '';
+  openModal(`<h3>${editing ? 'Изменить событие' : 'Новое событие'}</h3>
+    <div class="f"><label>Тема</label><input type="text" id="esub" value="${esc(e?.subject || '')}"></div>
+    <div class="frow"><div class="f"><label>Начало</label><input type="datetime-local" id="est" value="${isoLocal(s)}"></div>
+      <div class="f"><label>Конец</label><input type="datetime-local" id="een" value="${isoLocal(en)}"></div></div>
+    <div class="f"><label class="chk"><input type="checkbox" id="eall" ${e?.is_all_day ? 'checked' : ''}> Весь день</label></div>
+    <div class="f"><label>Место</label><input type="text" id="eloc" value="${esc(e?.location || '')}"></div>
+    <div class="f"><label>Участники (через запятую; можно писать фамилию)</label><input type="text" id="eatt" list="edl" value="${esc(attStr)}"><datalist id="edl"></datalist></div>
+    <div class="f" id="avw"><button class="btn" id="eavail" type="button">Проверить занятость</button><div class="hint">Проверка запускается автоматически при изменении участников или времени (как в OWA Widget).</div><div id="avres" class="hint"></div></div>
+    <div class="f"><label>Описание</label>
+      ${(prefs.links || []).length ? `<select id="elink"><option value="">＋ Вставить сохранённую ссылку…</option>${prefs.links.map((l, i) => `<option value="${i}">${esc(l.name)}</option>`).join('')}</select>` : '<div class="hint">Сохранённые ссылки добавляются в «Настройки».</div>'}
+      <textarea id="ebody" rows="4">${esc(e?.body || '')}</textarea></div>
+    ${editing ? '' : '<div class="f"><label class="chk"><input type="checkbox" id="emime" checked> Дополнительно отправить приглашение письмом (для внешних адресов и Seller)</label></div>'}
+    <div class="f" id="repw" ${editing ? 'style="display:none"' : ''}><label>Повторять</label><select id="erep"><option value="">Не повторять</option><option value="daily">Каждый день</option><option value="weekly">Каждую неделю</option><option value="monthly">Каждый месяц</option></select></div>
+    <div class="acts2"><button class="btn" id="ecancel">Отмена</button><button class="btn primary" id="esave">${editing ? 'Сохранить' : 'Создать'}</button></div>`);
+  const inp = $('#eatt'); let t;
+  inp.oninput = () => { clearTimeout(t); t = setTimeout(async () => {
+    const last = inp.value.split(/[;,]/).pop().trim(); if (last.length < 3) return;
+    try { const j = await api('people', {action: 'find', query: last, limit: 8});
+      const pre = inp.value.slice(0, inp.value.length - inp.value.split(/[;,]/).pop().length);
+      $('#edl').innerHTML = j.items.map(p => `<option value="${esc(pre + p.address)}">${esc(p.name)}</option>`).join(''); } catch (x) { /* ignore */ } }, 300); };
+  const sel = $('#elink');
+  if (sel) sel.onchange = () => { const l = prefs.links[+sel.value]; sel.value = ''; if (!l) return;
+    const b = $('#ebody'); b.value = (b.value ? b.value.replace(/\s*$/, '\n') : '') + l.name + ': ' + l.url; };
+  const av = $('#eavail');
+  let avTok = 0;
+  const runAvailability = guard(async () => {
+    if (!$('#avres')) return;
+    const st = new Date($('#est').value), en = new Date($('#een').value);
+    const att = splitAddrs($('#eatt').value);
+    const box = $('#avres');
+    if (isNaN(st) || isNaN(en) || en <= st) { box.textContent = ''; return; }
+    if (!att.length) { box.textContent = ''; return; }
+    const tok = ++avTok; box.textContent = 'Проверяю…';
+    let j;
+    try { j = await api('people', {action: 'availability', who: att, start: isoLocal(st), end: isoLocal(en)}); }
+    catch (x) {   // e.g. Stalwart (Seller) has no free/busy lookup: check only our own calendar
+      if (tok !== avTok) return;
+      const l = await api('events', {action: 'list', start: isoDay(st), end: isoDay(new Date(en.getTime() + 864e5)), limit: 300});
+      if (tok !== avTok) return;
+      const hit = (l.items || []).filter(e => { const es = new Date(e.start_iso), ee = e.end ? localDate(e.end) : es; return es < en && ee > st && e.busy_status !== 'free'; });
+      box.innerHTML = '<div>ℹ️ Этот сервер не отдаёт занятость участников — проверен только ваш календарь.</div>' +
+        (hit.length ? hit.map(e => `<div>⛔ Пересечение: ${esc(e.subject || '(без темы)')} (${new Date(e.start_iso).toLocaleTimeString('ru-RU', {timeStyle: 'short'})})</div>`).join('') : '<div>✅ У вас в это время свободно</div>');
+      return;
+    }
+    if (tok !== avTok) return;
+    const L = {'0': ['свободен', 'ok'], '1': ['под вопросом', 'warn'], '2': ['занят', 'bad'], '3': ['вне офиса', 'bad'], '4': ['нет данных', '']};
+    const rows = (j.items || []).map(x => {
+      const fb = x.freebusy || ''; const w = ['2', '3', '1', '0'].find(c => fb.includes(c)) || '4'; const [t, c] = L[w];
+      return `<div>${c === 'ok' ? '✅' : c === 'warn' ? '⚠️' : c === 'bad' ? '⛔' : '❔'} ${esc(x.name || x.address)} — ${t}</div>`; });
+    (j.unresolved || []).forEach(u => rows.push(`<div>❔ ${esc(u.query)} — не найден/неоднозначен, занятость неизвестна</div>`));
+    box.innerHTML = rows.join('') || 'Нет данных';
+    if ((j.items || []).some(x => /[23]/.test(x.freebusy || ''))) {
+      try { const f = await api('people', {action: 'find_free_slots', who: att, duration_minutes: Math.max(15, Math.round((en - st) / 6e4)), start: isoLocal(st), count: 4});
+        if (tok !== avTok) return;
+        if ((f.items || []).length) box.innerHTML += '<div style="margin-top:4px">Свободно у всех:</div>' + f.items.map(x => `<button class="btn" type="button" data-s="${esc(x.start_iso)}" data-e="${esc(x.end_iso)}">${esc(x.start)}</button>`).join(' ');
+        box.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { $('#est').value = isoLocal(new Date(b.dataset.s)); $('#een').value = isoLocal(new Date(b.dataset.e)); runAvailability(); });
+      } catch (x) { /* slots are a nicety */ } }
+  });
+  if (av) {
+    av.onclick = runAvailability;
+    // OWA-like: auto-check after attendee/time edits (debounced).
+    let avT;
+    const arm = () => { clearTimeout(avT); avT = setTimeout(() => runAvailability(), 450); };
+    ['eatt', 'est', 'een'].forEach(id => { const el = $('#' + id); if (el) el.addEventListener('change', arm); });
+    $('#eatt')?.addEventListener('input', arm);
+  }
+  $('#ecancel').onclick = closeModal;
+  $('#esave').onclick = guard(async () => {
+    const all = $('#eall').checked; let mimeFailed = false;
+    let st = new Date($('#est').value), en2 = new Date($('#een').value);
+    if (isNaN(st) || isNaN(en2) || en2 <= st) { if (!all) throw new Error('Проверьте время: конец должен быть позже начала'); }
+    const p = {subject: $('#esub').value, location: $('#eloc').value, body: $('#ebody').value, all_day: all,
+      start: all ? isoDay(st) + 'T00:00' : isoLocal(st), end: all ? isoDay(new Date(Math.max(en2, st).getTime() + (en2 <= st ? 864e5 : 0))) + 'T00:00' : isoLocal(en2)};
+    if (all && p.end <= p.start) p.end = isoDay(new Date(st.getTime() + 864e5)) + 'T00:00';
+    if (editing) {
+      const att = splitAddrs($('#eatt').value);
+      if (att.length) p.attendees = att;
+      else p.attendees = [];  // explicit empty — clear/keep server meeting roster via update patch
+      await api('events', {action: 'update', item_id: e.item_id, ...p});
+    } else {
+      const att = splitAddrs($('#eatt').value); if (att.length) p.attendees = att;
+      if ($('#erep').value) { p.repeat = $('#erep').value; p.repeat_count = 10; }
+      if (att.length && $('#emime')?.checked) p.mime_invite = true;
+      const r = await api('events', {action: 'create', ...p});
+      if (r.mime_error) mimeFailed = true, toast('Событие создано, но письмо-приглашение не ушло: ' + r.mime_error, true);
+    }
+    closeModal(); if (!mimeFailed) toast(editing ? 'Сохранено' : 'Событие создано'); loadCal();
+  });
+}
+
+/* ---------- start ---------- */
+(async () => {
+  try { prefs = (await api('prefs', {})).prefs; } catch (e) { /* defaults */ }
+  try { aboutMeta = await api('about', {}); } catch (e) { /* defaults */ }
+  try { accounts = (await api('accounts', {})).accounts; } catch (e) { /* main only */ }
+  buildAccountTabs(); setBrand();
+  calMode = prefs.cal_view; $('#thr').checked = prefs.threads; armAutoSync();
+  if (aboutMeta.needs_setup) {
+    toast('Первый запуск: укажите логин и пароль. Адреса серверов уже подставлены.');
+    setTimeout(() => $('#setbtn').click(), 200);
+  } else {
+    await loadFolders();
+  }
+  if (location.hash === '#cal') showView('cal');
+  lastSync = new Date(); setSyncText();
+})();
+</script>
+</body>
+</html>

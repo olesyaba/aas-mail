@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Secrets & local runtime (never ship)
+.env
+.env.*
+*.pem
+config.json
+state*.json
+runtime_token
+webapp.log
+
+# Build/output
+app/AppIcon.iconset/
+app/icon_preview.png
+app/aa-tray-preview.png
+dist/
+*.app/
+*.dmg
+*.zip
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
