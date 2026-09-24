@@ -20,10 +20,22 @@ open ~/Applications/AAS\ mail.app
 
 ```bash
 cd app
-bash build_dist.sh         # → ~/Desktop/AAS-mail-*-mac.zip
+bash build_dist.sh         # → ../dist/AAS-mail-*-mac.zip
 ```
 
 Коллеги вводят свои логин/пароль в Настройках; серверы уже подставлены.
+
+## Тесты
+
+```bash
+bash tests/run_tests.sh            # всё: py + js + swift
+bash tests/run_tests.sh py js      # выборочно
+```
+
+- `tests/python` — логика бэкенда, HTTP-защита, контракт UI↔API, запуск `webapp.py` целиком
+  (временный конфиг, реальный `~/.config/eas-bridge` не трогается)
+- `tests/js` — функции `web/index.html` в песочнице Node (без браузера)
+- `tests/swift` — логика трея (счётчик в меню, напоминания, ссылки «Подключиться»)
 
 ## Структура
 

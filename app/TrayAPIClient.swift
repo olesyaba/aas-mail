@@ -1,23 +1,5 @@
 import Foundation
 
-struct TrayAvailabilityItem: Decodable {
-    let name: String?
-    let address: String?
-    let freebusy: String?
-}
-
-/// An attendee the server could not resolve to a person (not found or
-/// ambiguous) — the web UI lists these separately, so the tray does too.
-struct TrayUnresolvedItem: Decodable {
-    let query: String?
-}
-
-struct TrayAvailabilityResponse: Decodable {
-    let ok: Bool
-    let items: [TrayAvailabilityItem]?
-    let unresolved: [TrayUnresolvedItem]?
-}
-
 struct TrayAccountSummary: Decodable { let id: String }
 struct TrayAccountsResponse: Decodable { let ok: Bool; let accounts: [TrayAccountSummary] }
 
@@ -56,18 +38,6 @@ final class TrayAPIClient {
         return decoded.items
     }
 
-    func createEvent(acct: String, subject: String, location: String, body: String,
-                      start: String, end: String, attendees: [String]) async throws {
-        var payload: [String: Any] = ["acct": acct, "action": "create", "subject": subject,
-                                       "location": location, "body": body, "start": start, "end": end]
-        if !attendees.isEmpty { payload["attendees"] = attendees }
-        let data = try await post("/api/events", payload)
-        let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        if (obj?["ok"] as? Bool) != true {
-            throw TrayAPIError.serverError(obj?["message"] as? String ?? "unknown error")
-        }
-    }
-
     /// RSVP: accept / tentative / decline (MeetingResponse). Notifies the organizer.
     func respondToEvent(acct: String, itemId: String, response: String) async throws {
         let data = try await post("/api/events", [
@@ -78,14 +48,6 @@ final class TrayAPIClient {
         if (obj?["ok"] as? Bool) == false {
             throw TrayAPIError.serverError(obj?["message"] as? String ?? "не удалось ответить на встречу")
         }
-    }
-
-    func availability(acct: String, who: [String], start: String, end: String) async throws
-        -> (items: [TrayAvailabilityItem], unresolved: [String]) {
-        let data = try await post("/api/people", ["acct": acct, "action": "availability", "who": who, "start": start, "end": end])
-        let decoded = try JSONDecoder().decode(TrayAvailabilityResponse.self, from: data)
-        guard decoded.ok else { throw TrayAPIError.serverError("availability lookup failed") }
-        return (decoded.items ?? [], (decoded.unresolved ?? []).compactMap { $0.query })
     }
 
     func accountIds() async throws -> Set<String> {

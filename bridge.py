@@ -13,7 +13,7 @@ from pathlib import Path
 log = logging.getLogger("eas-bridge")
 
 CONF_PATH = Path(os.environ.get("EAS_BRIDGE_CONFIG", "~/.config/eas-bridge/config.json")).expanduser()
-DATA_DIR = Path("~/.config/eas-bridge").expanduser()
+DATA_DIR = Path(os.environ.get("EAS_BRIDGE_DATA_DIR", "~/.config/eas-bridge")).expanduser()
 LIST_FIELDS = ["subject", "from", "received", "is_read", "has_attachments", "to", "cc", "size"]
 
 

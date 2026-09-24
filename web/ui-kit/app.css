@@ -1,0 +1,802 @@
+/* AAS mail — app shell layout (IDs + mail/cal chrome).
+   Tokens + components come from tokens.css / components.css. */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body.aas-root {
+  display: flex;
+  flex-direction: column;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+/* Native form controls (compose / settings / cal) */
+input[type="text"],
+input[type="search"],
+input[type="datetime-local"],
+input[type="date"],
+input[type="password"],
+input[type="email"],
+select,
+textarea {
+  background: var(--aas-panel);
+  border: 1px solid var(--aas-line);
+  border-radius: var(--aas-r-control);  /* one radius for every field: inputs, lists, text areas */
+  padding: 6px 8px;
+  width: 100%;
+}
+
+/* macOS draws <select> natively with its own corner radius, so a list next to a
+   text area looked differently rounded. Draw it ourselves; the chevron is two
+   gradients so it takes the theme's colour in light and dark. */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 30px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--aas-muted) 50%),
+    linear-gradient(135deg, var(--aas-muted) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--aas-accent-text);
+  outline-offset: -1px;
+}
+
+/* Topnav extras */
+.aas-topnav > * {
+  flex: none;
+}
+
+#search {
+  flex: 1 1 140px;
+  min-width: 90px;
+  max-width: 300px;
+}
+
+#synctxt {
+  color: var(--aas-muted);
+  font-size: var(--aas-t-xs);
+  white-space: nowrap;
+}
+
+@media (max-width: 1320px) {
+  #synctxt {
+    display: none;
+  }
+}
+
+@media (max-width: 1180px) {
+  #syncbtn .lbl {
+    display: none;
+  }
+  #brand {
+    display: none;
+  }
+}
+
+/* Seller primary CTA → lime */
+body.theme-seller .aas-btn--primary,
+body.green .aas-btn--primary {
+  background: var(--aas-lime);
+  border-color: var(--aas-lime);
+  color: var(--aas-ink);
+}
+
+body.theme-seller .aas-btn--primary:hover:not(:disabled),
+body.green .aas-btn--primary:hover:not(:disabled) {
+  background: var(--aas-lime-hover);
+  border-color: var(--aas-lime-hover);
+  color: var(--aas-ink);
+  filter: none;
+}
+
+/* Soft badge on inactive tabs */
+.aas-tab:not(.on) .aas-badge {
+  background: var(--aas-accent-bg);
+  color: var(--aas-accent-text);
+}
+
+/* On the active (filled) tab the default accent badge blends in — use a light pill. */
+.aas-tab.on .aas-badge {
+  background: #fff;
+  color: var(--aas-bank-ink, #501820);
+}
+.aas-tab--seller.on .aas-badge {
+  color: var(--aas-seller-ink, #003820);
+}
+
+.aas-badge {
+  margin-left: 6px;
+}
+
+/* Views */
+main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.view {
+  display: none;
+  flex: 1;
+  min-width: 0;
+}
+
+.view.on {
+  display: flex;
+}
+
+/* Mail columns */
+#folders.aas-folders,
+#folders {
+  width: 220px;
+  background: var(--aas-panel-2);
+  border-right: 1px solid var(--aas-line);
+  overflow: auto;
+  padding: 8px;
+  flex: none;
+}
+
+body.theme-seller #folders,
+body.green #folders {
+  background: color-mix(in srgb, var(--aas-accent) 5%, var(--aas-panel-2));
+}
+
+#list {
+  width: 380px;
+  flex: none;
+  border-right: 1px solid var(--aas-line);
+  background: var(--aas-panel);
+  display: flex;
+  flex-direction: column;
+}
+
+#listbar.aas-listbar,
+#listbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--aas-line);
+  color: var(--aas-muted);
+}
+
+#listbar select {
+  width: auto;
+}
+
+#listbar label {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#listtitle {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 110px;
+}
+
+#rows {
+  flex: 1;
+  overflow: auto;
+}
+
+.aas-row__from .aas-badge,
+.cnt {
+  display: inline-block;
+  min-width: 20px;
+  text-align: center;
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--aas-accent-bg);
+  color: var(--aas-accent-text);
+  margin-left: 6px;
+  font-weight: 600;
+}
+
+.more {
+  padding: 12px;
+  text-align: center;
+}
+
+#reader {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--aas-panel);
+}
+
+#rtools.aas-reader-tools,
+#rtools {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--aas-line);
+  align-items: center;
+}
+
+#conv {
+  flex: 1;
+  overflow: auto;
+  padding: 0 0 30px;
+}
+
+#chead {
+  padding: 14px 18px 6px;
+}
+
+#chead h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+#chead .meta {
+  color: var(--aas-muted);
+  font-size: 13px;
+}
+
+/* Conversation card body (kit covers head) */
+.aas-mc {
+  margin: 10px 16px;
+}
+
+.aas-mc__body {
+  display: none;
+  padding: 0 0 4px;
+}
+
+.aas-mc.open .aas-mc__body {
+  display: block;
+}
+
+.aas-mc.open .aas-mc__snip {
+  display: none;
+}
+
+.aas-mc.open .aas-mc__head {
+  background: var(--aas-panel);
+}
+
+.aas-mc__meta {
+  padding: 8px 14px 2px;
+  color: var(--aas-muted);
+  font-size: 13px;
+}
+
+.aas-mc__acts {
+  padding: 6px 14px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.aas-atts {
+  padding: 2px 14px 6px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.aas-imgbar {
+  margin: 4px 14px;
+  padding: 6px 10px;
+  background: var(--aas-accent-bg);
+  border-radius: 6px;
+  font-size: 13px;
+  display: none;
+}
+
+.aas-mc iframe {
+  border: 0;
+  width: 100%;
+  background: #fff;
+  min-height: 60px;
+  display: block;
+}
+
+/* Calendar */
+#cal {
+  flex-direction: column;
+  background: var(--aas-panel);
+}
+
+#calbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--aas-line);
+  flex-wrap: wrap;
+}
+
+#calbar #today {
+  font-weight: 600;
+}
+
+#calbar h2 {
+  font-size: 16px;
+  margin: 0 12px;
+}
+
+#weekwrap {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  --n: 7;
+}
+
+#weekhead,
+.allday,
+#grid {
+  display: grid;
+  grid-template-columns: 56px repeat(var(--n), 1fr);
+}
+
+#weekhead {
+  position: sticky;
+  top: 0;
+  background: var(--aas-panel);
+  z-index: 5;
+  border-bottom: 1px solid var(--aas-line);
+}
+
+.dh {
+  padding: 6px 8px;
+  text-align: center;
+  border-left: 1px solid var(--aas-line);
+}
+
+.dh.today b {
+  background: var(--aas-accent);
+  color: var(--aas-on-accent);
+  border-radius: 12px;
+  padding: 1px 8px;
+}
+
+.allday {
+  position: sticky;
+  top: 53px;
+  background: var(--aas-panel);
+  z-index: 4;
+  border-bottom: 1px solid var(--aas-line);
+  min-height: 6px;
+}
+
+.allday .cell {
+  border-left: 1px solid var(--aas-line);
+  padding: 2px;
+}
+
+#grid {
+  position: relative;
+}
+
+.hours div {
+  height: var(--hp, 48px);
+  font-size: 11px;
+  color: var(--aas-muted);
+  text-align: right;
+  padding-right: 6px;
+  transform: translateY(-7px);
+}
+
+.col {
+  position: relative;
+  border-left: 1px solid var(--aas-line);
+  background-image: linear-gradient(var(--aas-line) 1px, transparent 1px);
+  background-size: 100% var(--hp, 48px);
+}
+
+.aas-ev {
+  position: absolute;
+  color: #fff;
+  border-left: 3px solid rgb(0 0 0 / 25%);
+  background: var(--aas-busy);
+  overflow: hidden;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.aas-ev small {
+  display: block;
+  opacity: 0.88;
+}
+
+.aas-ev.wide {
+  font-size: 13.5px;
+  padding: 3px 10px;
+}
+
+.aas-ev.wide .l1 {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aas-ev.wide .l1 small {
+  display: inline;
+  margin-left: 10px;
+  font-size: 12px;
+}
+
+.aas-ev.wide > small {
+  font-size: 12px;
+}
+
+.aas-nowline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 3;
+}
+
+/* Modal overlay */
+#ov {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 40%);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 16px;
+}
+
+#ov.on {
+  display: flex;
+}
+
+#modal.aas-modal,
+#modal {
+  background: var(--aas-panel);
+  border-radius: var(--aas-r-md);
+  box-shadow: var(--aas-shadow);
+  width: min(680px, 100%);
+  max-height: 92vh;
+  overflow: auto;
+  padding: 18px;
+}
+
+#modal h3 {
+  margin: -18px -18px 12px;
+  padding: 18px 18px 0;
+  cursor: grab;
+  user-select: none;
+}
+
+#modal h3:active {
+  cursor: grabbing;
+}
+
+/* Dragged modal: no backdrop, page underneath stays scrollable/clickable. */
+#ov.floating {
+  background: transparent;
+  pointer-events: none;
+}
+
+#ov.floating #modal,
+#ov.floating .aas-people__dd {
+  pointer-events: auto;
+}
+
+#ov.floating #modal {
+  box-shadow: 0 14px 44px rgb(0 0 0 / 32%), 0 0 0 1px rgb(0 0 0 / 8%);
+}
+
+#modal a {
+  color: var(--aas-accent-text);
+  word-break: break-all;
+}
+
+/* Links styled as buttons keep the button's colours. `#modal a` above outranks
+   `.aas-btn--primary`, which painted «▶ Подключиться» in the fill colour —
+   an empty wine button in light mode. */
+#modal a.aas-btn { color: var(--aas-text); text-decoration: none; word-break: normal; }
+#modal a.aas-btn--primary,
+a.aas-btn--primary { color: var(--aas-on-accent); text-decoration: none; }
+
+.f {
+  margin-bottom: 10px;
+}
+
+.f label {
+  display: block;
+  color: var(--aas-muted);
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+
+.f label.chk {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--aas-text);
+  font-size: 14px;
+}
+
+.frow {
+  display: flex;
+  gap: 10px;
+}
+
+.frow > * {
+  flex: 1;
+}
+
+.aas-modal__acts,
+.acts2 {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.aas-hint,
+.hint {
+  color: var(--aas-muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.att-list li {
+  margin: 2px 0;
+}
+
+.aas-card--acct-bank .aas-acct-title { color: var(--aas-bank-ink); }
+.aas-card--acct-seller .aas-acct-title { color: var(--aas-seller-ink); }
+
+
+/* Toast fixed position */
+#toast.aas-toast,
+#toast {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  z-index: 99;
+  max-width: 80vw;
+}
+
+/* ——— Backlog UX fixes ——— */
+/* [hidden] must win over .aas-badge{display:inline-block}: tabs showed a stray "0". */
+.aas-badge[hidden] { display: none !important; }
+
+.aas-setbtn {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+}
+.aas-setbtn:hover { background: var(--aas-accent-bg); }
+
+/* Read state: filled dot = unread, ring = read (Outlook convention). */
+.aas-readdot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--aas-unread, var(--aas-accent));
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+.aas-readdot--read {
+  background: transparent;
+  border: 1.5px solid var(--aas-muted);
+}
+.aas-row__ico { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; }
+.aas-row__ico:hover .aas-readdot { transform: scale(1.2); }
+.aas-bulkbar .aas-btn .aas-readdot { margin-right: 6px; width: 9px; height: 9px; }
+.aas-bulkbar { gap: 6px; }
+
+.aas-slots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+
+/* Connection status: nothing while all is well; a labelled, clickable pill on error.
+   (A bare grey/green dot next to Settings read as a mystery control.) */
+#dot { display: none; }
+#dot.aas-status-dot--err {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  height: 28px;
+  padding: 0 10px 0 22px;
+  border: 0;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--aas-danger) 14%, transparent);
+  color: var(--aas-danger);
+  font: inherit;
+  font-size: var(--aas-t-xs);
+  font-weight: 600;
+  cursor: pointer;
+  position: relative;
+}
+#dot.aas-status-dot--err::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--aas-danger);
+}
+/* Fixed-width status text so «Синхронизация…» ⇄ «Обновлено 16:30» does not shift buttons. */
+#synctxt { min-width: 112px; text-align: right; }
+
+/* Outlook categories */
+.aas-cat {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 17px;
+  font-weight: 600;
+  /* lifted towards white in dark mode so dark category colours stay legible */
+  color: color-mix(in srgb, var(--cat), #fff var(--aas-cat-lift));
+  background: color-mix(in srgb, var(--cat) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cat) 45%, transparent);
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.aas-cats .aas-cat:first-child { margin-left: 0; }
+.aas-ev--cat { border-left-color: rgb(0 0 0 / 30%); }
+.aas-catedit { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.aas-catedit__row { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.aas-catedit__row input[type=color] { width: 26px; height: 22px; padding: 0; border: 0; background: none; cursor: pointer; }
+.aas-catedit__row .aas-cat { margin-left: 0; }
+
+.aas-themepick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.aas-themepick button {
+  border: 1px solid var(--aas-line);
+  border-radius: var(--aas-r-pill);
+  background: var(--aas-panel);
+  padding: 5px 12px;
+  font: inherit;
+  cursor: pointer;
+  color: var(--aas-text);
+}
+.aas-themepick button.on {
+  background: var(--aas-accent);
+  border-color: var(--aas-accent);
+  color: var(--aas-on-accent);
+}
+
+/* Место + «Мои ссылки…» on one line */
+.aas-locrow { display: flex; gap: 8px; }
+.aas-locrow input { flex: 1 1 auto; min-width: 0; }
+.aas-locrow select { flex: 0 0 auto; width: auto; max-width: 42%; }
+
+/* Invitation card inside a letter */
+.aas-invite {
+  margin: 10px 0 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--aas-line);
+  border-left: 4px solid var(--aas-accent);
+  border-radius: var(--aas-r-md);
+  background: var(--aas-accent-bg);
+}
+.aas-invite--cancel { border-left-color: var(--aas-danger); background: color-mix(in srgb, var(--aas-danger) 8%, var(--aas-panel)); }
+.aas-invite__kind { font-size: var(--aas-t-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--aas-accent-text); }
+.aas-invite--cancel .aas-invite__kind { color: var(--aas-danger); }
+.aas-invite__title { font-size: var(--aas-t-lg); font-weight: 600; margin: 4px 0 6px; }
+.aas-invite__row { margin: 2px 0; }
+.aas-invite__muted { color: var(--aas-muted); font-size: var(--aas-t-sm); }
+.aas-invite__acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.aas-invite__sep { width: 1px; height: 22px; background: var(--aas-line-strong, var(--aas-line)); margin: 0 4px; }
+.aas-invite__acts .aas-btn.on { background: var(--aas-accent); border-color: var(--aas-accent); color: var(--aas-on-accent); opacity: 1; }
+.aas-invite__acts .aas-btn--danger.on { background: #b3263e; border-color: #b3263e; color: #fff; }
+.aas-invite__status { margin-top: 8px; font-size: var(--aas-t-sm); color: var(--aas-muted); }
+.aas-invite a { color: var(--aas-accent-text); }
+.aas-invite a.aas-btn { text-decoration: none; }
+.aas-invite a.aas-btn--primary { color: var(--aas-on-accent); }
+
+/* On/off options as macOS-style switches, label left · switch right.
+   (Row selection boxes stay checkboxes — that is choosing, not switching.) */
+.aas-toggle {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.aas-toggle--inline { display: inline-flex; justify-content: flex-start; gap: 8px; }
+input[type="checkbox"].aas-sw {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  border-radius: 10px;
+  background: var(--aas-line-strong, var(--aas-line));
+  position: relative;
+  cursor: pointer;
+  transition: background var(--aas-dur) var(--aas-ease);
+}
+input[type="checkbox"].aas-sw::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 30%);
+  transition: transform var(--aas-dur) var(--aas-ease);
+}
+input[type="checkbox"].aas-sw:checked { background: var(--aas-accent); }
+input[type="checkbox"].aas-sw:checked::before { transform: translateX(14px); }
+input[type="checkbox"].aas-sw:focus-visible { outline: 2px solid var(--aas-accent-text); outline-offset: 2px; }
+
+.aas-hint-tight { margin: -4px 0 8px; }
+
+/* Meeting cancelled by the organizer (still in the calendar until removed). */
+.aas-ev--cancelled {
+  opacity: .55;
+  text-decoration: line-through;
+  background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgb(255 255 255 / 18%) 6px 12px);
+}
+.aas-pill--cancel { background: var(--aas-danger, #c0392b); color: #fff; }
+
+/* Account unread total above the folder tree. */
+.aas-folder-total {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px 8px; font-size: 12px; font-weight: 600;
+  color: var(--aas-muted, inherit); border-bottom: 1px solid var(--aas-line);
+  margin-bottom: 4px;
+}
+
+/* Event card: one scroll zone (the modal), no inner scroller for the description. */
+.aas-evbody { white-space: pre-wrap; overflow-wrap: anywhere; }
+.aas-att > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 8px; }
+.aas-att > summary::-webkit-details-marker { display: none; }
+.aas-att > summary label { margin: 0; cursor: pointer; }
+.aas-att > summary label::after { content: " ▸"; color: var(--aas-muted); }
+.aas-att[open] > summary label::after { content: " ▾"; }
+.aas-att__sum { color: var(--aas-muted); }
+.aas-att .att-list { margin: 6px 0 0; padding-left: 18px; }
+/* Actions stay reachable while a long description scrolls under them. */
+#modal > .meeting-rsvp {
+  position: sticky; bottom: -18px; margin: 12px -18px -18px; padding: 12px 18px 18px;
+  background: var(--aas-panel); border-top: 1px solid var(--aas-line);
+}

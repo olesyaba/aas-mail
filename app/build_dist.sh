@@ -1,10 +1,11 @@
 #!/bin/bash
 # Package AAS mail for colleagues: self-contained .app + README, no credentials.
-# Output: ~/Desktop/AAS-mail-1.2.0-mac.zip (or DIST_DIR).
+# Output: <project>/dist/AAS-mail-*-mac.zip (override with DIST_DIR).
 set -euo pipefail
 cd "$(dirname "$0")"
-VERSION="${VERSION:-1.2.0}"
-DIST_DIR="${DIST_DIR:-$HOME/Desktop}"
+ROOT="$(cd .. && pwd)"
+VERSION="${VERSION:-$(sed -n 's/^ *"version": "\([^"]*\)".*/\1/p' "$ROOT/webapp.py" | head -1)}"  # single source: APP_META
+DIST_DIR="${DIST_DIR:-$ROOT/dist}"
 STAGE="$(mktemp -d)/AAS-mail-${VERSION}"
 mkdir -p "$STAGE" "$DIST_DIR"
 
@@ -24,7 +25,7 @@ AAS mail — локальная почта и календарь (Alfa-Bank + Al
     Alfa-Bank:   https://owa.alfabank.ru/Microsoft-Server-ActiveSync
     Alfa-Seller: https://sync.alfaops.ru/Microsoft-Server-ActiveSync
 
-Установка (macOS 12+, Apple Silicon / Intel — собрано на вашей машине)
+Установка (macOS 12+, Mac на Apple Silicon — M1 и новее; на Intel не запустится)
 ----------------------------------------------------------------------
 1. Распакуйте архив.
 2. Перетащите «AAS mail.app» в «Программы» (Applications).
@@ -45,20 +46,27 @@ AAS mail — локальная почта и календарь (Alfa-Bank + Al
 Требования
 ----------
 • Сеть до owa.alfabank.ru / sync.alfaops.ru (VPN, если нужен у вас в компании).
-• Python 3.12 внутри приложения уже есть (venv); отдельно ставить ничего не нужно.
+• Всё нужное (включая Python) уже внутри приложения — отдельно ставить ничего не нужно.
 
 Контакт
 -------
 Mattermost: @olesya_ba
 EOF
 
+# Release notes for colleagues (source: RELEASE_NOTES.txt in the project root).
+cp "$ROOT/RELEASE_NOTES.txt" "$STAGE/ЧТО_НОВОГО.txt"
+
 ZIP="$DIST_DIR/AAS-mail-${VERSION}-mac.zip"
 rm -f "$ZIP"
 (
   cd "$(dirname "$STAGE")"
-  ditto -c -k --keepParent "$(basename "$STAGE")" "$ZIP"
+  # No xattrs/resource forks: they become "._*" files under plain `unzip`
+  # and break the app's code signature ("sealed resource is missing").
+  ditto -c -k --norsrc --noextattr --noqtn --keepParent "$(basename "$STAGE")" "$ZIP"
 )
 # Also copy app alone for quick local install
+# Replace, never merge: files removed from the app must not linger in the copy.
+rm -rf "$DIST_DIR/AAS mail.app"
 cp -R "$STAGE/AAS mail.app" "$DIST_DIR/" 2>/dev/null || true
 
 echo ""

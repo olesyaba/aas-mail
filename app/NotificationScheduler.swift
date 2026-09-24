@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import UserNotifications
 
@@ -8,16 +9,35 @@ let trayNotificationIdPrefix = "eas-bridge-event-"
 /// frontmost, so without this the reminders would silently do nothing in
 /// exactly the situation where the user is sitting at their desk.
 final class ForegroundNotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
+    static let categoryID = "EAS_MEETING_JOIN"
+    static let joinActionID = "JOIN_MEETING"
+    static let joinURLKey = "joinURL"
+
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                  willPresent notification: UNNotification,
                                  withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         completionHandler([.banner, .sound])
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                 didReceive response: UNNotificationResponse,
+                                 withCompletionHandler completionHandler: @escaping () -> Void) {
+        let info = response.notification.request.content.userInfo
+        if response.actionIdentifier == Self.joinActionID
+            || response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+           let s = info[Self.joinURLKey] as? String,
+           let url = URL(string: s) {
+            NSWorkspace.shared.open(url)
+        }
+        completionHandler()
     }
 }
 
 @MainActor
 final class NotificationScheduler {
     private var scheduledIds: Set<String> = []
+    /// Minutes before start; 0 = no reminders (Settings).
+    var leadMinutes = 5
     /// UNUserNotificationCenter.delegate is `weak` — this is the strong ref.
     private let presenter = ForegroundNotificationPresenter()
     private var adoptedPending = false
@@ -29,6 +49,16 @@ final class NotificationScheduler {
     }
 
     func requestAuthorizationIfNeeded() {
+        let join = UNNotificationAction(
+            identifier: ForegroundNotificationPresenter.joinActionID,
+            title: "Подключиться",
+            options: [.foreground])
+        let cat = UNNotificationCategory(
+            identifier: ForegroundNotificationPresenter.categoryID,
+            actions: [join],
+            intentIdentifiers: [],
+            options: [])
+        UNUserNotificationCenter.current().setNotificationCategories([cat])
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             guard settings.authorizationStatus == .notDetermined else { return }
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
@@ -69,7 +99,9 @@ final class NotificationScheduler {
     func reschedule(for events: [TrayEvent]) {
         lastEvents = events
         if !adoptedPending { rescheduledBeforeAdoption = true }
-        let (toSchedule, toCancel) = TrayNotificationPlan.plan(events: events, now: Date(), previouslyScheduledIds: scheduledIds)
+        let (toSchedule, toCancel) = TrayNotificationPlan.plan(
+            events: leadMinutes > 0 ? events : [], now: Date(), leadMinutes: max(leadMinutes, 1),
+            previouslyScheduledIds: scheduledIds)
         let center = UNUserNotificationCenter.current()
         if !toCancel.isEmpty { center.removePendingNotificationRequests(withIdentifiers: toCancel) }
         for req in toSchedule {
@@ -77,6 +109,11 @@ final class NotificationScheduler {
             content.title = req.title
             content.body = req.body
             content.sound = .default
+            content.categoryIdentifier = ForegroundNotificationPresenter.categoryID
+            if let url = req.joinURL {
+                content.userInfo = [ForegroundNotificationPresenter.joinURLKey: url.absoluteString]
+                content.body = req.body + " · Подключиться"
+            }
             let interval = max(1, req.fireDate.timeIntervalSinceNow)
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
             center.add(UNNotificationRequest(identifier: req.identifier, content: content, trigger: trigger)) { error in

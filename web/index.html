@@ -5,232 +5,72 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="tok" content="__TOKEN__">
 <title>AAS mail</title>
-<style>
-:root{
-  --bg:#f5f6f8;--panel:#fff;--panel2:#fafbfc;--line:#e3e6ea;--text:#1f2328;--muted:#66707a;
-  --accent:#0f6cbd;--accent-bg:#e6f0fa;--unread:#0f6cbd;--danger:#c4314b;--ok:#107c41;
-  --busy:#0f6cbd;--tent:#8a6fd1;--free:#7aa6d6;--oof:#b4485c;--shadow:0 8px 32px rgba(0,0,0,.18);
-}
-@media (prefers-color-scheme:dark){:root{
-  --bg:#181a1d;--panel:#212428;--panel2:#1c1f22;--line:#33383e;--text:#e6e8ea;--muted:#9aa3ac;
-  --accent:#4da3ff;--accent-bg:#1f3346;--unread:#6db3ff;--danger:#ff7a8f;--ok:#5cc98b;--shadow:0 8px 32px rgba(0,0,0,.5);}}
-*{box-sizing:border-box}
-html,body{height:100%;margin:0}
-body{font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
-button,input,select,textarea{font:inherit;color:inherit}
-button{cursor:pointer}
-.btn{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 12px}
-.btn:hover{background:var(--accent-bg)}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.btn.primary:hover{filter:brightness(1.1)}
-.btn.danger{color:var(--danger)}
-.btn.ghost{border-color:transparent;background:transparent}
-.btn.sm{padding:2px 9px;font-size:12.5px}
-.btn:disabled{opacity:.5;cursor:default}
-input[type=text],input[type=search],input[type=datetime-local],input[type=date],select,textarea{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%}
-input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
-header{display:flex;flex-wrap:nowrap;align-items:center;gap:8px;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line);min-width:0}
-header>*{flex:none}
-header h1{font-size:15px;margin:0 6px 0 0;font-weight:600;white-space:nowrap}
-.tabs{display:flex;flex-wrap:nowrap;gap:2px;white-space:nowrap}
-.tab{background:none;border:0;padding:6px 11px;border-radius:6px;color:var(--muted);white-space:nowrap}
-.tab.on{background:var(--accent-bg);color:var(--accent);font-weight:600}
-.spacer{flex:1}
-#search{flex:1 1 140px;min-width:90px;max-width:300px}
-#syncbtn{display:flex;align-items:center;gap:6px;white-space:nowrap}
-#syncbtn .ic{display:inline-block}
-#syncbtn.busy .ic{animation:spin 1s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-#synctxt{color:var(--muted);font-size:12px;white-space:nowrap}
-@media (max-width:1320px){#synctxt{display:none}}
-@media (max-width:1180px){#syncbtn .lbl{display:none}#brand{display:none}}
-#dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
-#dot.ok{background:var(--ok)}#dot.err{background:var(--danger)}
-main{flex:1;min-height:0;display:flex}
-.view{display:none;flex:1;min-width:0}
-.view.on{display:flex}
-/* mail */
-#folders{width:220px;background:var(--panel2);border-right:1px solid var(--line);overflow:auto;padding:8px;flex:none}
-.folder{display:flex;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.folder:hover{background:var(--accent-bg)}
-.folder.on{background:var(--accent-bg);color:var(--accent);font-weight:600}
-#list{width:380px;flex:none;border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column}
-#listbar{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);color:var(--muted)}
-#listbar select{width:auto}
-#listbar label{display:flex;gap:4px;align-items:center;white-space:nowrap;cursor:pointer}
-#listtitle{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
-#rows{flex:1;overflow:auto}
-.row{padding:9px 14px;border-bottom:1px solid var(--line);cursor:pointer;border-left:3px solid transparent}
-.row:hover{background:var(--panel2)}
-.row.on{background:var(--accent-bg);border-left-color:var(--accent)}
-.row .top{display:flex;justify-content:space-between;gap:8px;align-items:center}
-.row .from{flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.row.unread .from,.row.unread .subj{font-weight:700;color:var(--unread)}
-.row .read-ico{flex:none;width:16px;text-align:center;font-size:13px;line-height:1;opacity:.85}
-.row.unread .read-ico{color:var(--unread);opacity:1}
-.row:not(.unread) .read-ico{color:var(--muted)}
-.row .date{color:var(--muted);font-size:12px;white-space:nowrap}
-.row .subj{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.row .prev{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cnt{display:inline-block;min-width:20px;text-align:center;font-size:11px;padding:0 6px;border-radius:10px;background:var(--accent-bg);color:var(--accent);margin-left:6px;font-weight:600}
-.more{padding:12px;text-align:center}
-#reader{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--panel)}
-#rtools{display:flex;gap:6px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line);align-items:center}
-#conv{flex:1;overflow:auto;padding:0 0 30px}
-#chead{padding:14px 18px 6px}
-#chead h2{margin:0 0 4px;font-size:18px}
-#chead .meta{color:var(--muted);font-size:13px}
-.mc{margin:10px 16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden}
-.mc.unread{border-color:var(--accent)}
-.mc .mh{display:flex;gap:10px;align-items:baseline;padding:9px 14px;cursor:pointer;background:var(--panel2)}
-.mc .mh:hover{background:var(--accent-bg)}
-.mc .who{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
-.mc .snip{flex:1;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
-.mc .when{color:var(--muted);font-size:12px;white-space:nowrap}
-.mc .mb{display:none;padding:0 0 4px}
-.mc.open .mb{display:block}
-.mc.open .snip{display:none}
-.mc.open .mh{background:var(--panel)}
-.mc .mm{padding:8px 14px 2px;color:var(--muted);font-size:13px}
-.mc .macts{padding:6px 14px;display:flex;gap:6px;flex-wrap:wrap}
-.atts{padding:2px 14px 6px;display:flex;gap:8px;flex-wrap:wrap}
-.atts a{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 10px;color:var(--text);text-decoration:none;font-size:13px}
-.atts a:hover{background:var(--accent-bg)}
-.imgbar{margin:4px 14px;padding:6px 10px;background:var(--accent-bg);border-radius:6px;font-size:13px;display:none}
-.mc iframe{border:0;width:100%;background:#fff;min-height:60px;display:block}
-.empty{margin:auto;color:var(--muted);text-align:center;padding:40px}
-/* calendar */
-#cal{flex-direction:column;background:var(--panel)}
-#calbar{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-#calbar h2{font-size:16px;margin:0 12px}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
-.seg button{border:0;background:var(--panel);padding:5px 12px;border-right:1px solid var(--line)}
-.seg button:last-child{border-right:0}
-.seg button.on{background:var(--accent);color:#fff}
-#weekwrap{flex:1;overflow:auto;position:relative;--n:7}
-#weekhead,.allday,#grid{display:grid;grid-template-columns:56px repeat(var(--n),1fr)}
-#weekhead{position:sticky;top:0;background:var(--panel);z-index:5;border-bottom:1px solid var(--line)}
-.dh{padding:6px 8px;text-align:center;border-left:1px solid var(--line)}
-.dh.today b{background:var(--accent);color:#fff;border-radius:12px;padding:1px 8px}
-.allday{position:sticky;top:53px;background:var(--panel);z-index:4;border-bottom:1px solid var(--line);min-height:6px}
-.allday .cell{border-left:1px solid var(--line);padding:2px}
-.chip{background:var(--accent);color:#fff;border-radius:4px;padding:1px 6px;font-size:12px;margin:1px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
-#grid{position:relative}
-.hours div{height:var(--hp,48px);font-size:11px;color:var(--muted);text-align:right;padding-right:6px;transform:translateY(-7px)}
-.col{position:relative;border-left:1px solid var(--line);background-image:linear-gradient(var(--line) 1px,transparent 1px);background-size:100% var(--hp,48px)}
-.ev{position:absolute;border-radius:4px;padding:2px 5px;font-size:12px;overflow:hidden;cursor:pointer;color:#fff;border-left:3px solid rgba(0,0,0,.25);background:var(--busy)}
-.ev.tentative{background:var(--tent)}.ev.free{background:var(--free)}.ev.oof{background:var(--oof)}
-.ev small{display:block;opacity:.88}
-.ev.wide{font-size:13.5px;padding:3px 10px}
-.ev.wide .l1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ev.wide .l1 small{display:inline;margin-left:10px;font-size:12px}
-.ev.wide>small{font-size:12px}
-.nowline{position:absolute;left:0;right:0;height:2px;background:var(--danger);z-index:3;pointer-events:none}
-/* modal */
-#ov{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
-#ov.on{display:flex}
-#modal{background:var(--panel);border-radius:10px;box-shadow:var(--shadow);width:min(680px,100%);max-height:92vh;overflow:auto;padding:18px}
-#modal h3{margin:0 0 12px}
-.f{margin-bottom:10px}.f label{display:block;color:var(--muted);font-size:12px;margin-bottom:3px}
-.f label.chk{display:flex;gap:8px;align-items:center;color:var(--text);font-size:14px}
-.frow{display:flex;gap:10px}.frow>*{flex:1}
-.acts2{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
-.acct-block{border-left:3px solid var(--line);background:var(--panel2);border-radius:0 8px 8px 0;padding:10px 12px 2px;margin-bottom:14px}
-.acct-title{font-weight:700;margin-bottom:8px}
-.acct-block.bank{border-color:#501820}.acct-block.bank .acct-title{color:#501820}
-.acct-block.seller{border-color:#003830}.acct-block.seller .acct-title{color:#003830}
-@media (prefers-color-scheme:dark){
-  .acct-block.bank{border-color:#c47a84}.acct-block.bank .acct-title{color:#c47a84}
-  .acct-block.seller{border-color:#3d8f7a}.acct-block.seller .acct-title{color:#3d8f7a}
-}
-.att{display:inline-flex;gap:6px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:2px 8px;margin:2px 4px 2px 0;font-size:13px}
-.att button{border:0;background:none;color:var(--muted)}
-#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:9px 16px;border-radius:8px;display:none;z-index:99;max-width:80vw}
-#toast.err{background:var(--danger)}
-.att-list li{margin:2px 0}
-.badge{display:inline-block;font-size:11px;padding:1px 6px;border-radius:10px;background:var(--accent-bg);color:var(--accent);margin-left:6px}
-.hint{color:var(--muted);font-size:12px;margin-top:3px}
-#modal a{color:var(--accent);word-break:break-all}
-/* palette: Verde Esmeralda #003830 + Vinho #501820 */
-body.green{--accent:#003830;--accent-bg:#e4efec;--unread:#003830;--busy:#003830;--tent:#2a5c4a;--free:#6a9a88;--oof:#501820}
-@media (prefers-color-scheme:dark){body.green{--accent:#3d8f7a;--accent-bg:#142822;--unread:#5cb89e;--busy:#2a6b58;--tent:#4a7a5e;--free:#3d6e5c}}
-body.green header{border-bottom:2px solid var(--accent);background:linear-gradient(90deg,#e4efec,var(--panel) 45%)}
-body.green #folders{background:color-mix(in srgb,var(--accent) 5%,var(--panel2))}
-body.green header h1{color:#003830}
-.tab.g{color:var(--g,#003830)}
-.tab.g::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#003830;margin-right:6px;vertical-align:1px}
-.tab.g.on{background:#003830;color:#fff}
-@media (prefers-color-scheme:dark){.tab.g{--g:#3d8f7a}.tab.g::before{background:#3d8f7a}.tab.g.on{background:#003830;color:#a8e0d0}
-body.green header{background:linear-gradient(90deg,#142822,var(--panel) 45%)}body.green header h1{color:#5cb89e}}
-.tab.r{color:var(--r,#501820)}
-.tab.r::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#501820;margin-right:6px;vertical-align:1px}
-.tab.r.on{background:#501820;color:#fff}
-body:not(.green){--accent:#501820;--accent-bg:#f3e8ea;--unread:#501820;--busy:#501820;--tent:#8a4a55;--free:#b07a82;--oof:#501820}
-body:not(.green) header{background:linear-gradient(90deg,#f3e8ea,var(--panel) 45%);border-bottom:2px solid #501820}
-body:not(.green) header h1{color:#501820}
-@media (prefers-color-scheme:dark){.tab.r{--r:#c47a84}.tab.r.on{background:#501820;color:#f0c8cd}.tab.r::before{background:#c47a84}
-body:not(.green){--accent:#c47a84;--accent-bg:#2b1e20;--unread:#e39aa0;--busy:#8a4a55}
-body:not(.green) header{background:linear-gradient(90deg,#2b1e20,var(--panel) 45%);border-bottom-color:#501820}body:not(.green) header h1{color:#e39aa0}}
-.sep{width:1px;height:20px;background:var(--line);margin:0 6px;align-self:center}
-
-.tab-badge,.folder-badge{display:inline-block;min-width:16px;padding:0 5px;border-radius:8px;font-size:11px;font-weight:700;line-height:16px;text-align:center;margin-left:6px;background:var(--accent);color:#fff}
-.tab:not(.on) .tab-badge{background:var(--accent-bg);color:var(--accent)}
-.folder{align-items:center}
-.folder .fname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
-.folder .pin{border:0;background:none;color:var(--muted);padding:0 4px;font-size:12px;opacity:.55}
-.folder .pin.on,.folder .pin:hover{opacity:1;color:var(--accent)}
-.folder-sec{font-size:11px;color:var(--muted);padding:10px 10px 4px;text-transform:uppercase;letter-spacing:.04em}
-.folder-tools{display:flex;gap:4px;padding:6px 8px;border-top:1px solid var(--line)}
-.folder-tools .btn{flex:1;font-size:12px;padding:4px 6px}
-.settings-tabs{display:flex;gap:4px;margin:0 0 12px}
-.settings-tabs .btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
-.about-box{padding:8px 0}
-.about-box h4{margin:0 0 6px;font-size:18px}
-.about-box .ver{color:var(--muted);font-size:13px;margin-bottom:10px}
-.about-box a{color:var(--accent)}
-</style>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/ui-kit/tokens.css" />
+<link rel="stylesheet" href="/ui-kit/components.css" />
+<link rel="stylesheet" href="/ui-kit/app.css" />
+<script>
+/* Theme before first paint (no light flash): last choice cached locally, the
+   server copy in prefs wins once loaded. "system" = follow macOS. */
+try {
+  const t = localStorage.getItem('aas-theme');
+  const ok = ['light', 'dark', 'navy-orange', 'navy-orange-light',
+    'royal-velvet', 'royal-velvet-light', 'eclipse-almond', 'eclipse-almond-light'];
+  if (ok.includes(t)) document.documentElement.dataset.theme = t;
+} catch (_) {}
+</script>
 </head>
-<body>
-<header>
-  <h1 id="brand">AAS mail</h1>
-  <div class="tabs">
-    <button class="tab r on" data-view="mail" data-acct="main">Alfa почта<span class="tab-badge" hidden></span></button>
-    <button class="tab r" data-view="cal" data-acct="main">Alfa календарь</button>
+<body class="aas-root theme-bank">
+<header class="aas-topnav aas-topnav--bank">
+  <h1 class="aas-brand" id="brand">AAS mail</h1>
+  <div class="aas-tabs" id="tabs">
+    <button class="aas-tab aas-tab--bank on" data-view="mail" data-acct="main"><span class="aas-tab__dot"></span>Alfa почта<span class="aas-badge" hidden></span></button>
+    <button class="aas-tab aas-tab--bank" data-view="cal" data-acct="main"><span class="aas-tab__dot"></span>Alfa календарь</button>
   </div>
-  <div class="spacer"></div>
+  <div class="aas-spacer"></div>
   <input id="search" type="search" placeholder="Поиск по почте">
-  <span id="synctxt"></span>
-  <button class="btn" id="syncbtn" title="Принудительная синхронизация почты и календаря с сервером"><span class="ic">⟳</span><span class="lbl">Синхронизировать</span></button>
-  <button class="btn primary" id="newbtn">Создать</button>
-  <button class="btn ghost" id="setbtn" title="Настройки">⚙</button>
-  <span id="dot" title="Соединение с Exchange"></span>
+  <span id="synctxt" class="aas-sync__txt"></span>
+  <button class="aas-btn aas-sync" id="syncbtn" title="Принудительная синхронизация почты и календаря с сервером"><span class="aas-sync__ic ic">⟳</span><span class="lbl">Синхронизировать</span></button>
+  <button class="aas-btn aas-btn--primary" id="newbtn">Создать</button>
+  <button class="aas-btn aas-btn--ghost aas-setbtn" id="setbtn" title="Настройки" aria-label="Настройки"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  <button type="button" class="aas-status-dot" id="dot" title="Нет связи с почтовым сервером (VPN, пароль или сбой сервера). Нажмите, чтобы повторить. Пока связь есть — этой плашки не видно.">Нет связи</button>
 </header>
 <main>
   <section class="view on" id="mail">
-    <nav id="folders"></nav>
+    <nav id="folders" class="aas-folders"></nav>
     <div id="list">
-      <div id="listbar"><span id="listtitle">Входящие</span><span class="spacer"></span>
-        <label title="Группировать письма в диалоги"><input type="checkbox" id="thr"> Цепочки</label>
+      <div id="listbar" class="aas-listbar"><span id="listtitle">Входящие</span><span class="aas-spacer"></span>
+        <label class="aas-toggle aas-toggle--inline" title="Группировать письма в диалоги"><input type="checkbox" class="aas-sw" id="thr"> Цепочки</label>
         <select id="window" title="За какой период показывать письма">
           <option value="3">1 нед.</option><option value="4">2 нед.</option>
           <option value="5" selected>1 мес.</option><option value="0">Все</option></select></div>
+      <div id="bulkbar" class="aas-bulkbar" hidden>
+        <label class="aas-bulkbar__all" title="Выбрать все на экране"><input type="checkbox" id="selall"></label>
+        <span id="selcount" class="aas-bulkbar__count"></span>
+        <span class="aas-bulkbar__spacer"></span>
+        <button type="button" class="aas-btn aas-btn--sm" id="bulkread" title="Отметить выбранные прочитанными"><span class="aas-readdot aas-readdot--read"></span>Прочитано</button>
+        <button type="button" class="aas-btn aas-btn--sm" id="bulkunread" title="Отметить выбранные непрочитанными"><span class="aas-readdot"></span>Непрочитано</button>
+        <button type="button" class="aas-btn aas-btn--sm aas-btn--ghost" id="bulkclear" title="Снять выделение">Снять</button>
+      </div>
       <div id="rows"></div>
     </div>
-    <div id="reader"><div class="empty">Выберите письмо</div></div>
+    <div id="reader"><div class="aas-empty">Выберите письмо</div></div>
   </section>
   <section class="view" id="cal">
     <div id="calbar">
-      <button class="btn" id="prev">‹</button><button class="btn" id="today">Сегодня</button><button class="btn" id="next">›</button>
-      <h2 id="caltitle"></h2><span class="spacer"></span>
-      <div class="seg" id="calmode"><button data-m="day">День</button><button data-m="work">Раб. неделя</button><button data-m="week">Неделя</button></div>
+      <button class="aas-btn" id="prev">‹</button><button class="aas-btn" id="today">Сегодня</button><button class="aas-btn" id="next">›</button>
+      <h2 id="caltitle"></h2><span class="aas-spacer"></span>
+      <div class="aas-seg" id="calmode"><button data-m="day">День</button><button data-m="work">Раб. неделя</button><button data-m="week">Неделя</button></div>
     </div>
     <div id="weekwrap">
       <div id="weekhead"></div><div class="allday" id="allday"></div><div id="grid"></div>
     </div>
   </section>
 </main>
-<div id="ov"><div id="modal"></div></div>
-<div id="toast"></div>
+<div id="ov"><div id="modal" class="aas-modal"></div></div>
+<div id="toast" class="aas-toast"></div>
 
 <script>
 "use strict";
@@ -238,22 +78,86 @@ const TOK = document.querySelector('meta[name=tok]').content;
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let ACCT = 'main', accounts = [{id: 'main', name: 'Alfa-Bank', green: false}];
-async function api(domain, body) {
-  const r = await fetch('/api/' + domain, {method: 'POST', headers: {'X-Tok': TOK, 'Content-Type': 'application/json'}, body: JSON.stringify({...body, acct: ACCT})});
+async function api(domain, body, acct = ACCT) {
+  const r = await fetch('/api/' + domain, {method: 'POST', headers: {'X-Tok': TOK, 'Content-Type': 'application/json'}, body: JSON.stringify({...body, acct})});
   const j = await r.json();
   if (j.ok === false) { const err = new Error(j.message || j.error || 'Ошибка'); err.code = j.error; throw err; }
   return j;
 }
 let toastT;
 function toast(msg, err) {
-  const t = $('#toast'); t.textContent = msg; t.className = err ? 'err' : ''; t.style.display = 'block';
+  const t = $('#toast'); t.textContent = msg; t.className = 'aas-toast' + (err ? ' aas-toast--err' : ''); t.style.display = 'block';
   clearTimeout(toastT); toastT = setTimeout(() => t.style.display = 'none', err ? 7000 : 2500);
 }
-const guard = fn => async (...a) => { try { return await fn(...a); } catch (e) { toast(e.message, true); } };
+const guard = fn => async (...a) => { try { return await fn(...a); } catch (e) { if (!e.silent) toast(e.message, true); } };
 const who = a => !a ? '' : (a.name || a.address || '');
 const whoFull = a => !a ? '' : (a.name && a.address ? `${a.name} <${a.address}>` : (a.address || a.name || ''));
 // Turn URLs in already-escaped text into links that open outside the app window.
 const linkify = h => h.replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+/** First Teams/Zoom/Telemost/… URL from location or body (plain or HTML). */
+function joinURL(location, body) {
+  const preferred = ['teams.microsoft', 'teams.live', 'zoom.us', 'ktalk', 'kontur',
+    'meet.google', 'trueconf', 'jazz.sber', 'telemost.yandex', 'webex.com'];
+  const strip = s => String(s || '')
+    .replace(/\\\//g, '/')
+    .replace(/&amp;/gi, '&')
+    .replace(/<[^>]+>/g, ' ');
+  const blobs = [];
+  for (const raw of [location, body]) {
+    if (!raw) continue;
+    blobs.push(String(raw), strip(raw));
+  }
+  const re = /https?:\/\/[^\s<>'")\]]+/gi;
+  const urls = [];
+  for (const blob of blobs) {
+    let m; const r = new RegExp(re);
+    while ((m = r.exec(blob))) {
+      let u = m[0].replace(/[.,;)\]]+$/, '');
+      try { urls.push(new URL(u)); } catch (_) { /* skip */ }
+    }
+  }
+  const hit = urls.find(u => preferred.some(h => (u.host || '').toLowerCase().includes(h)));
+  return (hit || urls[0] || null)?.href || '';
+}
+/* Categories («теги» from Outlook). ActiveSync sends names only — Outlook's colour
+   table stays on the server — so each name gets a stable colour from an
+   Outlook-like palette, overridable in Settings → Почта → Цвета категорий. */
+const CAT_PALETTE = ['#D13438', '#CA5010', '#C19C00', '#498205', '#038387', '#0078D4', '#8764B8', '#E3008C', '#69797E', '#8E562E',
+  '#004E8C', '#5C2E91', '#A4262C', '#DA3B01', '#8CBD18', '#00B7C3', '#4F6BED', '#C239B3', '#986F0B', '#107C10'];
+const catKey = n => String(n || '').trim();
+let catSaveT;
+/** Stable, distinct colours: a new category takes the first palette colour no other
+ *  category uses yet (starting from a hash of its name) and keeps it in prefs. */
+/** Each mailbox keeps its own category colours: Bank «Проект» and Seller «Проект»
+ *  are different tags. Bank stays in the original `category_colors`. */
+const catPref = (acct = ACCT) => acct === 'main' ? 'category_colors' : 'category_colors_' + acct;
+function catColor(name, acct = ACCT) {
+  const n = catKey(name), key = catPref(acct), map = prefs[key] ||= {};
+  if (map[n]) return map[n];
+  let h = 0; for (const ch of n.toLowerCase()) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  const used = new Set(Object.values(map).map(c => c.toLowerCase()));
+  let col = CAT_PALETTE[h % CAT_PALETTE.length];
+  for (let i = 0; i < CAT_PALETTE.length; i++) {
+    const c = CAT_PALETTE[(h + i) % CAT_PALETTE.length];
+    if (!used.has(c.toLowerCase())) { col = c; break; }
+  }
+  map[n] = col;
+  clearTimeout(catSaveT); catSaveT = setTimeout(() => savePrefs(Object.fromEntries(accounts.map(a => [catPref(a.id), prefs[catPref(a.id)] || {}]))), 1500);
+  return col;
+}
+/** Text colour for a category fill: whichever of white / near-black has the higher
+ *  WCAG contrast (a brightness threshold put white on mustard and olive). */
+function inkOn(hex) {
+  const v = parseInt(hex.slice(1), 16);
+  const lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const L = 0.2126 * lin(v >> 16) + 0.7152 * lin((v >> 8) & 255) + 0.0722 * lin(v & 255);
+  const vsWhite = 1.05 / (L + 0.05), vsDark = (L + 0.05) / (0.0165 + 0.05);  // #1f2328 ≈ L 0.0165
+  return vsDark > vsWhite ? '#1f2328' : '#fff';
+}
+const uniqCats = list => [...new Set((list || []).map(catKey).filter(Boolean))];
+const catChips = list => uniqCats(list).map(n => (seenCat(n), n)).map(n => `<span class="aas-cat" style="--cat:${catColor(n)}">${esc(n)}</span>`).join('');
+const seenCats = {};  // acct → category names met in its mail/calendar this session (for Settings)
+const seenCat = (n, acct = ACCT) => (seenCats[acct] ||= new Set()).add(catKey(n));
 const fmtSize = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' МБ' : n > 1024 ? Math.round(n / 1024) + ' КБ' : n + ' Б';
 const pad = n => String(n).padStart(2, '0');
 const isoLocal = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -265,28 +169,94 @@ function fmtDate(s) {  // "YYYY-MM-DD HH:MM" local from the API
 }
 
 /* ---------- preferences (kept on the server) ---------- */
-let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 2, cal_view: 'week', links: [], favorite_folders: []};
+let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 2, cal_view: 'week', links: [], favorite_folders: [], theme: 'system', mail_sound: 'notice14'};
+/** Default light/dark/system + StylesBA (dark where readable, plus light variants). */
+const THEME_IDS = ['light', 'dark',
+  'navy-orange', 'navy-orange-light',
+  'royal-velvet', 'royal-velvet-light',
+  'eclipse-almond', 'eclipse-almond-light'];
+/** Apply a theme choice to the page and to the native shell (window chrome, tray, reminders). */
+function applyTheme(t) {
+  t = THEME_IDS.includes(t) ? t : 'system';
+  if (t === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('aas-theme', t); } catch (_) {}
+  try { window.webkit?.messageHandlers?.aasTheme?.postMessage(t); } catch (_) {}
+}
+/** Settings the native shell acts on (tray reminders, new-mail sound). */
+function syncNativePrefs() {
+  try {
+    window.webkit?.messageHandlers?.aasPrefs?.postMessage({
+      reminder_minutes: prefs.reminder_minutes ?? 5,
+      mail_sound: prefs.mail_sound || 'notice14',
+    });
+  } catch (_) {}
+}
 let unreadByAcct = {}; // acctId -> {folders: {id:n}, total:n}
-let aboutMeta = {name: 'AAS mail', version: '1.1.0', description: '', contact_mm: '@olesya_ba'};
+let aboutMeta = {name: 'AAS mail', version: '', description: '', contact_mm: '@olesya_ba'};
 async function savePrefs(patch) { Object.assign(prefs, patch); try { await api('prefs', {set: patch}); } catch (e) { toast('Не удалось сохранить настройки', true); } }
 
 /* ---------- modal ---------- */
-function openModal(html) { $('#modal').innerHTML = html; $('#ov').classList.add('on'); return $('#modal'); }
-function closeModal() { $('#ov').classList.remove('on'); $('#modal').innerHTML = ''; }
-$('#ov').addEventListener('mousedown', e => { if (e.target.id === 'ov') closeModal(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+/* The modal can be dragged by its title. Once moved it "floats": the backdrop goes
+   away and the page stays usable, so the letter or calendar can be read while
+   replying / planning. Typed text is never dropped without asking. */
+const modalOpen = () => $('#ov').classList.contains('on');
+const modalDirty = () => modalOpen() && $('#modal').dataset.dirty === '1';
+const confirmDiscard = () => !modalDirty() || confirm('Закрыть окно? Введённый текст пропадёт.');
+function openModal(html) {
+  if (!confirmDiscard()) { const e = new Error('cancelled'); e.silent = true; throw e; }
+  const m = $('#modal');
+  if (!$('#ov').classList.contains('floating')) resetModalPos();  // a floating window keeps its place
+  m.innerHTML = html; delete m.dataset.dirty; $('#ov').classList.add('on'); return m;
+}
+function closeModal() { $('#ov').classList.remove('on'); $('#modal').innerHTML = ''; delete $('#modal').dataset.dirty; resetModalPos(); }
+const closeModalSafe = () => { if (confirmDiscard()) closeModal(); };
+$('#modal').addEventListener('input', () => { $('#modal').dataset.dirty = '1'; });
+$('#ov').addEventListener('mousedown', e => { if (e.target.id === 'ov') closeModalSafe(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && modalOpen()) closeModalSafe(); });
+
+let modalOff = {x: 0, y: 0};
+function resetModalPos() {
+  modalOff = {x: 0, y: 0}; $('#modal').style.transform = ''; $('#ov').classList.remove('floating');
+}
+(() => {
+  const m = $('#modal');
+  let drag = null;  // {sx, sy, x0, y0, base, moved}
+  m.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || !e.target.closest('h3')) return;
+    const r = m.getBoundingClientRect();
+    // Untransformed box, for clamping: the title must stay reachable on screen.
+    drag = {sx: e.clientX, sy: e.clientY, x0: modalOff.x, y0: modalOff.y, moved: false,
+      base: {left: r.left - modalOff.x, top: r.top - modalOff.y, width: r.width}};
+    try { m.setPointerCapture(e.pointerId); } catch (_) { /* synthetic pointer */ }
+    e.preventDefault();
+  });
+  m.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (!drag.moved && Math.hypot(dx, dy) < 4) return;  // a click, not a drag
+    drag.moved = true;
+    const {left, top, width} = drag.base;
+    const x = Math.min(Math.max(drag.x0 + dx, 60 - left - width), innerWidth - 60 - left);
+    const y = Math.min(Math.max(drag.y0 + dy, -top), innerHeight - 40 - top);
+    modalOff = {x, y}; m.style.transform = `translate(${x}px, ${y}px)`;
+    $('#ov').classList.add('floating');
+  });
+  const end = () => { drag = null; };
+  m.addEventListener('pointerup', end); m.addEventListener('pointercancel', end);
+  m.addEventListener('dblclick', e => { if (e.target.closest('h3')) resetModalPos(); });
+})();
 
 /* ---------- tabs ---------- */
 let view = 'mail';
 const bindTab = b => b.onclick = () => showView(b.dataset.view, b.dataset.acct || 'main');
-document.querySelectorAll('.tab').forEach(bindTab);
+document.querySelectorAll('.aas-tab').forEach(bindTab);
 function buildAccountTabs() {
-  const box = $('.tabs');
+  const box = $('#tabs') || $('.aas-tabs');
   accounts.filter(a => a.green).forEach(a => {
-    const sep = document.createElement('span'); sep.className = 'sep'; box.appendChild(sep);
+    const sep = document.createElement('span'); sep.className = 'aas-sep'; box.appendChild(sep);
     [['mail', 'Почта'], ['cal', 'Календарь']].forEach(([v, t]) => {
-      const b = document.createElement('button'); b.className = 'tab g'; b.dataset.view = v; b.dataset.acct = a.id;
-      b.innerHTML = `${esc(a.name)} · ${t}` + (v === 'mail' ? '<span class="tab-badge" hidden></span>' : '');
+      const b = document.createElement('button'); b.className = 'aas-tab aas-tab--seller'; b.dataset.view = v; b.dataset.acct = a.id;
+      b.innerHTML = `<span class="aas-tab__dot"></span>${esc(a.name)} · ${t}` + (v === 'mail' ? '<span class="aas-badge" hidden></span>' : '');
       bindTab(b); box.appendChild(b);
     });
   });
@@ -298,19 +268,76 @@ function setBrand() {
   document.title = aboutMeta.name + (view === 'cal' ? ' · календарь' : ' · почта') + (a?.green ? ' · ' + a.name : '');
 }
 function paintTabBadges() {
-  document.querySelectorAll('.tab[data-view=mail]').forEach(b => {
-    const badge = b.querySelector('.tab-badge'); if (!badge) return;
-    const n = unreadByAcct[b.dataset.acct || 'main']?.total || 0;
-    badge.hidden = !n; badge.textContent = n > 99 ? '99+' : String(n);
+  document.querySelectorAll('.aas-tab[data-view=mail]').forEach(b => {
+    const badge = b.querySelector('.aas-badge'); if (!badge) return;
+    const acct = b.dataset.acct || 'main';
+    const u = unreadByAcct[acct] || {};
+    // Tab shows Inbox unread (Outlook-style), not the sum of every opened folder.
+    const inbox = inboxIds[acct];
+    const n = (inbox && u.folders && u.folders[inbox] != null)
+      ? u.folders[inbox]
+      : (u.total || 0);
+    badge.hidden = !n;
+    badge.textContent = n > 99 ? '99+' : String(n);
+    b.title = `Входящие: ${n} непрочитанных · всего в ящике: ${u.total || 0}`;
   });
+}
+/** Background results from the server (e.g. invitation mails sent after a meeting
+ *  was created) arrive with the unread counters; each is shown once. */
+function showNotices(j) {
+  for (const n of j?.notices || []) toast(n.text, n.error);
+}
+/** Poll a little after an action whose outcome comes later (≤ 3 min). */
+function watchNotices(acct = ACCT) {
+  let left = 18;
+  const tick = async () => {
+    try { const j = await api('unread', {}, acct); if ((j.notices || []).length) { showNotices(j); return; } } catch (_) {}
+    if (--left > 0) setTimeout(tick, 10000);
+  };
+  setTimeout(tick, 5000);
+}
+function setUnread(acct, j) {
+  unreadByAcct[acct] = {folders: j.folders || {}, total: j.total || 0, partial: new Set(j.partial || [])};
+  reconcileOpenList(acct);
+}
+/* The badge and the open list must tell the same story. Background work (Inbox
+   badge refresh, the unread sweep) pulls new mail into the server's folder cache,
+   which updated the badge but not the list on screen — «1», and no letter until
+   the folder was reopened. A different count for the open folder = reload it. */
+let reconcileAt = 0;
+function reconcileOpenList(acct) {
+  if (acct !== ACCT || view !== 'mail' || searchQ || !curFolder || Date.now() - reconcileAt < 5000) return;
+  const server = unreadByAcct[acct].folders[curFolder];
+  if (server == null || server === allItems.filter(m => !m.is_read).length) return;
+  reconcileAt = Date.now();
+  loadListQuiet();
 }
 async function refreshUnread(acct = ACCT, force = false) {
   try {
     const j = await api('unread', force ? {refresh: true} : {});
-    unreadByAcct[acct] = {folders: j.folders || {}, total: j.total || 0};
+    showNotices(j);
+    setUnread(acct, j);
     if (acct === ACCT) renderFolders(folderItems);
     paintTabBadges();
   } catch (e) { /* counts are best-effort */ }
+}
+/* Real unread counts for every Inbox / user folder: the server walks them in the
+   background (SyncKey deltas after the first time) and we repaint as they land. */
+const sweeping = {};
+async function sweepUnread(acct = ACCT, force = false) {
+  if (sweeping[acct]) return;
+  sweeping[acct] = true;
+  try {
+    let j = await api('unread', {sweep: true, force, filter: +$('#window').value, fields: LIST_FIELDS}, acct);
+    for (let i = 0; i < 90; i++) {
+      setUnread(acct, j);
+      if (acct === ACCT) renderFolders(folderItems);
+      paintTabBadges();
+      if (!j.sweeping) break;
+      await new Promise(r => setTimeout(r, 2000));
+      j = await api('unread', {}, acct);
+    }
+  } catch (_) { /* best-effort */ } finally { sweeping[acct] = false; }
 }
 function favKey(fid, acct = ACCT) { return `${acct}:${fid}`; }
 function isFav(fid) { return (prefs.favorite_folders || []).includes(favKey(fid)); }
@@ -321,19 +348,42 @@ async function toggleFav(fid) {
   renderFolders(folderItems);
 }
 function showView(v, acctId = 'main') {
+  const was = view + ':' + ACCT, restored = acctId === ACCT || !!acctStates[acctId];
   switchAccount(acctId);
   view = v; setBrand();
-  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.view === v && (b.dataset.acct || 'main') === ACCT));
+  document.querySelectorAll('.aas-tab').forEach(b => b.classList.toggle('on', b.dataset.view === v && (b.dataset.acct || 'main') === ACCT));
   document.querySelectorAll('.view').forEach(s => s.classList.toggle('on', s.id === v));
-  $('#search').style.display = v === 'mail' ? '' : 'none';
+  $('#search').style.visibility = v === 'mail' ? '' : 'hidden';  // keep its slot: no header jump
   $('#newbtn').textContent = v === 'cal' ? 'Новое событие' : 'Создать';
-  if (v === 'cal') loadCal();
+  if (v === 'cal') { loadCal(); syncCalDelta(); }
+  // Back on a mail tab from its saved state: pull what changed meanwhile (a fresh
+  // account's first load is already a sync).
+  else if (was !== v + ':' + ACCT && restored && curFolder) syncMailDelta();
+}
+/* Entering a tab or starting the app forces a sync — always a SyncKey delta
+   (changes only: moved / cancelled meetings, new mail, renamed folders), so it
+   costs well under a second. The cached view is drawn first, then redrawn. */
+async function syncCalDelta(acct = ACCT) {
+  try { await api('sync', {calendar: 'delta'}, acct); } catch (_) { return; }
+  if (acct === ACCT && view === 'cal' && !modalOpen()) loadCal(true);
+}
+function syncMailDelta() {
+  if (searchQ) return;
+  refreshFolders().catch(() => {});
+  loadListQuiet();
+  sweepUnread();
 }
 $('#newbtn').onclick = () => view === 'cal' ? eventForm() : composeForm();
 
 /* ---------- sync ---------- */
 let syncing = false, lastSync = null, autoTimer = null;
-function setSyncText() { $('#synctxt').textContent = syncing ? 'Синхронизация…' : lastSync ? 'Обновлено ' + pad(lastSync.getHours()) + ':' + pad(lastSync.getMinutes()) : ''; }
+function setSyncText() {
+  $('#synctxt').textContent = syncing ? 'Синхронизация…' : lastSync ? 'Обновлено ' + pad(lastSync.getHours()) + ':' + pad(lastSync.getMinutes()) : '';
+  const auto = prefs.auto_sync > 0 ? `Автоматически каждые ${prefs.auto_sync} мин: открытая папка или календарь и счётчики всех ящиков.` : 'Автосинхронизация выключена.';
+  const hint = `${auto} Интервал — в Настройки → Почта.`;
+  $('#synctxt').title = hint;
+  $('#syncbtn').title = 'Синхронизировать сейчас: почта, календарь (полностью) и счётчики. ' + hint;
+}
 async function syncAll() {
   if (syncing) return;
   syncing = true; $('#syncbtn').classList.add('busy'); setSyncText();
@@ -343,68 +393,194 @@ async function syncAll() {
     // Unread across every mail folder (current + other accounts).
     jobs.push(refreshUnread(ACCT, true));
     accounts.filter(a => a.id !== ACCT).forEach(a => {
-      jobs.push((async () => {
-        const prev = ACCT;
-        try {
-          const j = await fetch('/api/unread', {method:'POST', headers:{'X-Tok':TOK,'Content-Type':'application/json'},
-            body: JSON.stringify({acct: a.id, refresh: true})}).then(r => r.json());
-          unreadByAcct[a.id] = {folders: j.folders || {}, total: j.total || 0};
-        } catch (e) {}
-      })());
+      jobs.push(api('unread', {refresh: true}, a.id).then(j => setUnread(a.id, j), () => {}));
     });
     const res = await Promise.allSettled(jobs);
     paintTabBadges();
+    warmFolders();
+    accounts.forEach(a => sweepUnread(a.id, true));  // the button: recount now
     const bad = res.find(r => r.status === 'rejected');
     lastSync = new Date();
     if (bad) toast('Синхронизация: ' + (bad.reason?.message || 'ошибка'), true); else toast('Синхронизировано');
   } finally { syncing = false; $('#syncbtn').classList.remove('busy'); setSyncText(); }
 }
 $('#syncbtn').onclick = guard(syncAll);
+$('#dot').onclick = guard(syncAll);
+/* Auto-sync («каждые N минут» in Settings): the open folder or calendar week, plus
+   Inbox badges of every account — so a new Seller letter lights its tab without a
+   manual sync. Cheap: the server answers mail lists with SyncKey deltas. */
+const inboxIds = {};
+/** Seen Inbox item ids per account — first snapshot seeds silently; later unread Adds notify. */
+const knownMailIds = {};
+function whoFrom(m) {
+  const f = m?.from;
+  if (!f) return '';
+  if (typeof f === 'string') return f;
+  return (f.name || f.address || '').trim();
+}
+function noteIncoming(acct, items) {
+  if (!Array.isArray(items) || !items.length) return;
+  let known = knownMailIds[acct];
+  if (!known) {
+    knownMailIds[acct] = new Set(items.map(m => m.item_id).filter(Boolean));
+    return;  // first look at this Inbox — no fanfare for mail already sitting there
+  }
+  const fresh = items.filter(m => m.item_id && !known.has(m.item_id) && !m.is_read);
+  for (const m of items) if (m.item_id) known.add(m.item_id);
+  if (known.size > 4000) knownMailIds[acct] = new Set([...known].slice(-2500));
+  if (!fresh.length) return;
+  const a = accounts.find(x => x.id === acct) || {};
+  const top = fresh[0];
+  try {
+    window.webkit?.messageHandlers?.aasNewMail?.postMessage({
+      count: fresh.length,
+      from: whoFrom(top),
+      subject: top.subject || '(без темы)',
+      preview: String(top.preview || '').replace(/\s+/g, ' ').slice(0, 160),
+      account: a.name || '',
+    });
+  } catch (_) {}
+}
+async function refreshInboxBadge(id) {
+  if (!inboxIds[id]) {
+    const f = await api('folders', {action: 'list'}, id);
+    inboxIds[id] = (f.items || []).find(x => String(x.type) === '2')?.folder_id;
+  }
+  if (!inboxIds[id]) return;
+  const openHere = id === ACCT && view === 'mail' && curFolder === inboxIds[id];
+  // Always Sync the Inbox so new mail is known; use the list payload to detect fresh unread.
+  if (!openHere) {
+    try {
+      const j = await api('mail', {action: 'list', folder: inboxIds[id], limit: 40, filter: +$('#window').value, fields: LIST_FIELDS}, id);
+      noteIncoming(id, j.items || []);
+    } catch (_) {}
+  }
+  const j = await api('unread', {}, id);
+  showNotices(j);
+  setUnread(id, j);
+  if (id === ACCT) renderFolders(folderItems);
+  paintTabBadges();
+}
+let autoBusy = false;
+async function autoSyncTick() {
+  if (autoBusy || syncing || document.hidden) return;
+  autoBusy = true;
+  try {
+    const jobs = [];
+    if (view === 'mail' && !searchQ && curFolder) jobs.push(loadListQuiet());
+    if (view === 'cal' && !modalOpen()) jobs.push(loadCal(true));
+    for (const a of accounts) jobs.push(refreshInboxBadge(a.id));
+    await Promise.allSettled(jobs);
+    accounts.forEach(a => sweepUnread(a.id));
+    paintTabBadges();
+    lastSync = new Date(); setSyncText();
+  } finally { autoBusy = false; }
+}
 function armAutoSync() {
   clearInterval(autoTimer);
-  if (prefs.auto_sync > 0) autoTimer = setInterval(() => {
-    if (view === 'mail' && !searchQ && curFolder && !document.hidden && !syncing && !$('#ov').classList.contains('on')) loadListQuiet();
-  }, prefs.auto_sync * 60000);
+  if (prefs.auto_sync > 0) autoTimer = setInterval(autoSyncTick, prefs.auto_sync * 60000);
 }
+// Coming back to the window (it may have been hidden for a while): catch up at once.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && prefs.auto_sync > 0 && lastSync && Date.now() - lastSync > prefs.auto_sync * 60000) autoSyncTick();
+});
 
 /* ---------- mail list ---------- */
 const MAIL_TYPES = new Set(['1', '2', '3', '4', '5', '6', '12']);
 const ORDER = {'2': 0, '3': 1, '5': 2, '4': 3, '6': 4};
+let folderTree = [];  // [[folder, depth], …] in display order — for «Где создать»
 let folderItems = [], folders = [], curFolder = null, nextCursor = null, searchQ = '', allItems = [], curKey = null, curGroup = null, openToken = 0;
-const LIST_FIELDS = ['subject', 'from', 'received', 'is_read', 'has_attachments', 'preview', 'thread_topic'];
+const LIST_FIELDS = ['subject', 'from', 'received', 'is_read', 'has_attachments', 'preview', 'thread_topic', 'categories'];
+/** Selected group keys for bulk read/unread. */
+let selectedKeys = new Set();
+const groupsOnScreen = () => groupItems(allItems);
+function itemsForKeys(keys) {
+  const set = keys instanceof Set ? keys : new Set(keys);
+  return groupsOnScreen().filter(g => set.has(g.key)).flatMap(g => g.items);
+}
+function syncBulkBar(total) {
+  const bar = $('#bulkbar'), n = selectedKeys.size;
+  if (!bar) return;
+  bar.hidden = false; // always visible so users discover mass mark
+  const cnt = $('#selcount'); if (cnt) cnt.textContent = n ? String(n) : '';
+  const all = $('#selall');
+  if (all) {
+    total ??= groupsOnScreen().length;
+    all.checked = total > 0 && n === total;
+    all.indeterminate = n > 0 && n < total;
+  }
+  document.querySelectorAll('.aas-row').forEach(r => r.classList.toggle('sel', selectedKeys.has(r.dataset.key)));
+  const disabled = n === 0;
+  ['bulkread', 'bulkunread', 'bulkclear'].forEach(id => {
+    const b = $('#' + id); if (b) b.disabled = disabled;
+  });
+}
+async function markGroupsRead(keys, read) {
+  const items = itemsForKeys(keys);
+  if (!items.length) return;
+  await api('mail', {action: 'mark_read', item_ids: items.map(m => m.item_id), read});
+  const ids = new Set(items.map(m => m.item_id));
+  allItems.forEach(m => { if (ids.has(m.item_id)) m.is_read = read; });
+  renderList(!!nextCursor);
+  toast(read ? 'Отмечено прочитанным' : 'Отмечено непрочитанным');
+  recountOpenFolder();
+}
+/** After a local read/unread change, update the open folder's badge without a round-trip
+ *  (same basis as the server: the loaded page of the folder). */
+function recountOpenFolder() {
+  if (searchQ || !curFolder) return;
+  const u = unreadByAcct[ACCT] ||= {folders: {}, total: 0};
+  const was = u.folders[curFolder] || 0, now = allItems.filter(m => !m.is_read).length;
+  u.folders[curFolder] = now;
+  // Same basis as the server total: Inbox and own folders only.
+  if (['1', '2', '12'].includes(String(folders.find(f => f.folder_id === curFolder)?.type))) u.total = Math.max(0, (u.total || 0) + now - was);
+  renderFolders(folderItems); paintTabBadges();
+}
 
 // Each account keeps its own folders, list, calendar window and position; switching swaps them.
 const acctStates = {};
-const freshState = () => ({folderItems: [], curFolder: null, nextCursor: null, searchQ: '', allItems: [], curKey: null, curGroup: null, cards: [], events: [], anchor: new Date(), lastSync: null, win: '5'});
-const snapshot = () => ({folderItems, curFolder, nextCursor, searchQ, allItems, curKey, curGroup, cards, events, anchor, lastSync, win: $('#window').value});
-function restore(s) { ({folderItems, curFolder, nextCursor, searchQ, allItems, curKey, curGroup, cards, events, anchor, lastSync} = s); $('#window').value = s.win; }
+// View settings (threads, period, calendar week/mode) are shared by all accounts, so
+// Bank and Seller always show the same period and the same calendar week.
+const freshState = () => ({folderItems: [], curFolder: null, nextCursor: null, searchQ: '', allItems: [], curKey: null, curGroup: null, cards: [], events: [], lastSync: null});
+const snapshot = () => ({folderItems, curFolder, nextCursor, searchQ, allItems, curKey, curGroup, cards, events, lastSync});
+function restore(s) { ({folderItems, curFolder, nextCursor, searchQ, allItems, curKey, curGroup, cards, events, lastSync} = s); }
 function switchAccount(id) {
   if (id === ACCT) return;
   acctStates[ACCT] = snapshot(); ACCT = id; openToken++;
   const a = accounts.find(x => x.id === id) || accounts[0];
   document.body.classList.toggle('green', !!a.green);
+  document.body.classList.toggle('theme-seller', !!a.green);
+  document.body.classList.toggle('theme-bank', !a.green);
+  const nav = document.querySelector('header.aas-topnav');
+  if (nav) {
+    nav.classList.toggle('aas-topnav--seller', !!a.green);
+    nav.classList.toggle('aas-topnav--bank', !a.green);
+  }
+  const nb = $('#newbtn');
+  if (nb) nb.className = a.green ? 'aas-btn aas-btn--lime' : 'aas-btn aas-btn--primary';
   const saved = acctStates[id];
   restore(saved || freshState());
-  $('#search').value = searchQ; $('#reader').innerHTML = '<div class="empty">Выберите письмо</div>';
+  selectedKeys = new Set();
+  $('#search').value = searchQ; $('#reader').innerHTML = '<div class="aas-empty">Выберите письмо</div>';
   if (saved) {
     renderFolders(folderItems); $('#listtitle').textContent = folders.find(f => f.folder_id === curFolder)?.name || ''; renderList(!!nextCursor);
   } else {
-    $('#folders').innerHTML = ''; $('#listtitle').textContent = ''; $('#rows').innerHTML = '<div class="empty">Загрузка…</div>'; loadFolders();
+    $('#folders').innerHTML = ''; $('#listtitle').textContent = ''; $('#rows').innerHTML = '<div class="aas-empty">Загрузка…</div>'; loadFolders();
   }
-  $('#dot').className = ''; setSyncText();
+  $('#dot').className = 'aas-status-dot'; setSyncText();
 }
 function showAcctError(e) {
-  $('#dot').className = 'err';
+  $('#dot').className = 'aas-status-dot aas-status-dot--err';
   const a = accounts.find(x => x.id === ACCT);
   $('#folders').innerHTML = '';
-  $('#rows').innerHTML = `<div class="empty"><b>Не удалось подключиться${a?.green ? ' к «' + esc(a.name) + '»' : ''}</b><br><span style="font-size:13px">${esc(e.message)}</span><br><br>
-    <button class="btn primary" id="retrybtn">Повторить вход</button><div class="hint">Если менялся пароль или включали VPN, нажмите «Повторить вход».</div></div>`;
-  $('#retrybtn').onclick = guard(async () => { $('#rows').innerHTML = '<div class="empty">Подключение…</div>'; await api('retry', {}); loadFolders(); });
+  $('#rows').innerHTML = `<div class="aas-empty"><b>Не удалось подключиться${a?.green ? ' к «' + esc(a.name) + '»' : ''}</b><br><span style="font-size:13px">${esc(e.message)}</span><br><br>
+    <button class="aas-btn aas-btn--primary" id="retrybtn">Повторить вход</button><div class="hint">Если менялся пароль или включали VPN, нажмите «Повторить вход».</div></div>`;
+  $('#retrybtn').onclick = guard(async () => { $('#rows').innerHTML = '<div class="aas-empty">Подключение…</div>'; await api('retry', {}); loadFolders(); });
 }
 function renderFolders(items) {
   folderItems = items;
   folders = items.filter(f => MAIL_TYPES.has(String(f.type)));
-  const counts = unreadByAcct[ACCT]?.folders || {};
+  const u = unreadByAcct[ACCT] || {}, counts = u.folders || {}, partial = u.partial || new Set();
   const kids = p => folders.filter(f => (f.parent_id || '0') === p)
     .sort((a, b) => (ORDER[a.type] ?? 9) - (ORDER[b.type] ?? 9) || a.name.localeCompare(b.name, 'ru'));
   const out = [];
@@ -412,32 +588,54 @@ function renderFolders(items) {
   walk('0', 0);
   const known = new Set(out.map(([f]) => f.folder_id));
   folders.filter(f => !known.has(f.folder_id)).forEach(f => out.push([f, 0]));
+  folderTree = out;
   const favs = out.filter(([f]) => isFav(f.folder_id));
   const rest = out.filter(([f]) => !isFav(f.folder_id));
   const row = ([f, d]) => {
-    const n = counts[f.folder_id] || 0;
-    const badge = n ? `<span class="folder-badge">${n > 99 ? '99+' : n}</span>` : '';
-    const pin = `<button class="pin ${isFav(f.folder_id) ? 'on' : ''}" data-pin="${esc(f.folder_id)}" title="Избранное">${isFav(f.folder_id) ? '★' : '☆'}</button>`;
-    return `<div class="folder ${f.folder_id === curFolder ? 'on' : ''}" data-id="${esc(f.folder_id)}" style="padding-left:${10 + d * 16}px" title="${esc(f.name)}"><span class="fname">${esc(f.name)}</span>${badge}${pin}</div>`;
+    const n = counts[f.folder_id] || 0, more = partial.has(f.folder_id);
+    const badge = n ? `<span class="aas-badge" title="${more ? 'Не меньше ' + n + ' непрочитанных — папка ещё догружается' : n + ' непрочитанных за период'}">${n > 99 ? '99+' : n}${more && n <= 99 ? '+' : ''}</span>` : '';
+    const pin = `<button class="aas-folder__pin ${isFav(f.folder_id) ? 'on' : ''}" data-pin="${esc(f.folder_id)}" title="Избранное">${isFav(f.folder_id) ? '★' : '☆'}</button>`;
+    return `<div class="aas-folder ${f.folder_id === curFolder ? 'on' : ''}" data-id="${esc(f.folder_id)}" style="padding-left:${10 + d * 16}px" title="${esc(f.name)}"><span class="aas-folder__name">${esc(f.name)}</span>${badge}${pin}</div>`;
   };
   let html = '';
-  if (favs.length) html += `<div class="folder-sec">Избранные</div>` + favs.map(row).join('');
-  if (rest.length) html += (favs.length ? `<div class="folder-sec">Папки</div>` : '') + rest.map(row).join('');
-  html += `<div class="folder-tools"><button class="btn" id="newfolder">＋ Папка</button></div>`;
+  const total = u.total || 0;
+  html += `<div class="aas-folder-total" title="Входящие и свои папки, за выбранный период (без Отправленных, Черновиков и Удалённых)">Непрочитанные<span class="aas-badge"${total ? '' : ' hidden'}>${total > 999 ? '999+' : total}${partial.size && total <= 999 ? '+' : ''}</span></div>`;
+  if (favs.length) html += `<div class="aas-folder-sec">Избранные</div>` + favs.map(row).join('');
+  if (rest.length) html += (favs.length ? `<div class="aas-folder-sec">Папки</div>` : '') + rest.map(row).join('');
+  html += `<div class="aas-folder-tools"><button class="aas-btn" id="newfolder" title="Создать новую папку">＋ Папка</button></div>`;
   $('#folders').innerHTML = html;
-  document.querySelectorAll('.folder[data-id]').forEach(el => el.onclick = e => {
+  document.querySelectorAll('.aas-folder[data-id]').forEach(el => el.onclick = e => {
     if (e.target.closest('[data-pin]')) return;
     openFolder(el.dataset.id);
   });
   document.querySelectorAll('[data-pin]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleFav(b.dataset.pin); });
   const nf = $('#newfolder');
   if (nf) nf.onclick = guard(async () => {
-    const name = prompt('Имя новой папки');
-    if (!name || !name.trim()) return;
-    await api('folders', {action: 'create', name: name.trim(), parent_id: '0'});
-    toast('Папка создана');
-    await refreshFolders();
-    await refreshUnread(ACCT, true);
+    // window.prompt() silently returns null in the app's WKWebView — a real form instead.
+    // New folders go to the mailbox root unless another parent is picked (it used to
+    // silently land inside whatever folder was open — usually Inbox).
+    openModal(`<h3>Новая папка</h3>
+      <div class="f"><label>Название</label><input type="text" id="fname" maxlength="64" placeholder="Например, Проекты"></div>
+      <div class="f"><label>Где создать</label><select id="fparent">
+        <option value="0" selected>В корне ящика (рядом с «Входящими»)</option>
+        ${folderTree.map(([f, d]) => `<option value="${esc(f.folder_id)}">${'\u00a0\u00a0\u00a0'.repeat(d + 1)}внутри «${esc(f.name)}»</option>`).join('')}
+      </select></div>
+      <div class="acts2"><button class="aas-btn" id="fcancel">Отмена</button><button class="aas-btn aas-btn--primary" id="fsave">Создать</button></div>`);
+    const inp = $('#fname'); inp.focus();
+    $('#fcancel').onclick = closeModal;
+    const save = guard(async () => {
+      const name = inp.value.trim();
+      if (!name) { inp.focus(); return; }
+      $('#fsave').disabled = true;
+      const parent = $('#fparent').value || '0';
+      try { await api('folders', {action: 'create', name, parent_id: parent}); }
+      finally { const b = $('#fsave'); if (b) b.disabled = false; }
+      closeModal(); toast('Папка «' + name + '» создана');
+      await refreshFolders();
+      await refreshUnread(ACCT, true);
+    });
+    $('#fsave').onclick = save;
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
   });
 }
 async function loadFolders() {
@@ -447,16 +645,39 @@ async function loadFolders() {
     if (acct !== ACCT) return;
     renderFolders(j.items);
     const inbox = folders.find(f => String(f.type) === '2') || folders[0];
-    if (inbox) openFolder(inbox.folder_id);
-    $('#dot').className = 'ok';
+    if (inbox) {
+      inboxIds[acct] = inbox.folder_id;
+      openFolder(inbox.folder_id);
+    }
+    $('#dot').className = 'aas-status-dot aas-status-dot--ok';
     refreshUnread(ACCT);
+    setTimeout(() => { if (acct === ACCT) warmFolders(); }, 4000);  // after the visible folder
   } catch (e) { if (acct === ACCT) showAcctError(e); }
 }
 async function refreshFolders() { const acct = ACCT; const j = await api('folders', {action: 'list', refresh: true}); if (acct === ACCT) renderFolders(j.items); }
 
+/* Folder warm-up: favourites, the last few opened folders and Inbox are fetched in
+   the background (the server keeps them in memory), so switching to them is instant. */
+const recentKey = () => 'aas-recent-folders:' + ACCT;
+function rememberFolder(id) {
+  try {
+    const list = [id, ...JSON.parse(localStorage.getItem(recentKey()) || '[]').filter(x => x !== id)].slice(0, 5);
+    localStorage.setItem(recentKey(), JSON.stringify(list));
+  } catch (_) { /* per-viewer nicety only */ }
+}
+function warmFolders() {
+  let recent = [];
+  try { recent = JSON.parse(localStorage.getItem(recentKey()) || '[]'); } catch (_) {}
+  const favs = (prefs.favorite_folders || []).filter(k => k.startsWith(ACCT + ':')).map(k => k.slice(ACCT.length + 1));
+  const known = new Set(folders.map(f => f.folder_id));
+  const list = [...new Set([inboxIds[ACCT], ...favs, ...recent])].filter(f => f && f !== curFolder && known.has(f));
+  if (list.length) api('warm', {folders: list, filter: +$('#window').value, fields: LIST_FIELDS}).catch(() => {});
+}
 function openFolder(id) {
+  rememberFolder(id);
   curFolder = id; searchQ = ''; $('#search').value = '';
-  document.querySelectorAll('.folder').forEach(el => el.classList.toggle('on', el.dataset.id === id));
+  selectedKeys = new Set();
+  document.querySelectorAll('.aas-folder').forEach(el => el.classList.toggle('on', el.dataset.id === id));
   $('#listtitle').textContent = folders.find(f => f.folder_id === id)?.name || '';
   loadListGuarded(true);
 }
@@ -466,7 +687,7 @@ const keyOf = m => (prefs.threads ? 't:' + normSubj(m.thread_topic || m.subject)
 
 async function loadList(reset) {
   const acct = ACCT, box = $('#rows');
-  if (reset) { box.innerHTML = '<div class="empty">Загрузка…</div>'; nextCursor = null; }
+  if (reset) { box.innerHTML = '<div class="aas-empty">Загрузка…</div>'; nextCursor = null; selectedKeys = new Set(); }
   let j;
   try {
     if (searchQ) j = await api('mail', {action: 'search', query: searchQ, limit: 40, fields: LIST_FIELDS});
@@ -478,7 +699,11 @@ async function loadList(reset) {
   nextCursor = j.next_cursor || null;
   allItems = reset ? j.items : allItems.concat(j.items);
   renderList(!!(nextCursor || (searchQ && j.has_more)));
-  $('#dot').className = 'ok';
+  $('#dot').className = 'aas-status-dot aas-status-dot--ok';
+  // Seed Inbox ids on a normal open so the first auto-sync does not treat
+  // already-visible mail as "new".
+  if (!searchQ && inboxIds[acct] && curFolder === inboxIds[acct] && (j.items || []).length)
+    noteIncoming(acct, j.items);
 }
 const loadListGuarded = guard(loadList);
 
@@ -495,25 +720,47 @@ function groupItems(items) {
 }
 function renderList(hasMore) {
   const box = $('#rows'); box.innerHTML = '';
-  if (!allItems.length) box.innerHTML = '<div class="empty">Писем нет</div>';
-  groupItems(allItems).sort((a, b) => (b.items[0].received || '').localeCompare(a.items[0].received || ''))
-    .forEach(g => box.appendChild(rowEl(g)));
+  const groups = groupsOnScreen();
+  // Drop selections that no longer exist on screen.
+  const alive = new Set(groups.map(g => g.key));
+  selectedKeys = new Set([...selectedKeys].filter(k => alive.has(k)));
+  if (!allItems.length) box.innerHTML = '<div class="aas-empty">Писем нет</div>';
+  const frag = document.createDocumentFragment();  // one reflow for the whole list
+  groups.sort((a, b) => (b.items[0].received || '').localeCompare(a.items[0].received || ''))
+    .forEach(g => frag.appendChild(rowEl(g)));
   if (hasMore) {
     const more = document.createElement('div'); more.className = 'more';
-    more.innerHTML = '<button class="btn">Ещё</button>'; more.firstChild.onclick = () => loadListGuarded(false); box.appendChild(more);
+    more.innerHTML = '<button class="aas-btn">Ещё</button>'; more.firstChild.onclick = () => loadListGuarded(false); frag.appendChild(more);
   }
+  box.appendChild(frag);
+  syncBulkBar(groups.length);
 }
 function rowEl(g) {
   const m = g.items[0], n = g.items.length, unread = g.items.some(x => !x.is_read);
   const senders = [...new Set(g.items.map(x => who(x.from)))].slice(0, 3).join(', ');
   const el = document.createElement('div');
-  el.className = 'row' + (unread ? ' unread' : '') + (g.key === curKey ? ' on' : '');
+  el.className = 'aas-row' + (unread ? ' unread' : '') + (g.key === curKey ? ' on' : '') + (selectedKeys.has(g.key) ? ' sel' : '');
   el.dataset.key = g.key;
   const ico = unread
-    ? `<span class="read-ico" title="Непрочитано">✉</span>`
-    : `<span class="read-ico" title="Прочитано">✓</span>`;
-  el.innerHTML = `<div class="top">${ico}<span class="from">${esc(senders)}${n > 1 ? `<span class="cnt">${n}</span>` : ''}</span><span class="date">${g.items.some(x => x.has_attachments) ? '📎 ' : ''}${esc(fmtDate(m.received))}</span></div>
-    <div class="subj">${esc((prefs.threads ? m.thread_topic || m.subject : m.subject) || '(без темы)')}</div><div class="prev">${esc((m.preview || '').replace(/\s+/g, ' '))}</div>`;
+    ? `<button type="button" class="aas-row__ico" data-read="1" title="Непрочитанное — нажмите, чтобы отметить прочитанным" aria-label="Отметить прочитанным"><span class="aas-readdot"></span></button>`
+    : `<button type="button" class="aas-row__ico" data-read="0" title="Прочитано — нажмите, чтобы отметить непрочитанным" aria-label="Отметить непрочитанным"><span class="aas-readdot aas-readdot--read"></span></button>`;
+  el.innerHTML = `<div class="aas-row__top">
+      <label class="aas-row__chk" title="Выбрать"><input type="checkbox" ${selectedKeys.has(g.key) ? 'checked' : ''}></label>
+      ${ico}<span class="aas-row__from">${esc(senders)}${n > 1 ? `<span class="cnt">${n}</span>` : ''}</span>
+      <span class="aas-row__date">${g.items.some(x => x.has_attachments) ? '📎 ' : ''}${esc(fmtDate(m.received))}</span></div>
+    <div class="aas-row__subj">${esc((prefs.threads ? m.thread_topic || m.subject : m.subject) || '(без темы)')}${catChips(g.items.flatMap(x => x.categories || []))}</div>
+    <div class="aas-row__prev">${esc((m.preview || '').replace(/\s+/g, ' '))}</div>`;
+  el.querySelector('.aas-row__chk input').onclick = e => {
+    e.stopPropagation();
+    if (e.target.checked) selectedKeys.add(g.key); else selectedKeys.delete(g.key);
+    el.classList.toggle('sel', e.target.checked);
+    syncBulkBar();
+  };
+  el.querySelector('.aas-row__ico').onclick = guard(async e => {
+    e.stopPropagation();
+    const read = e.currentTarget.dataset.read === '1';
+    await markGroupsRead([g.key], read);
+  });
   el.onclick = () => openGroup(g);
   return el;
 }
@@ -524,14 +771,16 @@ const cardOf = id => cards.find(c => c.m.item_id === id);
 
 function openGroup(g) {
   curKey = g.key; curGroup = g; const token = ++openToken;
-  document.querySelectorAll('.row').forEach(r => r.classList.toggle('on', r.dataset.key === g.key));
+  document.querySelectorAll('.aas-row').forEach(r => r.classList.toggle('on', r.dataset.key === g.key));
   const subject = g.items[0].thread_topic || g.items[0].subject || '(без темы)';
   cards = [];
   $('#reader').innerHTML = `
-    <div id="rtools">
-      <button class="btn" data-a="reply">Ответить</button><button class="btn" data-a="replyall">Ответить всем</button>
-      <button class="btn" data-a="fwd">Переслать</button><button class="btn danger" data-a="del">Удалить</button>
-      <button class="btn" data-a="unread">Непрочитано</button><button class="btn ghost" data-a="all">Развернуть все</button>
+    <div id="rtools" class="aas-reader-tools">
+      <button class="aas-btn" data-a="reply">Ответить</button><button class="aas-btn" data-a="replyall">Ответить всем</button>
+      <button class="aas-btn" data-a="fwd">Переслать</button><button class="aas-btn aas-btn--danger" data-a="del">Удалить</button>
+      <button class="aas-btn" data-a="unread" title="Отметить непрочитанным">✉ Непрочитано</button>
+      <button class="aas-btn" data-a="read" title="Отметить прочитанным">✓ Прочитано</button>
+      <button class="aas-btn aas-btn--ghost" data-a="all">Развернуть все</button>
       <select id="mv" style="width:auto"><option value="">Переместить в…</option>${folders.map(f => `<option value="${esc(f.folder_id)}">${esc(f.name)}</option>`).join('')}</select>
     </div>
     <div id="conv"><div id="chead"><h2>${esc(subject)}</h2><div class="meta" id="cmeta"></div></div><div id="cards"></div></div>`;
@@ -555,9 +804,9 @@ function openGroup(g) {
 }
 function addCard(m) {
   const c = {m, j: null, open: false, el: document.createElement('div')};
-  c.el.className = 'mc' + (m.is_read ? '' : ' unread');
-  c.el.innerHTML = `<div class="mh"><span class="who">${esc(who(m.from))}</span><span class="snip">${esc((m.preview || '').replace(/\s+/g, ' '))}</span><span class="when">${m.has_attachments ? '📎 ' : ''}${esc(m.received || '')}</span></div><div class="mb"></div>`;
-  c.el.querySelector('.mh').onclick = () => toggleCard(c);
+  c.el.className = 'aas-mc' + (m.is_read ? '' : ' unread');
+  c.el.innerHTML = `<div class="aas-mc__head"><span class="aas-mc__who">${esc(who(m.from))}</span><span class="aas-mc__snip">${esc((m.preview || '').replace(/\s+/g, ' '))}</span><span class="aas-mc__when">${m.has_attachments ? '📎 ' : ''}${esc(m.received || '')}</span></div><div class="aas-mc__body"></div>`;
+  c.el.querySelector('.aas-mc__head').onclick = () => toggleCard(c);
   cards.push(c);
 }
 function layoutCards() {
@@ -571,7 +820,7 @@ const toggleCard = guard(async (c, force) => {
   if (open && !c.j) await loadCard(c);
 });
 async function loadCard(c) {
-  const mb = c.el.querySelector('.mb'); mb.innerHTML = '<div class="mm">Загрузка…</div>';
+  const mb = c.el.querySelector('.aas-mc__body'); mb.innerHTML = '<div class="aas-mc__meta">Загрузка…</div>';
   let j;
   try { j = await api('message', {item_id: c.m.item_id, has_att: !!c.m.has_attachments}); }
   catch (e) {
@@ -586,18 +835,71 @@ async function loadCard(c) {
   if (!c.m.is_read) {
     c.m.is_read = true; c.el.classList.remove('unread');
     api('mail', {action: 'mark_read', item_ids: [c.m.item_id], read: true}).catch(() => {});
-    document.querySelector(`.row[data-key="${CSS.escape(curKey || '')}"]`)?.classList.toggle('unread', curGroup.items.some(x => !x.is_read));
+    document.querySelector(`.aas-row[data-key="${CSS.escape(curKey || '')}"]`)?.classList.toggle('unread', curGroup.items.some(x => !x.is_read));
+    recountOpenFolder();
   }
 }
+/* Meeting invitation inside a letter: what / when / where + RSVP, same actions and
+   look as the calendar's event card. The answer goes to the organizer (Exchange
+   MeetingResponse, or a standard iCalendar reply by mail when the server can't). */
+const RSVP_DONE = {accept: 'Вы приняли приглашение', tentative: 'Вы ответили «Под вопросом»', decline: 'Вы отклонили приглашение'};
+function inviteWhen(inv) {
+  if (!inv.start) return '';
+  const d = new Date(inv.start.replace(' ', 'T'));
+  const day = d.toLocaleDateString('ru-RU', {weekday: 'short', day: 'numeric', month: 'long'});
+  if (inv.all_day) return day + ' · весь день';
+  const t = s => (s || '').slice(11, 16);
+  return `${day} · ${t(inv.start)}${inv.end ? '–' + t(inv.end) : ''}`;
+}
+function inviteCard(inv) {
+  const cancelled = inv.method === 'cancel';
+  const link = joinURL(inv.location, '');
+  const org = inv.organizer?.name || inv.organizer?.address || '';
+  return `<div class="aas-invite${cancelled ? ' aas-invite--cancel' : ''}">
+    <div class="aas-invite__kind">${cancelled ? 'Встреча отменена' : 'Приглашение на встречу'}</div>
+    <div class="aas-invite__title">${esc(inv.subject || '(без темы)')}</div>
+    <div class="aas-invite__row">🕑 ${esc(inviteWhen(inv))}</div>
+    ${inv.location ? `<div class="aas-invite__row">📍 ${linkify(esc(inv.location))}</div>` : ''}
+    ${org ? `<div class="aas-invite__row aas-invite__muted">Организатор: ${esc(org)}</div>` : ''}
+    ${cancelled ? '' : `<div class="aas-invite__acts">
+      ${link ? `<a class="aas-btn aas-btn--primary" href="${esc(link)}" target="_blank" rel="noopener noreferrer" title="Открыть ссылку встречи в браузере: ${esc(link)}">▶ Подключиться</a><span class="aas-invite__sep"></span>` : ''}
+      <button type="button" class="aas-btn" data-rsvp="accept">✓ Принять</button>
+      <button type="button" class="aas-btn" data-rsvp="tentative">? Под вопросом</button>
+      <button type="button" class="aas-btn aas-btn--danger" data-rsvp="decline">✕ Отклонить</button>
+    </div><div class="aas-invite__status" hidden></div>`}
+  </div>`;
+}
+function bindInviteCard(mb, c) {
+  const box = mb.querySelector('.aas-invite'); if (!box) return;
+  const status = box.querySelector('.aas-invite__status');
+  const show = (resp, via) => {
+    box.querySelectorAll('[data-rsvp]').forEach(b => { b.disabled = true; b.classList.toggle('on', b.dataset.rsvp === resp); });
+    status.hidden = false;
+    status.textContent = RSVP_DONE[resp] + (via === 'mail' ? ' — ответ отправлен организатору письмом.' : ' — организатор получит уведомление.');
+  };
+  if (c.rsvp) show(c.rsvp.resp, c.rsvp.via);
+  box.querySelectorAll('[data-rsvp]').forEach(b => b.onclick = guard(async () => {
+    const resp = b.dataset.rsvp;
+    box.querySelectorAll('[data-rsvp]').forEach(x => x.disabled = true);
+    try {
+      const r = await api('invite', {item_id: c.m.item_id, response: resp});
+      c.rsvp = {resp, via: r.via}; show(resp, r.via);
+      toast(RSVP_DONE[resp]);
+      if (view === 'cal') loadCal();
+    } catch (e) { box.querySelectorAll('[data-rsvp]').forEach(x => x.disabled = false); throw e; }
+  }));
+}
 function renderCard(c) {
-  const j = c.j, m = c.m, mb = c.el.querySelector('.mb');
+  const j = c.j, m = c.m, mb = c.el.querySelector('.aas-mc__body');
   const to = j.to.map(whoFull).join(', '), cc = j.cc.map(whoFull).join(', ');
-  mb.innerHTML = `<div class="mm"><b>${esc(j.from.map(whoFull).join(', '))}</b><br>Кому: ${esc(to)}${cc ? `<br>Копия: ${esc(cc)}` : ''}</div>
-    <div class="macts"><button class="btn sm" data-a="reply">Ответить</button><button class="btn sm" data-a="replyall">Ответить всем</button><button class="btn sm" data-a="fwd">Переслать</button></div>
-    ${j.attachments.length ? `<div class="atts">${j.attachments.map(a => `<a href="/attachment?id=${encodeURIComponent(m.item_id)}&${a.ref ? 'ref=' + encodeURIComponent(a.ref) + '&n=' + encodeURIComponent(a.name) : 'i=' + a.idx}&a=${ACCT}&t=${TOK}" download>📎 ${esc(a.name)} <small>${fmtSize(a.size)}</small></a>`).join('')}</div>` : ''}
-    ${j.html ? '<div class="imgbar">Внешние картинки заблокированы. <a href="#" class="showimg">Показать</a></div>' : ''}
+  mb.innerHTML = `<div class="aas-mc__meta"><b>${esc(j.from.map(whoFull).join(', '))}</b><br>Кому: ${esc(to)}${cc ? `<br>Копия: ${esc(cc)}` : ''}</div>
+    <div class="aas-mc__acts"><button class="aas-btn aas-btn--sm" data-a="reply">Ответить</button><button class="aas-btn aas-btn--sm" data-a="replyall">Ответить всем</button><button class="aas-btn aas-btn--sm" data-a="fwd">Переслать</button></div>
+    ${j.attachments.length ? `<div class="aas-atts">${j.attachments.map(a => `<a class="aas-att" href="/attachment?id=${encodeURIComponent(m.item_id)}&${a.ref ? 'ref=' + encodeURIComponent(a.ref) + '&n=' + encodeURIComponent(a.name) : 'i=' + a.idx}&a=${ACCT}&t=${TOK}" download>📎 ${esc(a.name)} <small>${fmtSize(a.size)}</small></a>`).join('')}</div>` : ''}
+    ${j.invite ? inviteCard(j.invite) : ''}
+    ${j.html ? '<div class="aas-imgbar">Внешние картинки заблокированы. <a href="#" class="showimg">Показать</a></div>' : ''}
     <iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" scrolling="no"></iframe>`;
-  const fr = mb.querySelector('iframe'), bar = mb.querySelector('.imgbar');
+  bindInviteCard(mb, c);
+  const fr = mb.querySelector('iframe'), bar = mb.querySelector('.aas-imgbar');
   const setFrame = allowImg => {
     const csp = `default-src 'none'; style-src 'unsafe-inline'; img-src data: ${allowImg ? 'https: http:' : ''}`;
     const body = j.html || `<pre style="white-space:pre-wrap;font:14px/1.5 -apple-system,system-ui,sans-serif">${linkify(esc(j.text))}</pre>`;
@@ -607,7 +909,7 @@ function renderCard(c) {
   fr.onload = () => { try { fr.style.height = (fr.contentDocument.documentElement.scrollHeight + 6) + 'px'; } catch (e) { fr.style.height = '480px'; } };
   setFrame(false);
   const show = mb.querySelector('.showimg'); if (show) show.onclick = e => { e.preventDefault(); bar.style.display = 'none'; setFrame(true); };
-  mb.querySelector('.macts').onclick = guard(e => { const a = e.target.dataset?.a; if (a) return act(a, c); });
+  mb.querySelector('.aas-mc__acts').onclick = guard(e => { const a = e.target.dataset?.a; if (a) return act(a, c); });
 }
 function act(a, c) {
   const send = c => composeForm({mode: a === 'fwd' ? 'fwd' : 'reply', all: a === 'replyall', m: c.m, j: c.j});
@@ -622,17 +924,21 @@ async function toolbar(e) {
   if (a === 'del') { await api('mail', {action: 'delete', item_ids: curGroup.items.map(m => m.item_id)}); afterRemove(curGroup); toast('Перемещено в «Удалённые»'); }
   if (a === 'unread') {
     await api('mail', {action: 'mark_read', item_ids: curGroup.items.map(m => m.item_id), read: false});
-    curGroup.items.forEach(m => m.is_read = false); renderList(!!nextCursor); toast('Отмечено непрочитанным');
+    curGroup.items.forEach(m => m.is_read = false); renderList(!!nextCursor); recountOpenFolder(); toast('Отмечено непрочитанным');
+  }
+  if (a === 'read') {
+    await api('mail', {action: 'mark_read', item_ids: curGroup.items.map(m => m.item_id), read: true});
+    curGroup.items.forEach(m => m.is_read = true); renderList(!!nextCursor); recountOpenFolder(); toast('Отмечено прочитанным');
   }
 }
 function afterRemove(g) {
   const gone = new Set(g.items.map(m => m.item_id));
   allItems = allItems.filter(m => !gone.has(m.item_id)); curKey = null; curGroup = null;
-  renderList(!!nextCursor); $('#reader').innerHTML = '<div class="empty">Выберите письмо</div>';
+  renderList(!!nextCursor); $('#reader').innerHTML = '<div class="aas-empty">Выберите письмо</div>';
 }
 
-$('#window').onchange = () => loadListGuarded(true);
-$('#thr').onchange = e => { savePrefs({threads: e.target.checked}); if (allItems.length) renderList(!!nextCursor); if (curGroup) { curKey = null; $('#reader').innerHTML = '<div class="empty">Выберите письмо</div>'; } };
+$('#window').onchange = () => { savePrefs({mail_window: +$('#window').value}); loadListGuarded(true); };
+$('#thr').onchange = e => { savePrefs({threads: e.target.checked}); if (allItems.length) renderList(!!nextCursor); if (curGroup) { curKey = null; $('#reader').innerHTML = '<div class="aas-empty">Выберите письмо</div>'; } };
 $('#search').addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   searchQ = e.target.value.trim();
@@ -644,17 +950,264 @@ async function loadListQuiet() {
   try {
     const j = await api('mail', {action: 'list', folder: curFolder, limit: 40, filter: +$('#window').value, fields: LIST_FIELDS});
     if (acct !== ACCT) return;
+    // Server returns the whole folder cache after a SyncKey delta — replace so
+    // read/unread and deletes from other clients show up without a full prime.
+    if (j.delta) {
+      allItems = j.items || [];
+      nextCursor = j.next_cursor || null;
+      renderList(!!nextCursor);
+      lastSync = new Date();
+      setSyncText();
+      if (inboxIds[acct] && curFolder === inboxIds[acct]) noteIncoming(acct, allItems);
+      return;
+    }
     const have = new Set(allItems.map(m => m.item_id));
-    const fresh = j.items.filter(m => !have.has(m.item_id));
+    const fresh = (j.items || []).filter(m => !have.has(m.item_id));
     if (fresh.length) { allItems = fresh.concat(allItems); renderList(!!nextCursor); lastSync = new Date(); setSyncText(); }
+    if (inboxIds[acct] && curFolder === inboxIds[acct]) noteIncoming(acct, j.items || []);
   } catch (e) { /* quiet */ }
 }
 
 /* ---------- compose ---------- */
-function splitAddrs(s) { return s.split(/[;,]/).map(x => x.trim()).filter(Boolean); }
+/** Split To/Cc preserving commas inside `Name <email>` and `"Last, First"` tokens. */
+function splitAddrs(s) {
+  const out = []; let cur = '', depth = 0, quoted = false;
+  for (const ch of String(s || '')) {
+    if (ch === '"') quoted = !quoted;
+    else if (ch === '<' && !quoted) depth++;
+    else if (ch === '>' && !quoted) depth = Math.max(0, depth - 1);
+    if ((ch === ',' || ch === ';' || ch === '\n') && depth === 0 && !quoted) {
+      if (cur.trim()) out.push(cur.trim());
+      cur = '';
+    } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+/** Prefer bare SMTP for the wire; keep display name only in the UI field. */
+function addrOnly(s) {
+  const m = String(s || '').match(/<([^<>@\s]+@[^<>@\s]+)>/);
+  if (m) return m[1].trim();
+  const bare = String(s || '').trim();
+  return bare.includes('@') ? bare.replace(/^["']|["']$/g, '') : bare;
+}
+function formatPerson(p) {
+  const name = (p.name || '').trim(), addr = (p.address || '').trim();
+  if (name && addr && name.toLowerCase() !== addr.toLowerCase())
+    return /[,;"]/.test(name) ? `"${name.replace(/"/g, "'")}" <${addr}>` : `${name} <${addr}>`;
+  return addr || name;
+}
 const sigText = () => ACCT === 'main' ? prefs.signature : prefs.signature2;
 const sigBlock = mode => sigText() && (mode === 'new' || prefs.sig_replies) ? '\n\n-- \n' + sigText() : '';
 let files = [];
+
+/* Recent GAL picks — local per account, ranked by use. Instant suggestions without a round-trip. */
+const PEOPLE_RECENT_MAX = 40;
+function peopleRecentKey() { return 'aas-people-recent:' + ACCT; }
+function loadRecentPeople() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(peopleRecentKey()) || '[]');
+    return Array.isArray(raw) ? raw.filter(p => p && p.address) : [];
+  } catch (_) { return []; }
+}
+function saveRecentPeople(list) {
+  try { localStorage.setItem(peopleRecentKey(), JSON.stringify(list.slice(0, PEOPLE_RECENT_MAX))); } catch (_) { /* ignore */ }
+}
+function rememberPeople(people) {
+  if (!people || !people.length) return;
+  const now = Date.now();
+  let cur = loadRecentPeople();
+  for (const p of people) {
+    const address = (p.address || addrOnly(p) || '').trim();
+    if (!address || !address.includes('@')) continue;
+    const name = (p.name || '').trim();
+    const i = cur.findIndex(x => (x.address || '').toLowerCase() === address.toLowerCase());
+    if (i >= 0) {
+      cur[i] = {address, name: name || cur[i].name || '', useCount: (cur[i].useCount || 1) + 1, lastUsed: now};
+    } else {
+      cur.push({address, name, useCount: 1, lastUsed: now});
+    }
+  }
+  cur.sort((a, b) => (b.useCount - a.useCount) || (b.lastUsed - a.lastUsed));
+  saveRecentPeople(cur);
+}
+function rememberAddrsFromFields(...fields) {
+  const people = [];
+  for (const s of fields) {
+    for (const tok of splitAddrs(s)) {
+      const address = addrOnly(tok);
+      if (!address.includes('@')) continue;
+      const m = tok.match(/^\s*(.*?)\s*<[^>]+>\s*$/);
+      people.push({address, name: (m && m[1] ? m[1].replace(/^["']|["']$/g, '').trim() : '')});
+    }
+  }
+  rememberPeople(people);
+}
+function filterRecentPeople(q, limit = 8) {
+  const needle = (q || '').trim().toLowerCase();
+  const all = loadRecentPeople();
+  if (!needle) return all.slice(0, limit);
+  return all.filter(p =>
+    (p.name || '').toLowerCase().includes(needle) ||
+    (p.address || '').toLowerCase().includes(needle)
+  ).slice(0, limit);
+}
+
+/**
+ * Autocomplete for To/Cc/attendees: recent contacts instantly, GAL after 2+ chars,
+ * keyboard nav, replaces only the last incomplete token.
+ */
+function bindPeopleInput(inp) {
+  if (!inp || inp._peopleBound) return;
+  inp._peopleBound = true;
+  inp.setAttribute('autocomplete', 'off');
+  inp.setAttribute('spellcheck', 'false');
+
+  let wrap = inp.closest('.aas-people');
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.className = 'aas-people';
+    inp.parentNode.insertBefore(wrap, inp);
+    wrap.appendChild(inp);
+  }
+  // Portal to #ov so a scrollable modal does not clip the list.
+  let dd = document.querySelector('.aas-people__dd[data-for="' + CSS.escape(inp.id || '') + '"]');
+  if (!dd || !inp.id) {
+    dd = document.createElement('div');
+    dd.className = 'aas-people__dd';
+    if (inp.id) dd.dataset.for = inp.id;
+    dd.hidden = true;
+    (document.getElementById('ov') || document.body).appendChild(dd);
+  }
+
+  let timer = null, tok = 0, items = [], idx = -1, lastQ = '';
+
+  const place = () => {
+    const r = inp.getBoundingClientRect();
+    dd.style.position = 'fixed';
+    dd.style.left = Math.round(r.left) + 'px';
+    dd.style.width = Math.round(r.width) + 'px';
+    dd.style.top = Math.round(r.bottom + 3) + 'px';
+    dd.style.right = 'auto';
+  };
+  const hide = () => { dd.hidden = true; dd.innerHTML = ''; items = []; idx = -1; };
+  const prefixAndToken = () => {
+    const v = inp.value;
+    let depth = 0, lastSep = -1, quoted = false;
+    for (let i = 0; i < v.length; i++) {
+      const ch = v[i];
+      if (ch === '"') quoted = !quoted;
+      else if (quoted) continue;
+      else if (ch === '<') depth++;
+      else if (ch === '>') depth = Math.max(0, depth - 1);
+      else if ((ch === ',' || ch === ';' || ch === '\n') && depth === 0) lastSep = i;
+    }
+    const pre = lastSep >= 0 ? v.slice(0, lastSep + 1) : '';
+    const rawToken = lastSep >= 0 ? v.slice(lastSep + 1) : v;
+    return {pre, token: rawToken.replace(/^\s+/, ''), rawToken};
+  };
+
+  const paint = (list, {loading, empty} = {}) => {
+    items = list || [];
+    idx = items.length ? 0 : -1;
+    place();
+    if (loading && !items.length) {
+      dd.innerHTML = '<div class="aas-people__hint">Ищу в каталоге…</div>';
+      dd.hidden = false;
+      return;
+    }
+    if (!items.length) {
+      dd.innerHTML = empty ? `<div class="aas-people__hint">${esc(empty)}</div>` : '';
+      dd.hidden = !empty;
+      return;
+    }
+    dd.innerHTML = items.map((p, i) => {
+      const sub = [p.address, p.title || p.department].filter(Boolean).join(' · ');
+      const badge = p._recent ? '<span class="aas-people__badge">недавний</span>' : '';
+      return `<button type="button" class="aas-people__opt${i === idx ? ' on' : ''}" data-i="${i}">
+        <span class="aas-people__name">${esc(p.name || p.address)}${badge}</span>
+        <span class="aas-people__sub">${esc(sub)}</span>
+      </button>`;
+    }).join('');
+    dd.hidden = false;
+    dd.querySelectorAll('.aas-people__opt').forEach(btn => {
+      btn.onmousedown = e => { e.preventDefault(); pick(+btn.dataset.i); };
+    });
+  };
+
+  const pick = i => {
+    const p = items[i]; if (!p) return;
+    const {pre} = prefixAndToken();
+    const formatted = formatPerson(p);
+    const needsSep = pre.length && !/[,;\s]$/.test(pre);
+    inp.value = pre + (needsSep ? ', ' : '') + formatted + ', ';
+    rememberPeople([p]);
+    hide();
+    inp.focus();
+    const pos = inp.value.length;
+    inp.setSelectionRange(pos, pos);
+  };
+
+  const run = async () => {
+    const {token} = prefixAndToken();
+    const q = token.trim();
+    lastQ = q;
+    if (!q) { hide(); return; }
+
+    const local = filterRecentPeople(q, 8).map(p => ({...p, _recent: true}));
+    if (q.length < 2) {
+      paint(local, {empty: local.length ? '' : 'Введите ещё символ'});
+      return;
+    }
+
+    // Show local hits immediately; refresh with GAL when it returns.
+    paint(local, {loading: true});
+    const my = ++tok;
+    try {
+      const j = await api('people', {action: 'find', query: q, limit: 10});
+      if (my !== tok || lastQ !== q) return;
+      const seen = new Set(local.map(p => (p.address || '').toLowerCase()));
+      const remote = (j.items || []).filter(p => p.address && !seen.has(p.address.toLowerCase()));
+      const merged = local.concat(remote).slice(0, 12);
+      paint(merged, {empty: merged.length ? '' : 'Никого не найдено'});
+    } catch (_) {
+      if (my !== tok) return;
+      paint(local, {empty: local.length ? '' : 'Каталог недоступен'});
+    }
+  };
+
+  inp.addEventListener('input', () => {
+    clearTimeout(timer);
+    const {token} = prefixAndToken();
+    // Local filter is sync and cheap — paint on first tick.
+    if (token.trim()) {
+      const local = filterRecentPeople(token.trim(), 8).map(p => ({...p, _recent: true}));
+      if (local.length) paint(local, {loading: token.trim().length >= 2});
+    } else hide();
+    timer = setTimeout(run, token.trim().length >= 2 ? 180 : 60);
+  });
+  inp.addEventListener('keydown', e => {
+    if (dd.hidden || !items.length) {
+      if (e.key === 'Escape') hide();
+      return;
+    }
+    if (e.key === 'ArrowDown') { e.preventDefault(); idx = (idx + 1) % items.length; paint(items); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); idx = (idx - 1 + items.length) % items.length; paint(items); }
+    else if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); pick(idx); }
+    else if (e.key === 'Tab' && idx >= 0 && !e.shiftKey) { e.preventDefault(); pick(idx); }
+    else if (e.key === 'Escape') { e.preventDefault(); hide(); }
+  });
+  inp.addEventListener('blur', () => setTimeout(hide, 120));
+  inp.addEventListener('focus', () => {
+    const {token} = prefixAndToken();
+    if (token.trim()) run();
+    else {
+      const top = filterRecentPeople('', 6).map(p => ({...p, _recent: true}));
+      if (top.length) paint(top);
+    }
+  });
+}
+
 function composeForm(ctx) {
   files = [];
   const mode = ctx?.mode || 'new';
@@ -662,23 +1215,15 @@ function composeForm(ctx) {
   openModal(`<h3>${title}</h3>
     ${mode === 'reply' ? `<div class="f"><label>Кому</label><div>${esc(ctx.j.from.map(whoFull).join(', '))}${ctx.all ? ' и остальные адресаты' : ''}</div></div>
       <div class="f"><label>Тема</label><div>Re: ${esc(ctx.j.subject)}</div></div>` : `
-    <div class="f"><label>Кому (через запятую; можно писать фамилию)</label><input type="text" id="cto" list="dl" autocomplete="off"></div>
-    <div class="f"><label>Копия</label><input type="text" id="ccc" list="dl" autocomplete="off"></div>
+    <div class="f"><label>Кому</label><div class="aas-people"><input type="text" id="cto" placeholder="фамилия или email"></div>
+      <div class="hint">Начните вводить — подсказки из недавних и каталога. Enter/Tab подставляют выбранного.</div></div>
+    <div class="f"><label>Копия</label><div class="aas-people"><input type="text" id="ccc" placeholder="копия"></div></div>
     ${mode === 'fwd' ? `<div class="f"><label>Тема</label><div>Fwd: ${esc(ctx.j.subject)}</div></div>` : '<div class="f"><label>Тема</label><input type="text" id="csub"></div>'}`}
-    <datalist id="dl"></datalist>
     <div class="f"><label>Текст</label><textarea id="cbody" rows="10"></textarea></div>
     ${mode === 'reply' ? '' : '<div class="f"><input type="file" id="cfile" multiple> <div id="cfiles"></div></div>'}
-    <div class="acts2"><button class="btn" id="ccancel">Отмена</button><button class="btn primary" id="csend">Отправить</button></div>`);
+    <div class="acts2"><button class="aas-btn" id="ccancel">Отмена</button><button class="aas-btn aas-btn--primary" id="csend">Отправить</button></div>`);
   $('#cbody').value = sigBlock(mode);
-  const dl = $('#dl'); let t;
-  for (const id of ['cto', 'ccc']) {
-    const inp = $('#' + id); if (!inp) continue;
-    inp.oninput = () => { clearTimeout(t); t = setTimeout(async () => {
-      const last = inp.value.split(/[;,]/).pop().trim(); if (last.length < 3) return;
-      try { const j = await api('people', {action: 'find', query: last, limit: 8});
-        const pre = inp.value.slice(0, inp.value.length - inp.value.split(/[;,]/).pop().length);
-        dl.innerHTML = j.items.map(p => `<option value="${esc(pre + p.address)}">${esc(p.name)}</option>`).join(''); } catch (e) { /* ignore */ } }, 300); };
-  }
+  for (const id of ['cto', 'ccc']) { const el = $('#' + id); if (el) bindPeopleInput(el); }
   const fi = $('#cfile');
   if (fi) fi.onchange = async () => {
     for (const f of fi.files) files.push({name: f.name, content_base64: await toB64(f), size: f.size});
@@ -690,11 +1235,18 @@ function composeForm(ctx) {
     try {
       const body = $('#cbody').value, atts = files.map(({name, content_base64}) => ({name, content_base64}));
       if (mode === 'new') {
-        const to = splitAddrs($('#cto').value); if (!to.length) throw new Error('Укажите получателя');
-        await api('mail', {action: 'send', to, cc: splitAddrs($('#ccc').value), subject: $('#csub').value, body, attachments: atts});
+        const toRaw = splitAddrs($('#cto').value), ccRaw = splitAddrs($('#ccc').value);
+        const to = toRaw.map(addrOnly).filter(Boolean);
+        const cc = ccRaw.map(addrOnly).filter(Boolean);
+        if (!to.length) throw new Error('Укажите получателя');
+        await api('mail', {action: 'send', to, cc, subject: $('#csub').value, body, attachments: atts});
+        rememberAddrsFromFields($('#cto').value, $('#ccc').value);
       } else if (mode === 'fwd') {
-        const to = splitAddrs($('#cto').value); if (!to.length) throw new Error('Укажите получателя');
+        const toRaw = splitAddrs($('#cto').value);
+        const to = toRaw.map(addrOnly).filter(Boolean);
+        if (!to.length) throw new Error('Укажите получателя');
         await api('mail', {action: 'forward', item_id: ctx.m.item_id, to, body, attachments: atts});
+        rememberAddrsFromFields($('#cto').value);
       } else await api('mail', {action: 'reply', item_id: ctx.m.item_id, body, reply_all: !!ctx.all});
       closeModal(); toast('Отправлено');
     } finally { btn.disabled = false; btn.textContent = 'Отправить'; }
@@ -703,7 +1255,7 @@ function composeForm(ctx) {
   (mode === 'reply' ? ta : $('#cto')).focus();
 }
 function drawFiles() {
-  $('#cfiles').innerHTML = files.map((f, i) => `<span class="att">${esc(f.name)} <small>${fmtSize(f.size)}</small><button data-i="${i}">✕</button></span>`).join('');
+  $('#cfiles').innerHTML = files.map((f, i) => `<span class="aas-attendee">${esc(f.name)} <small>${fmtSize(f.size)}</small><button data-i="${i}">✕</button></span>`).join('');
   $('#cfiles').querySelectorAll('button').forEach(b => b.onclick = () => { files.splice(+b.dataset.i, 1); drawFiles(); });
 }
 const toB64 = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(f); });
@@ -714,7 +1266,7 @@ const parseLinks = t => t.split('\n').map(l => l.trim()).filter(Boolean).map(l =
   return m ? {name: m[1] || m[2].replace(/^https?:\/\//, '').slice(0, 40), url: m[2]} : null; }).filter(Boolean);
 function acctFields(prefix, kind, title, v, extra, loginHint, defaultUrl) {
   const def = defaultUrl || '';
-  return `<div class="acct-block ${kind}"><div class="acct-title">${esc(title)}</div>${extra || ''}
+  return `<div class="aas-card aas-card--acct-${kind}"><div class="aas-acct-title">${esc(title)}</div>${extra || ''}
     <div class="frow">
       <div class="f"><label>Сервер (EAS URL)</label><input type="text" id="${prefix}_url" value="${esc(v.url || def)}" placeholder="${esc(def)}">
         <div class="hint">По умолчанию: <code>${esc(def)}</code>${def ? ` · <a href="#" data-fillurl="${prefix}_url" data-url="${esc(def)}">подставить</a>` : ''}</div></div>
@@ -735,10 +1287,10 @@ $('#setbtn').onclick = async () => {
   const sellerBefore = acctCfg.seller || {name: '', url: '', username: '', email: ''};
   const defs = acctCfg.defaults || {};
   openModal(`<h3>Настройки</h3>
-    <div class="settings-tabs"><button class="btn on" data-sp="acct">Аккаунты</button><button class="btn" data-sp="mail">Почта</button><button class="btn" data-sp="about">О приложении</button></div>
+    <div class="aas-settings-tabs"><button class="aas-btn on" data-sp="acct">Аккаунты</button><button class="aas-btn" data-sp="mail">Почта</button><button class="aas-btn" data-sp="about">О приложении</button></div>
     <div data-pane="acct">
     ${acctFields('m', 'bank', 'Alfa-Bank', {...acctCfg.main, hasPass: !!acctCfg.main.has_password}, null,
-      'Формат ДОМЕН\\логин, например moscow\\U_M1YX3', defs.main || '')}
+      'Формат ДОМЕН\\логин, например moscow\\U_XXXXX', defs.main || '')}
     ${acctFields('s', 'seller', 'Alfa-Seller', {...sellerBefore, hasPass: !!sellerBefore.has_password},
       `<div class="f"><label>Название</label><input type="text" id="s_name" value="${esc(sellerBefore.name || 'Alfa-Seller')}">
         <div class="hint">Как аккаунт будет подписан в интерфейсе</div></div>`,
@@ -746,35 +1298,81 @@ $('#setbtn').onclick = async () => {
     <div class="hint">Изменения переподключаются сразу после сохранения. Адреса серверов по умолчанию сохранены в форме.</div>
     </div>
     <div data-pane="mail" hidden>
+    <div class="f"><label>Оформление</label>
+      <div class="aas-themepick" id="stheme">${[
+        ['system', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная'],
+        ['navy-orange', 'Navy + Orange'], ['navy-orange-light', 'Navy · светлая'],
+        ['royal-velvet', 'Royal Velvet'], ['royal-velvet-light', 'Velvet · светлая'],
+        ['eclipse-almond', 'Eclipse + Almond'], ['eclipse-almond-light', 'Eclipse · светлая']
+      ].map(([v, t]) =>
+        `<button type="button" data-theme-v="${v}" class="${(prefs.theme || 'system') === v ? 'on' : ''}">${t}</button>`).join('')}</div>
+      <div class="hint">Светлая / тёмная — по умолчанию. StylesBA: основная — тёмная (где хорошо читается), рядом светлый вариант. Сразу на окно, трей и напоминания.</div></div>
+    <div class="f"><label>Напоминать о встрече за</label>
+      <select id="sremind">${[[1, '1 минуту'], [2, '2 минуты'], [5, '5 минут'], [10, '10 минут'], [15, '15 минут'], [30, '30 минут'], [0, 'Не напоминать']].map(([v, t]) =>
+        `<option value="${v}" ${(prefs.reminder_minutes ?? 5) === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
+      <div class="hint">Всплывающее окно вверху экрана и уведомление macOS перед началом встречи.</div></div>
+    <div class="f"><label>Звук нового письма</label>
+      <div class="frow" style="align-items:center;gap:8px">
+        <select id="smailsound" style="flex:1">${[['notice14', 'Notice'], ['short', 'Short'], ['none', 'Без звука']].map(([v, t]) =>
+          `<option value="${v}" ${(prefs.mail_sound || 'notice14') === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <button type="button" class="aas-btn" id="smailsound_preview" title="Прослушать">▶</button>
+      </div>
+      <div class="hint">Уведомление macOS, когда во «Входящих» появляется новое непрочитанное. «Без звука» — только баннер.</div></div>
     <div class="f"><label>Подпись (добавляется в новые письма, ответы и пересылки)</label>
-      <textarea id="ssig" rows="5" placeholder="С уважением,&#10;Олеся Бабакаева">${esc(prefs.signature)}</textarea></div>
+      <textarea id="ssig" rows="5" placeholder="С уважением,&#10;Имя Фамилия&#10;Должность, телефон">${esc(prefs.signature)}</textarea></div>
     ${accounts.filter(a => a.green).map(a => `<div class="f"><label>Подпись для «${esc(a.name)}»</label><textarea id="ssig2" rows="4">${esc(prefs.signature2)}</textarea></div>`).join('')}
-    <div class="f"><label class="chk"><input type="checkbox" id="ssigr" ${prefs.sig_replies ? 'checked' : ''}> Подпись в ответах и пересылках</label></div>
-    <div class="f"><label class="chk"><input type="checkbox" id="sthr" ${prefs.threads ? 'checked' : ''}> Показывать письма цепочками (диалогами)</label></div>
+    <div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="ssigr" ${prefs.sig_replies ? 'checked' : ''}> Подпись в ответах и пересылках</label></div>
     <div class="frow">
-      <div class="f"><label>Автосинхронизация почты</label><select id="sauto">${[[0, 'Выключена'], [1, 'Каждую минуту'], [2, 'Каждые 2 минуты'], [5, 'Каждые 5 минут'], [10, 'Каждые 10 минут']].map(([v, t]) => `<option value="${v}" ${prefs.auto_sync === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+      <div class="f"><label>Автосинхронизация (почта, календарь, счётчики)</label><select id="sauto">${[[0, 'Выключена'], [1, 'Каждую минуту'], [2, 'Каждые 2 минуты'], [5, 'Каждые 5 минут'], [10, 'Каждые 10 минут']].map(([v, t]) => `<option value="${v}" ${prefs.auto_sync === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
       <div class="f"><label>Вид календаря по умолчанию</label><select id="scal">${[['day', 'День'], ['work', 'Рабочая неделя'], ['week', 'Неделя']].map(([v, t]) => `<option value="${v}" ${prefs.cal_view === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+    </div>
+    <div class="frow">
+      <div class="f"><label>Рабочий день: начало</label><select id="swstart">${[...Array(15)].map((_, i) => i + 6).map(h => `<option value="${h}" ${prefs.work_start === h ? 'selected' : ''}>${pad(h)}:00</option>`).join('')}</select></div>
+      <div class="f"><label>Рабочий день: конец</label><select id="swend">${[...Array(15)].map((_, i) => i + 10).map(h => `<option value="${h}" ${prefs.work_end === h ? 'selected' : ''}>${pad(h)}:00</option>`).join('')}</select>
+        <div class="hint">По нему подбирается «Свободно у всех» при создании встречи</div></div>
     </div>
     <div class="f"><label>Сохранённые ссылки для встреч (по одной в строке: «Название | https://…»)</label>
       <textarea id="slinks" rows="4" placeholder="Моя комната Telemost | https://telemost.yandex.ru/j/…">${esc((prefs.links || []).map(l => l.name + ' | ' + l.url).join('\n'))}</textarea></div>
+    ${accounts.map(a => { const names = [...new Set([...Object.keys(prefs[catPref(a.id)] || {}), ...(seenCats[a.id] || [])])].filter(Boolean).sort((x, y) => x.localeCompare(y, 'ru'));
+      return names.length ? `<div class="f"><label>Цвета категорий${accounts.length > 1 ? ' — ' + esc(a.name) : ''}</label><div class="aas-catedit">${names.map(n =>
+        `<label class="aas-catedit__row"><input type="color" data-cat="${esc(n)}" data-acct="${esc(a.id)}" value="${catColor(n, a.id)}"><span class="aas-cat" style="--cat:${catColor(n, a.id)}">${esc(n)}</span></label>`).join('')}</div></div>` : ''; }).join('')}
+    ${accounts.some(a => Object.keys(prefs[catPref(a.id)] || {}).length || seenCats[a.id]?.size) ? '<div class="hint">Цвета из Outlook протокол не передаёт — выставьте такие же, как у вас в Outlook. У каждого ящика свои категории и цвета; список пополняется тем, что встречалось в его календаре и почте.</div>' : ''}
     <div class="hint">Календарь обновляется автоматически; кнопка «Синхронизировать» перечитывает почту (все папки → непрочитанные) и календарь.</div>
     </div>
-    <div data-pane="about" hidden class="about-box">
-      <h4>${esc(aboutMeta.name || 'AAS mail')}</h4>
-      <div class="ver">Версия ${esc(aboutMeta.version || '')}</div>
+    <div data-pane="about" hidden class="aas-about">
+      <h4 class="aas-about__title">${esc(aboutMeta.name || 'AAS mail')}</h4>
+      <div class="aas-about__ver">Версия ${esc(aboutMeta.version || '')}</div>
       <p>${esc(aboutMeta.description || '')}</p>
       <p>Контакт в Mattermost: <b>${esc(aboutMeta.contact_mm || '@olesya_ba')}</b></p>
+      ${Array.isArray(aboutMeta.thanks) && aboutMeta.thanks.length ? `
+      <div class="aas-about__thanks">
+        <div class="aas-about__thanks-head">${esc(aboutMeta.thanks_intro || '')}</div>
+        <ul class="aas-about__thanks-list">
+          ${aboutMeta.thanks.map(t => `<li>${esc(t.emoji || '')} ${esc(t.title || '')} <span class="aas-about__handle">${esc(t.handle || '')}</span> ${esc(t.name || '')}</li>`).join('')}
+        </ul>
+        <div class="aas-about__thanks-out">${esc(aboutMeta.thanks_outro || '')}</div>
+      </div>` : ''}
       <p class="hint">Локальный клиент поверх Exchange ActiveSync · данные не уходят с этой машины.</p>
     </div>
-    <div class="acts2"><button class="btn" id="scancel">Отмена</button><button class="btn primary" id="ssave">Сохранить</button></div>`);
-  document.querySelectorAll('.settings-tabs [data-sp]').forEach(b => b.onclick = () => {
-    document.querySelectorAll('.settings-tabs .btn').forEach(x => x.classList.toggle('on', x === b));
+    <div class="acts2"><button class="aas-btn" id="scancel">Отмена</button><button class="aas-btn aas-btn--primary" id="ssave">Сохранить</button></div>`);
+  document.querySelectorAll('.aas-settings-tabs [data-sp]').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.aas-settings-tabs .aas-btn').forEach(x => x.classList.toggle('on', x === b));
     document.querySelectorAll('[data-pane]').forEach(pane => { pane.hidden = pane.dataset.pane !== b.dataset.sp; });
     $('#ssave').style.display = b.dataset.sp === 'about' ? 'none' : '';
+  });
+  document.querySelectorAll('[data-theme-v]').forEach(b => b.onclick = () => {
+    document.querySelectorAll('[data-theme-v]').forEach(x => x.classList.toggle('on', x === b));
+    applyTheme(b.dataset.themeV); savePrefs({theme: b.dataset.themeV});  // instant, like macOS settings
   });
   document.querySelectorAll('[data-fillurl]').forEach(a => a.onclick = e => {
     e.preventDefault(); const inp = document.getElementById(a.dataset.fillurl); if (inp) inp.value = a.dataset.url;
   });
+  const playMailSound = () => {
+    const v = $('#smailsound')?.value || 'notice14';
+    try { window.webkit?.messageHandlers?.aasPlaySound?.postMessage(v); } catch (_) {}
+  };
+  $('#smailsound')?.addEventListener('change', playMailSound);
+  $('#smailsound_preview')?.addEventListener('click', playMailSound);
   $('#scancel').onclick = closeModal;
   $('#ssave').onclick = guard(async () => {
     const jobs = [];
@@ -793,11 +1391,16 @@ $('#setbtn').onclick = async () => {
       }
     }
     await savePrefs({signature: $('#ssig')?.value ?? prefs.signature, signature2: $('#ssig2') ? $('#ssig2').value : prefs.signature2,
-      sig_replies: $('#ssigr') ? $('#ssigr').checked : prefs.sig_replies, threads: $('#sthr') ? $('#sthr').checked : prefs.threads,
+      sig_replies: $('#ssigr') ? $('#ssigr').checked : prefs.sig_replies, threads: prefs.threads,
       auto_sync: $('#sauto') ? +$('#sauto').value : prefs.auto_sync, cal_view: $('#scal') ? $('#scal').value : prefs.cal_view,
-      links: $('#slinks') ? parseLinks($('#slinks').value) : prefs.links, favorite_folders: prefs.favorite_folders || []});
+      work_start: $('#swstart') ? +$('#swstart').value : prefs.work_start, work_end: $('#swend') ? +$('#swend').value : prefs.work_end,
+      reminder_minutes: $('#sremind') ? +$('#sremind').value : (prefs.reminder_minutes ?? 5),
+      mail_sound: $('#smailsound') ? $('#smailsound').value : (prefs.mail_sound || 'notice14'),
+      links: $('#slinks') ? parseLinks($('#slinks').value) : prefs.links, favorite_folders: prefs.favorite_folders || [],
+      ...Object.fromEntries(accounts.map(a => [catPref(a.id), {...(prefs[catPref(a.id)] || {}), ...Object.fromEntries(
+        [...document.querySelectorAll(`[data-cat][data-acct="${CSS.escape(a.id)}"]`)].map(i => [i.dataset.cat, i.value]))}]))});
     if ($('#thr')) $('#thr').checked = prefs.threads; if (allItems.length) renderList(!!nextCursor);
-    calMode = prefs.cal_view; armAutoSync(); if (view === 'cal') loadCal(); closeModal();
+    calMode = prefs.cal_view; armAutoSync(); syncNativePrefs(); if (view === 'cal') loadCal(); closeModal();
     if (accountsChanged) {
       toast(authIssues.length ? 'Сохранено. Проблема входа — ' + authIssues.join('; ') : 'Настройки сохранены, переподключение…', authIssues.length > 0);
       setTimeout(() => location.reload(), authIssues.length ? 4000 : 800);
@@ -821,33 +1424,79 @@ function visibleDays() {
 const step = () => calMode === 'day' ? 1 : 7;
 $('#prev').onclick = () => { anchor.setDate(anchor.getDate() - step()); loadCal(); };
 $('#next').onclick = () => { anchor.setDate(anchor.getDate() + step()); loadCal(); };
-$('#today').onclick = () => { anchor = new Date(); loadCal(); };
+$('#today').onclick = () => {
+  anchor = new Date();
+  const wrap = $('#weekwrap'); if (wrap) wrap._scrolled = false;
+  loadCal();
+};
 $('#calmode').onclick = e => { const m = e.target.dataset?.m; if (!m) return; calMode = m; savePrefs({cal_view: m}); $('#weekwrap')._scrolled = false; loadCal(); };
 let events = [];
 
-const loadCal = guard(async () => {
+const loadCal = guard(async (quiet = false) => {
   const acct = ACCT;
   document.querySelectorAll('#calmode button').forEach(b => b.classList.toggle('on', b.dataset.m === calMode));
   const days = visibleDays(), end = new Date(days[days.length - 1]); end.setDate(end.getDate() + 1);
   const fmt = d => d.toLocaleDateString('ru-RU', {day: 'numeric', month: 'long'});
   const title = calMode === 'day' ? days[0].toLocaleDateString('ru-RU', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'})
     : `${fmt(days[0])} – ${fmt(days[days.length - 1])} ${days[days.length - 1].getFullYear()}`;
-  $('#caltitle').textContent = title + ' — загрузка…';
+  if (quiet !== true) $('#caltitle').textContent = title + ' — загрузка…';
+  // Another account's meetings must never stay on screen while this one loads
+  // (they could be opened, answered and deleted under the wrong mailbox).
+  if (calDrawnFor !== acct) drawCal();
   let j;
   try { j = await api('events', {action: 'list', start: isoDay(days[0]), end: isoDay(end), limit: 300}); }
-  catch (e) { if (acct === ACCT) { $('#caltitle').textContent = title; $('#dot').className = 'err'; } throw e; }
+  catch (e) { if (acct === ACCT) { $('#caltitle').textContent = title; $('#dot').className = 'aas-status-dot aas-status-dot--err'; } throw e; }
   if (acct !== ACCT) return;
   // Stale cache answers instantly and refreshes behind the scenes: look again once it is done.
   if (j.cached_age > 180 && view === 'cal') setTimeout(() => { if (view === 'cal') loadCal(); }, 40000);
-  events = j.items.map(e => { const s = new Date(e.start_iso); let en = e.end ? localDate(e.end) : s; if (isNaN(en) || en < s) en = s; return {...e, s, e: en}; });
+  // Join links are parsed once per load, not on every redraw of the grid.
+  events = j.items.map(e => { const s = new Date(e.start_iso); let en = e.end ? localDate(e.end) : s; if (isNaN(en) || en < s) en = s; (e.categories || []).forEach(c => seenCat(c)); return {...e, s, e: en, _acct: acct, _join: joinURL(e.location, e.body), _cat: uniqCats(e.categories)[0] || ''}; });
   $('#caltitle').textContent = title; drawCal();
+  $('#dot').className = 'aas-status-dot aas-status-dot--ok';
 });
 
+/**
+ * Column layout for one day's timed events (sorted by start, longer first).
+ * Events are split into conflict groups (chains of overlaps); lanes are packed
+ * greedily inside each group, and the group's lane count sets its width, so a
+ * lone meeting stays full-width even if another hour of the day has 3 clashes.
+ * Sets e._l (lane) and e._n (lanes in its group).
+ */
+function layoutLanes(timed) {
+  let group = [], lanes = [], groupEnd = -Infinity;
+  const close = () => { group.forEach(g => g._n = Math.max(1, lanes.length)); group = []; lanes = []; };
+  timed.forEach(e => {
+    const s = e.s.getTime(), en = Math.max(e.e.getTime(), s + 1);
+    if (s >= groupEnd) close();
+    let l = lanes.findIndex(end => end <= s);
+    if (l < 0) { l = lanes.length; lanes.push(0); }
+    lanes[l] = en; e._l = l; group.push(e);
+    groupEnd = Math.max(groupEnd, en);
+  });
+  close();
+  return timed;
+}
+
+let calDrawnFor = null;
 function drawCal() {
+  calDrawnFor = ACCT;
   const today = isoDay(new Date()), days = visibleDays(), wide = days.length === 1;
   HP = wide ? 72 : 48;
   $('#weekwrap').style.setProperty('--n', days.length); $('#weekwrap').style.setProperty('--hp', HP + 'px');
-  $('#weekhead').innerHTML = '<div></div>' + days.map(d => `<div class="dh ${isoDay(d) === today ? 'today' : ''}">${DAYS[(d.getDay() + 6) % 7]} <b>${d.getDate()}</b></div>`).join('');
+  $('#weekhead').innerHTML = '<div></div>' + days.map(d => {
+    const id = isoDay(d), isToday = id === today;
+    return `<div class="dh ${isToday ? 'today' : ''}" data-day="${id}" title="${isToday ? 'Сегодня' : 'Открыть день'}">${DAYS[(d.getDay() + 6) % 7]} <b>${d.getDate()}</b></div>`;
+  }).join('');
+  $('#weekhead').querySelectorAll('.dh[data-day]').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.onclick = () => {
+      const id = el.dataset.day;
+      anchor = new Date(id + 'T12:00');
+      if (id === today) { const wrap = $('#weekwrap'); if (wrap) wrap._scrolled = false; }
+      else if (calMode === 'week' || calMode === 'work') { calMode = 'day'; savePrefs({cal_view: 'day'}); }
+      loadCal();
+    };
+  });
   $('#allday').innerHTML = '<div></div>' + days.map(() => '<div class="cell"></div>').join('');
   const cells = [...$('#allday').children].slice(1);
   $('#grid').innerHTML = '<div class="hours">' + [...Array(24)].map((_, h) => `<div>${h ? pad(h) + ':00' : ''}</div>`).join('') + '</div>' + days.map(() => '<div class="col"></div>').join('');
@@ -856,25 +1505,42 @@ function drawCal() {
     const day0 = d.getTime(), day1 = day0 + 864e5;
     const todays = events.filter(e => e.s.getTime() < day1 && Math.max(e.e.getTime(), e.s.getTime() + 1) > day0);
     todays.filter(e => e.is_all_day).forEach(e => {
-      const c = document.createElement('div'); c.className = 'chip'; c.textContent = e.subject || '(без темы)'; c.onclick = () => eventView(e); cells[i].appendChild(c);
+      const c = document.createElement('div'); c.className = 'aas-chip'; c.textContent = e.subject || '(без темы)'; c.onclick = () => eventView(e);
+      if (e._cat) { const col = catColor(e._cat); c.style.background = col; c.style.color = inkOn(col); }
+      cells[i].appendChild(c);
     });
     const timed = todays.filter(e => !e.is_all_day && e.e.getTime() > day0).sort((a, b) => a.s - b.s || b.e - a.e);
-    const lanes = [];  // greedy column packing
-    timed.forEach(e => { let l = lanes.findIndex(end => end <= e.s.getTime()); if (l < 0) { l = lanes.length; lanes.push(0); } lanes[l] = e.e.getTime(); e._l = l; });
-    const n = Math.max(1, lanes.length);
+    layoutLanes(timed);
+    // Empty-slot click → new meeting (Outlook / Alfa-Bank calendar).
+    cols[i].style.cursor = 'cell';
+    cols[i].title = 'Нажмите на слот, чтобы создать встречу';
+    cols[i].onclick = ev => {
+      if (ev.target.closest('.aas-ev')) return;
+      const rect = cols[i].getBoundingClientRect();
+      const y = Math.max(0, ev.clientY - rect.top);
+      const mins = Math.min(23 * 60 + 30, Math.floor(y / HP * 60));
+      const snapped = Math.floor(mins / 30) * 30;
+      const start = new Date(d);
+      start.setHours(Math.floor(snapped / 60), snapped % 60, 0, 0);
+      eventForm(null, {start});
+    };
     timed.forEach(e => {
       const st = Math.max(e.s.getTime(), day0), en = Math.min(e.e.getTime(), day1);
       const top = (st - day0) / 36e5 * HP, h = Math.max(18, (en - st) / 36e5 * HP - 2);
       const el = document.createElement('div');
-      el.className = 'ev ' + (e.busy_status || '') + (wide ? ' wide' : ''); el.style.cssText = `top:${top}px;height:${h}px;left:${e._l * 100 / n}%;width:calc(${100 / n}% - 3px)`;
+      el.className = 'aas-ev' + (e.busy_status ? ' aas-ev--' + e.busy_status : '') + (wide ? ' wide' : '') + (e._cat ? ' aas-ev--cat' : '') + (e.meeting_status === 'cancelled' ? ' aas-ev--cancelled' : ''); el.style.cssText = `top:${top}px;height:${h}px;left:${e._l * 100 / e._n}%;width:calc(${100 / e._n}% - 3px)`;
+      if (e._cat) { const col = catColor(e._cat); el.style.backgroundColor = col; el.style.color = inkOn(col); }
       const t1 = `${pad(e.s.getHours())}:${pad(e.s.getMinutes())}–${pad(e.e.getHours())}:${pad(e.e.getMinutes())}`;
-      el.innerHTML = (wide ? `<div class="l1">${esc(e.subject || '(без темы)')}<small>${t1}${e.location ? ' · ' + esc(e.location) : ''}</small></div>`
-        : `${esc(e.subject || '(без темы)')}<small>${t1.slice(0, 5)}${e.location ? ' · ' + esc(e.location) : ''}</small>`) +
+      const hasJoin = !!e._join;
+      el.innerHTML = (wide ? `<div class="l1">${esc(e.subject || '(без темы)')}<small>${t1}${e.location ? ' · ' + esc(e.location) : ''}${hasJoin ? ' · ▶' : ''}</small></div>`
+        : `${esc(e.subject || '(без темы)')}<small>${t1.slice(0, 5)}${e.location ? ' · ' + esc(e.location) : ''}${hasJoin ? ' ▶' : ''}</small>`) +
         (wide && h > 46 && e.organizer ? `<small>${esc(who(e.organizer))}${(e.attendees || []).length > 1 ? ' · участников: ' + e.attendees.length : ''}</small>` : '');
-      el.title = `${e.subject}\n${t1}\n${e.location || ''}`; el.onclick = () => eventView(e); cols[i].appendChild(el);
+      el.title = `${e.subject}\n${t1}\n${e.location || ''}${hasJoin ? '\nесть ссылка для подключения' : ''}`;
+      el.onclick = ev => { ev.stopPropagation(); eventView(e); };
+      cols[i].appendChild(el);
     });
     if (isoDay(d) === today) {
-      const now = new Date(), line = document.createElement('div'); line.className = 'nowline';
+      const now = new Date(), line = document.createElement('div'); line.className = 'aas-nowline';
       line.style.top = ((now - d) / 36e5 * HP) + 'px'; cols[i].appendChild(line);
     }
   });
@@ -882,6 +1548,15 @@ function drawCal() {
   if (!wrap._scrolled) { const h = days.some(d => isoDay(d) === today) ? Math.max(0, new Date().getHours() - 2) : 8; wrap.scrollTop = h * HP - 10; wrap._scrolled = true; }
 }
 
+/** «5 приняли · 1 отклонил · 2 без ответа» — the collapsed participants line. */
+function attSummary(att, st) {
+  const n = {};
+  att.forEach(a => { const k = st[a.status] ? a.status : 'none'; n[k] = (n[k] || 0) + 1; });
+  const order = [['accepted', 'принял'], ['tentative', 'под вопросом'], ['declined', 'отклонил'], ['none', 'без ответа'], ['not_responded', 'без ответа']];
+  const parts = [];
+  for (const [k, w] of order) if (n[k]) parts.push(`${n[k]} ${w}${k === 'accepted' || k === 'declined' ? (n[k] > 1 ? 'и' : '') : ''}`);
+  return parts.length ? `<small class="aas-att__sum">${parts.join(' · ')}</small>` : '';
+}
 function eventView(e) {
   const att = e.attendees || [];
   const me = (accounts.find(a => a.id === ACCT) || {}).email || '';
@@ -893,63 +1568,92 @@ function eventView(e) {
   const st = {accepted: 'принял', tentative: 'под вопросом', declined: 'отклонил', not_responded: 'без ответа', none: 'без ответа', organizer: 'организатор'};
   const rsvpBtn = (code, label, danger) => {
     const on = (code === 'accept' && my === 'accepted') || (code === 'tentative' && my === 'tentative') || (code === 'decline' && my === 'declined');
-    return `<button class="btn ${danger ? 'danger' : ''} ${on ? 'primary' : ''}" data-r="${code}" ${on ? 'disabled title="Текущий ответ"' : ''}>${label}</button>`;
+    return `<button class="aas-btn ${danger ? 'aas-btn--danger' : ''} ${on ? 'aas-btn--primary on' : ''}" data-r="${code}" ${on ? 'disabled title="Текущий ответ"' : ''}>${label}</button>`;
   };
-  const el = openModal(`<h3>${esc(e.subject || '(без темы)')}${e.is_recurring ? '<span class="badge">серия</span>' : ''}${canRespond ? '<span class="badge">встреча</span>' : ''}</h3>
+  const link = e._join ?? joinURL(e.location, e.body);
+  const el = openModal(`<h3>${esc(e.subject || '(без темы)')}${e.is_recurring ? '<span class="aas-pill">серия</span>' : ''}${canRespond ? '<span class="aas-pill">встреча</span>' : ''}${e.meeting_status === 'cancelled' ? '<span class="aas-pill aas-pill--cancel">отменена</span>' : ''}</h3>
+    ${(e.categories || []).length ? `<div class="f aas-cats">${catChips(e.categories)}</div>` : ''}
     <div class="f">${e.is_all_day ? 'Весь день, ' + e.s.toLocaleDateString('ru-RU') : `${e.s.toLocaleString('ru-RU', {dateStyle: 'medium', timeStyle: 'short'})} – ${e.e.toLocaleTimeString('ru-RU', {timeStyle: 'short'})}`}</div>
     ${e.location ? `<div class="f">📍 ${linkify(esc(e.location))}</div>` : ''}
+    ${link ? `<div class="f"><a class="aas-btn aas-btn--primary" id="evjoin" href="${esc(link)}" target="_blank" rel="noopener noreferrer" title="Открыть ссылку встречи в браузере: ${esc(link)}">▶ Подключиться</a></div>` : ''}
     ${e.organizer ? `<div class="f"><label>Организатор</label>${esc(whoFull(e.organizer))}</div>` : ''}
     ${my && canRespond ? `<div class="f"><label>Ваш ответ</label>${esc(st[my] || my)}</div>` : ''}
-    ${isMeeting && att.length ? `<div class="f"><label>Участники (${att.length})</label><ul class="att-list" style="margin:0;padding-left:18px">${att.map(a => `<li>${esc(a.name || a.address)}${a.status ? ` <small style="color:var(--muted)">— ${st[a.status] || esc(a.status)}</small>` : ''}</li>`).join('')}</ul></div>` : ''}
-    ${e.body ? `<div class="f"><label>Описание</label><div style="white-space:pre-wrap;max-height:180px;overflow:auto">${linkify(esc(e.body))}</div></div>` : ''}
-    <div class="acts2 meeting-rsvp">${canRespond ? rsvpBtn('accept','Принять',false) + rsvpBtn('tentative','Под вопросом',false) + rsvpBtn('decline','Отклонить',true) : ''}
-      <button class="btn" id="evedit">Изменить</button><button class="btn danger" id="evdel">${iAmOrg && isMeeting ? 'Отменить' : 'Удалить'}</button><button class="btn" id="evclose">Закрыть</button></div>`);
+    ${isMeeting && att.length ? `<details class="f aas-att"${att.length <= 3 ? ' open' : ''}><summary><label>Участники (${att.length})</label>${attSummary(att, st)}</summary><ul class="att-list">${att.map(a => `<li>${esc(a.name || a.address)}${a.status ? ` <small style="color:var(--muted)">— ${st[a.status] || esc(a.status)}</small>` : ''}</li>`).join('')}</ul></details>` : ''}
+    ${e.body ? `<div class="f"><label>Описание</label><div class="aas-evbody">${linkify(esc(e.body))}</div></div>` : ''}
+    <div class="acts2 aas-rsvp meeting-rsvp">${canRespond ? rsvpBtn('accept','Принять',false) + rsvpBtn('tentative','Под вопросом',false) + rsvpBtn('decline','Отклонить',true) : ''}
+      <button class="aas-btn" id="evedit">Изменить</button><button class="aas-btn aas-btn--danger" id="evdel">${iAmOrg && isMeeting ? 'Отменить' : 'Удалить'}</button><button class="aas-btn" id="evclose">Закрыть</button></div>`);
   $('#evclose').onclick = closeModal;
   el.querySelectorAll('[data-r]').forEach(b => b.onclick = guard(async () => {
-    await api('events', {action: 'respond', item_id: e.item_id, response: b.dataset.r, notify: true});
+    const r = await api('events', {action: 'respond', item_id: e.item_id, response: b.dataset.r, notify: true}, e._acct || ACCT);
+    if (r.via === 'mail') { closeModal(); toast('Сервер не принял ответ напрямую — отправили его организатору письмом'); loadCal(); return; }
     closeModal(); toast('Ответ отправлен организатору'); loadCal();
   }));
   $('#evedit').onclick = () => eventForm(e);
   $('#evdel').onclick = guard(async () => {
     if (!confirm(e.is_recurring ? 'Отменить это событие серии?' : (iAmOrg && isMeeting ? 'Отменить событие? Участникам уйдёт уведомление.' : 'Удалить событие?'))) return;
-    await api('events', {action: 'cancel', item_id: e.item_id}); closeModal(); toast(iAmOrg && isMeeting ? 'Событие отменено' : 'Удалено'); loadCal();
+    await api('events', {action: 'cancel', item_id: e.item_id}, e._acct || ACCT); closeModal(); toast(iAmOrg && isMeeting ? 'Событие отменено' : 'Удалено'); loadCal();
   });
 }
 
-function eventForm(e) {
+/** New/edit event form.
+ *  opts.start — Date from a calendar slot click;
+ *  opts.day ('YYYY-MM-DD') + opts.hour/minute — from the tray. */
+function eventForm(e, opts = {}) {
   const editing = !!(e && e.item_id);
   const now = new Date(); now.setMinutes(0, 0, 0); now.setHours(now.getHours() + 1);
-  const s = e ? e.s : now, en = e ? e.e : new Date(now.getTime() + 36e5);
-  const attStr = e ? (e.attendees || []).filter(a => a.address && a.address !== e.organizer?.address).map(a => a.address).join(', ') : '';
+  if (!e && opts.start instanceof Date && !isNaN(opts.start)) {
+    now.setTime(opts.start.getTime());
+  } else if (!e && (opts.day || opts.hour != null)) {
+    const base = opts.day ? new Date(opts.day + 'T00:00') : new Date();
+    if (!isNaN(base)) {
+      if (opts.hour != null && opts.hour !== 'null') {
+        base.setHours(+opts.hour, +(opts.minute || 0), 0, 0);
+      } else if (opts.day && opts.day !== isoDay(new Date())) {
+        base.setHours(10, 0, 0, 0);
+      } else {
+        base.setTime(now.getTime());
+      }
+      now.setTime(base.getTime());
+    }
+  }
+  const s = e ? e.s : now, en = e ? e.e : new Date(now.getTime() + 30 * 6e4);  // 30 min by default
+  const attStr = e ? (e.attendees || []).filter(a => a.address && a.address !== e.organizer?.address)
+    .map(a => formatPerson(a)).join(', ') : '';
   openModal(`<h3>${editing ? 'Изменить событие' : 'Новое событие'}</h3>
     <div class="f"><label>Тема</label><input type="text" id="esub" value="${esc(e?.subject || '')}"></div>
     <div class="frow"><div class="f"><label>Начало</label><input type="datetime-local" id="est" value="${isoLocal(s)}"></div>
       <div class="f"><label>Конец</label><input type="datetime-local" id="een" value="${isoLocal(en)}"></div></div>
-    <div class="f"><label class="chk"><input type="checkbox" id="eall" ${e?.is_all_day ? 'checked' : ''}> Весь день</label></div>
-    <div class="f"><label>Место</label><input type="text" id="eloc" value="${esc(e?.location || '')}"></div>
-    <div class="f"><label>Участники (через запятую; можно писать фамилию)</label><input type="text" id="eatt" list="edl" value="${esc(attStr)}"><datalist id="edl"></datalist></div>
-    <div class="f" id="avw"><button class="btn" id="eavail" type="button">Проверить занятость</button><div class="hint">Проверка запускается автоматически при изменении участников или времени (как в OWA Widget).</div><div id="avres" class="hint"></div></div>
+    ${e ? '' : '<div class="hint aas-hint-tight">Новая встреча — 30 минут; поменяйте «Конец», если нужно дольше.</div>'}
+    <div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="eall" ${e?.is_all_day ? 'checked' : ''}> Весь день</label></div>
+    <div class="f"><label>Место или ссылка на встречу</label>
+      <div class="aas-locrow"><input type="text" id="eloc" value="${esc(e?.location || '')}" placeholder="Переговорная или https://…">
+      ${(prefs.links || []).length ? `<select id="elink" title="Подставить сохранённую ссылку"><option value="">Мои ссылки…</option>${prefs.links.map((l, i) => `<option value="${i}">${esc(l.name)}</option>`).join('')}</select>` : ''}</div>
+      ${(prefs.links || []).length ? '' : '<div class="hint">Свои ссылки на встречи (Telemost, KTalk…) можно сохранить в «Настройки → Почта».</div>'}</div>
+    <div class="f"><label>Участники</label><div class="aas-people"><input type="text" id="eatt" placeholder="фамилия или email" value="${esc(attStr)}"></div>
+      <div class="hint">Подсказки из недавних и каталога — Enter/Tab подставляют.</div></div>
+    <div class="f" id="avw"><button class="aas-btn" id="eavail" type="button">Проверить занятость</button><div class="hint">Проверка запускается автоматически при изменении участников или времени (как в OWA Widget).</div><div id="avres" class="hint"></div></div>
     <div class="f"><label>Описание</label>
-      ${(prefs.links || []).length ? `<select id="elink"><option value="">＋ Вставить сохранённую ссылку…</option>${prefs.links.map((l, i) => `<option value="${i}">${esc(l.name)}</option>`).join('')}</select>` : '<div class="hint">Сохранённые ссылки добавляются в «Настройки».</div>'}
       <textarea id="ebody" rows="4">${esc(e?.body || '')}</textarea></div>
-    ${editing ? '' : '<div class="f"><label class="chk"><input type="checkbox" id="emime" checked> Дополнительно отправить приглашение письмом (для внешних адресов и Seller)</label></div>'}
+    ${editing || !(accounts.find(a => a.id === ACCT) || {}).green ? '' : `<div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="emime" checked> Разослать участникам приглашения письмом</label>
+      <div class="hint">Сервер ${esc((accounts.find(a => a.id === ACCT) || {}).name || 'Seller')} сам приглашения не отправляет — без этой галочки участники не узнают о встрече. В Alfa-Bank приглашения рассылает Exchange, поэтому там этой опции нет.</div></div>`}
     <div class="f" id="repw" ${editing ? 'style="display:none"' : ''}><label>Повторять</label><select id="erep"><option value="">Не повторять</option><option value="daily">Каждый день</option><option value="weekly">Каждую неделю</option><option value="monthly">Каждый месяц</option></select></div>
-    <div class="acts2"><button class="btn" id="ecancel">Отмена</button><button class="btn primary" id="esave">${editing ? 'Сохранить' : 'Создать'}</button></div>`);
-  const inp = $('#eatt'); let t;
-  inp.oninput = () => { clearTimeout(t); t = setTimeout(async () => {
-    const last = inp.value.split(/[;,]/).pop().trim(); if (last.length < 3) return;
-    try { const j = await api('people', {action: 'find', query: last, limit: 8});
-      const pre = inp.value.slice(0, inp.value.length - inp.value.split(/[;,]/).pop().length);
-      $('#edl').innerHTML = j.items.map(p => `<option value="${esc(pre + p.address)}">${esc(p.name)}</option>`).join(''); } catch (x) { /* ignore */ } }, 300); };
+    <div class="acts2"><button class="aas-btn" id="ecancel">Отмена</button><button class="aas-btn aas-btn--primary" id="esave">${editing ? 'Сохранить' : 'Создать'}</button></div>`);
+  bindPeopleInput($('#eatt'));
   const sel = $('#elink');
-  if (sel) sel.onchange = () => { const l = prefs.links[+sel.value]; sel.value = ''; if (!l) return;
-    const b = $('#ebody'); b.value = (b.value ? b.value.replace(/\s*$/, '\n') : '') + l.name + ': ' + l.url; };
+  // A saved link goes where people look for it: «Место» (the Join button reads it
+  // in the calendar, tray and attendees' Outlook) and, bare, into the description.
+  if (sel) sel.onchange = () => {
+    const l = prefs.links[+sel.value]; sel.value = ''; if (!l) return;
+    $('#eloc').value = l.url;
+    const b = $('#ebody');
+    if (!b.value.includes(l.url)) b.value = (b.value.trim() ? b.value.replace(/\s*$/, '\n\n') : '') + l.url;
+  };
   const av = $('#eavail');
   let avTok = 0;
   const runAvailability = guard(async () => {
     if (!$('#avres')) return;
     const st = new Date($('#est').value), en = new Date($('#een').value);
-    const att = splitAddrs($('#eatt').value);
+    const att = splitAddrs($('#eatt').value).map(addrOnly).filter(Boolean);
     const box = $('#avres');
     if (isNaN(st) || isNaN(en) || en <= st) { box.textContent = ''; return; }
     if (!att.length) { box.textContent = ''; return; }
@@ -973,9 +1677,12 @@ function eventForm(e) {
     (j.unresolved || []).forEach(u => rows.push(`<div>❔ ${esc(u.query)} — не найден/неоднозначен, занятость неизвестна</div>`));
     box.innerHTML = rows.join('') || 'Нет данных';
     if ((j.items || []).some(x => /[23]/.test(x.freebusy || ''))) {
-      try { const f = await api('people', {action: 'find_free_slots', who: att, duration_minutes: Math.max(15, Math.round((en - st) / 6e4)), start: isoLocal(st), count: 4});
+      try { const f = await api('people', {action: 'find_free_slots', who: att, duration_minutes: Math.max(15, Math.round((en - st) / 6e4)), start: isoLocal(st), count: 3});
         if (tok !== avTok) return;
-        if ((f.items || []).length) box.innerHTML += '<div style="margin-top:4px">Свободно у всех:</div>' + f.items.map(x => `<button class="btn" type="button" data-s="${esc(x.start_iso)}" data-e="${esc(x.end_iso)}">${esc(x.start)}</button>`).join(' ');
+        const slotLabel = x => { const a = new Date(x.start_iso), b = new Date(x.end_iso);
+          return `${a.toLocaleDateString('ru-RU', {weekday: 'short', day: 'numeric', month: 'numeric'})}, ${pad(a.getHours())}:${pad(a.getMinutes())}–${pad(b.getHours())}:${pad(b.getMinutes())}`; };
+        if ((f.items || []).length) box.innerHTML += `<div style="margin-top:6px">Свободно у всех (рабочий день ${pad(f.work_start ?? prefs.work_start)}:00–${pad(f.work_end ?? prefs.work_end)}:00):</div>`
+          + '<div class="aas-slots">' + f.items.map(x => `<button class="aas-btn aas-btn--sm" type="button" data-s="${esc(x.start_iso)}" data-e="${esc(x.end_iso)}">${esc(slotLabel(x))}</button>`).join('') + '</div>';
         box.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { $('#est').value = isoLocal(new Date(b.dataset.s)); $('#een').value = isoLocal(new Date(b.dataset.e)); runAvailability(); });
       } catch (x) { /* slots are a nicety */ } }
   });
@@ -996,33 +1703,74 @@ function eventForm(e) {
       start: all ? isoDay(st) + 'T00:00' : isoLocal(st), end: all ? isoDay(new Date(Math.max(en2, st).getTime() + (en2 <= st ? 864e5 : 0))) + 'T00:00' : isoLocal(en2)};
     if (all && p.end <= p.start) p.end = isoDay(new Date(st.getTime() + 864e5)) + 'T00:00';
     if (editing) {
-      const att = splitAddrs($('#eatt').value);
+      const att = splitAddrs($('#eatt').value).map(addrOnly).filter(Boolean);
       if (att.length) p.attendees = att;
       else p.attendees = [];  // explicit empty — clear/keep server meeting roster via update patch
-      await api('events', {action: 'update', item_id: e.item_id, ...p});
+      await api('events', {action: 'update', item_id: e.item_id, ...p}, e._acct || ACCT);
+      rememberAddrsFromFields($('#eatt').value);
     } else {
-      const att = splitAddrs($('#eatt').value); if (att.length) p.attendees = att;
+      const att = splitAddrs($('#eatt').value).map(addrOnly).filter(Boolean); if (att.length) p.attendees = att;
       if ($('#erep').value) { p.repeat = $('#erep').value; p.repeat_count = 10; }
       if (att.length && $('#emime')?.checked) p.mime_invite = true;
       const r = await api('events', {action: 'create', ...p});
-      if (r.mime_error) mimeFailed = true, toast('Событие создано, но письмо-приглашение не ушло: ' + r.mime_error, true);
+      rememberAddrsFromFields($('#eatt').value);
+      if (r.mime_invite_pending) { mimeFailed = true; toast('Событие создано. Приглашения отправляются письмом — сообщу, когда уйдут.'); watchNotices(); }
     }
     closeModal(); if (!mimeFailed) toast(editing ? 'Сохранено' : 'Событие создано'); loadCal();
   });
 }
 
 /* ---------- start ---------- */
+$('#selall')?.addEventListener('change', e => {
+  if (e.target.checked) groupsOnScreen().forEach(g => selectedKeys.add(g.key));
+  else selectedKeys = new Set();
+  document.querySelectorAll('.aas-row').forEach(r => {
+    const on = selectedKeys.has(r.dataset.key);
+    r.classList.toggle('sel', on);
+    const cb = r.querySelector('.aas-row__chk input');
+    if (cb) cb.checked = on;
+  });
+  syncBulkBar();
+});
+$('#bulkclear')?.addEventListener('click', () => {
+  selectedKeys = new Set();
+  document.querySelectorAll('.aas-row').forEach(r => {
+    r.classList.remove('sel');
+    const cb = r.querySelector('.aas-row__chk input');
+    if (cb) cb.checked = false;
+  });
+  syncBulkBar();
+});
+/** Bulk read/unread: clear the selection before the list re-renders (restored if the call fails). */
+const bulkMark = read => guard(async () => {
+  if (!selectedKeys.size) return toast('Выберите письма');
+  const keys = selectedKeys;
+  selectedKeys = new Set();
+  try { await markGroupsRead(keys, read); }
+  catch (e) { selectedKeys = keys; syncBulkBar(); throw e; }
+});
+$('#bulkread')?.addEventListener('click', bulkMark(true));
+$('#bulkunread')?.addEventListener('click', bulkMark(false));
+
 (async () => {
-  try { prefs = (await api('prefs', {})).prefs; } catch (e) { /* defaults */ }
-  try { aboutMeta = await api('about', {}); } catch (e) { /* defaults */ }
-  try { accounts = (await api('accounts', {})).accounts; } catch (e) { /* main only */ }
+  // Independent boot calls go out together (one round-trip of latency instead of three).
+  const [p, m, acc] = await Promise.allSettled([api('prefs', {}), api('about', {}), api('accounts', {})]);
+  if (p.status === 'fulfilled') prefs = p.value.prefs;
+  applyTheme(prefs.theme); syncNativePrefs();
+  if (m.status === 'fulfilled') aboutMeta = m.value;
+  if (acc.status === 'fulfilled') accounts = acc.value.accounts;
   buildAccountTabs(); setBrand();
-  calMode = prefs.cal_view; $('#thr').checked = prefs.threads; armAutoSync();
+  calMode = prefs.cal_view; $('#thr').checked = prefs.threads; $('#window').value = String(prefs.mail_window ?? 5); armAutoSync();
   if (aboutMeta.needs_setup) {
     toast('Первый запуск: укажите логин и пароль. Адреса серверов уже подставлены.');
     setTimeout(() => $('#setbtn').click(), 200);
   } else {
     await loadFolders();
+    refreshFolders().catch(() => {});  // the stored tree may be hours old: delta it
+    for (const a of accounts) syncCalDelta(a.id);  // disk cache → delta, also warms the tray
+    accounts.forEach(a => sweepUnread(a.id));
+    // Prime Inbox unread badges on every account so tab counters appear without a manual sync.
+    Promise.allSettled(accounts.map(a => refreshInboxBadge(a.id))).then(() => paintTabBadges());
   }
   if (location.hash === '#cal') showView('cal');
   lastSync = new Date(); setSyncText();

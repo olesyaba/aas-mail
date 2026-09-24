@@ -71,6 +71,9 @@ struct TrayEvent: Decodable, Identifiable {
         return Self.localFormatter.date(from: end)
     }
 
+    /// Organizer cancelled it (Exchange keeps it in the calendar until removed).
+    var isCancelled: Bool { (meetingStatus ?? "").lowercased() == "cancelled" }
+
     /// Invited meeting where we are not the organizer — show RSVP actions.
     var canRespond: Bool {
         let ms = (meetingStatus ?? "").lowercased()
@@ -80,6 +83,85 @@ struct TrayEvent: Decodable, Identifiable {
         if ms == "meeting" { return true }
         if organizer?.address != nil { return true }
         return (attendees?.count ?? 0) > 1
+    }
+
+    /// Teams / Zoom / KTalk / Meet link from location or body HTML/text.
+    var joinURL: URL? { TrayJoinLink.url(location: location, body: body) }
+
+    /// Brand tint for the source account (matches web tabs).
+    var accountTintHex: String {
+        if !accountColorHex.isEmpty { return accountColorHex }
+        return accountId == "seller" ? "#003830" : "#501820"
+    }
+}
+
+/// Pull the first usable meeting URL out of location / body text (incl. HTML).
+enum TrayJoinLink {
+    private static let preferredHosts = [
+        "teams.microsoft", "teams.live", "zoom.us", "ktalk", "kontur",
+        "meet.google", "trueconf", "jazz.sber", "telemost.yandex", "webex.com",
+    ]
+
+    static func url(location: String?, body: String?) -> URL? {
+        if let loc = location?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let u = Self.httpURL(loc) {
+            return u
+        }
+        // Collect links from every variant (raw, unescaped, HTML-stripped) before
+        // choosing, like the web UI's joinURL(): a Teams link that only appears
+        // JSON-escaped must still beat an ordinary wiki link earlier in the body.
+        let urls = [location, body].compactMap { $0 }
+            .flatMap { sources(from: $0) }
+            .flatMap { urls(in: $0) }
+        return urls.first(where: isMeetingHost) ?? urls.first
+    }
+
+    private static func isMeetingHost(_ u: URL) -> Bool {
+        let host = u.host?.lowercased() ?? ""
+        return preferredHosts.contains { host.contains($0) }
+    }
+
+    /// Raw + HTML-stripped + entity-decoded variants, order preserved.
+    private static func sources(from text: String) -> [String] {
+        let normalized = text
+            .replacingOccurrences(of: #"\/"#, with: "/")
+            .replacingOccurrences(of: "&amp;", with: "&")
+        let plain = stripHTML(normalized)
+        var out: [String] = []
+        var seen = Set<String>()
+        for s in [text, normalized, plain] where seen.insert(s).inserted {
+            out.append(s)
+        }
+        return out
+    }
+
+    private static let tagRegex = try? NSRegularExpression(pattern: "<[^>]+>")
+
+    private static func stripHTML(_ string: String) -> String {
+        guard string.contains("<"), let regex = tagRegex else { return string }
+        let ns = string as NSString
+        return regex.stringByReplacingMatches(
+            in: string, range: NSRange(location: 0, length: ns.length), withTemplate: " ")
+    }
+
+    private static let urlRegex = try? NSRegularExpression(pattern: #"https?://[^\s<>'")\]]+"#)
+
+    private static func urls(in text: String) -> [URL] {
+        guard let regex = urlRegex else { return [] }
+        let ns = text as NSString
+        return regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).compactMap { m in
+            var s = ns.substring(with: m.range)
+            while s.last == "." || s.last == "," || s.last == ";"
+                    || s.last == ")" || s.last == "]" { s.removeLast() }
+            return httpURL(s)
+        }
+    }
+
+    private static func httpURL(_ string: String) -> URL? {
+        guard let u = URL(string: string),
+              let scheme = u.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else { return nil }
+        return u
     }
 }
 

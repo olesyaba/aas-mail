@@ -14,6 +14,7 @@ runtime_token
 webapp.log
 
 # Build/output
+.build/
 app/AppIcon.iconset/
 app/icon_preview.png
 app/aa-tray-preview.png
@@ -26,3 +27,6 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+*.pyc
+.remember/
+dist/*.zip

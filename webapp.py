@@ -41,9 +41,15 @@ MAX_BODY = 40 * 1024 * 1024
 # Product identity (About page + UI chrome).
 APP_META = {
     "name": "AAS mail",
-    "version": "1.2.0",
+    "version": "1.2.9",
     "description": "Локальный клиент почты и календаря Alfa / Alfa-Seller поверх Exchange ActiveSync.",
     "contact_mm": "@olesya_ba",
+    "thanks_intro": "Спасибо за тест-рейды и светлые идеи:",
+    "thanks": [
+        {"emoji": "🧚", "title": "фее", "handle": "@vdgrekova", "name": "Грековой Владене"},
+        {"emoji": "🧙", "title": "магу", "handle": "@ivan.rachenko", "name": "Раченко Ивану"},
+    ],
+    "thanks_outro": "Спасибо — вы сделали AAS mail чуть волшебнее ✨",
 }
 
 # Seeded into empty account-config fields so the settings form has working defaults.
@@ -68,11 +74,24 @@ class Acct:
         self.mime_cache: dict[str, bytes] = {}
         self.mime_lock = threading.Lock()
         self.cal = {"items": [], "ts": 0.0, "loaded": False, "loading": False, "error": None,
-                    "range": (None, None), "truncated": False}
+                    "range": (None, None), "truncated": False, "gen": None, "cal_id": None,
+                    "masters": {}, "filter": None}
+        # Per-folder mail cache: SyncKey generation + items, so refresh is a delta
+        # (Add/Change/Delete) instead of SyncKey=0 prime every time.
+        self.mail_boxes: dict[str, dict] = {}
         # folder_id -> unread count (best-effort, refreshed in background).
         self.unread: dict[str, int] = {}
         self.unread_ts = 0.0
+        # Folders whose count covers only part of the period (the box is not drained).
+        self.unread_partial: set[str] = set()
+        self.unread_sweeping = False
+        self.unread_sweep_ts = 0.0  # last finished sweep
         self.unread_lock = threading.Lock()
+        # Outgoing mail: when the server's submission is down (Stalwart answered
+        # SendMail status 120 after a 60 s wait), fail fast for a while instead of
+        # making every send wait a minute. Background results for the UI go to notices.
+        self.send_down_until = 0.0
+        self.notices: list[dict] = []
         self.cv = threading.Condition()
 
     def get(self) -> bridge.EasBackend:
@@ -296,7 +315,97 @@ def save_account_config(p: dict) -> dict:
 
 # -- ActiveSync dispatch ----------------------------------------------------
 
-def _mail_list_paged(backend: bridge.EasBackend, params: dict) -> dict:
+# Cap of messages retained per folder after a dump/delta (UI window is usually 40).
+_MAIL_BOX_CAP = 400
+# Wall-clock budget for one UI list request. Stalwart (Seller) answers 1–2
+# messages per Sync round, so "fill a 40-message page" took ~40 s on a big
+# folder while the UI showed «Загрузка…». Show what arrived; the rest comes
+# with «Ещё» / the next refresh.
+_MAIL_PAGE_BUDGET = 2.5
+
+
+def _mail_box(a: Acct, collection_id: str) -> dict:
+    box = a.mail_boxes.get(collection_id)
+    if box is None:
+        box = {"filter": object(), "by_id": {}, "gen": None, "complete": False,
+               "next_cursor": None, "label": None, "ts": 0.0}
+        a.mail_boxes[collection_id] = box
+    return box
+
+
+def _mail_sorted_items(box: dict) -> list:
+    items = list(box["by_id"].values())
+    items.sort(key=lambda m: m.get("received") or "", reverse=True)
+    if len(items) > _MAIL_BOX_CAP:
+        keep = items[:_MAIL_BOX_CAP]
+        box["by_id"] = {m["item_id"]: m for m in keep if m.get("item_id")}
+        return keep
+    return items
+
+
+def _mail_apply_tree(tree, collection_id: str, label: str, proj: list, box: dict) -> None:
+    """Merge one Sync response into the folder box (Add / Change / Delete)."""
+    from outlook_activesync_mcp.model.mapping import project_mail
+    from outlook_activesync_mcp.models import pack_item_id
+    from outlook_activesync_mcp.wbxml import find, find_all, text_of
+
+    by_id = box["by_id"]
+    for node in find_all(tree, "AirSync", "Add"):
+        sid = text_of(find(node, "AirSync", "ServerId"))
+        appdata = find(node, "AirSync", "ApplicationData")
+        if not sid or appdata is None:
+            continue
+        item_id = pack_item_id(collection_id, sid)
+        by_id[item_id] = project_mail(appdata, proj, item_id=item_id, folder=label)
+    for node in find_all(tree, "AirSync", "Change"):
+        sid = text_of(find(node, "AirSync", "ServerId"))
+        appdata = find(node, "AirSync", "ApplicationData")
+        if not sid or appdata is None:
+            continue
+        item_id = pack_item_id(collection_id, sid)
+        existing = by_id.get(item_id)
+        if existing is None:
+            by_id[item_id] = project_mail(appdata, proj, item_id=item_id, folder=label)
+            continue
+        # Change may be partial (e.g. only Read). Never treat missing Read as unread.
+        if find(appdata, "Email", "Read") is not None:
+            existing["is_read"] = text_of(find(appdata, "Email", "Read")) == "1"
+        for tag, key in (("Subject", "subject"), ("ThreadTopic", "thread_topic")):
+            if find(appdata, "Email", tag) is not None:
+                existing[key] = text_of(find(appdata, "Email", tag))
+        if find(appdata, "Email", "From") is not None:
+            from outlook_activesync_mcp.model.mapping import parse_address
+            existing["from"] = parse_address(text_of(find(appdata, "Email", "From")))
+        if find(appdata, "Email", "DateReceived") is not None:
+            from outlook_activesync_mcp.utils import to_local
+            existing["received"] = to_local(text_of(find(appdata, "Email", "DateReceived")))
+        if find(appdata, "AirSyncBase", "Body") is not None or find(appdata, "Email", "Body") is not None:
+            preview = project_mail(appdata, ["preview"], item_id=item_id).get("preview")
+            if preview:
+                existing["preview"] = preview
+    for node in find_all(tree, "AirSync", "Delete") + find_all(tree, "AirSync", "SoftDelete"):
+        sid = text_of(find(node, "AirSync", "ServerId"))
+        if sid:
+            by_id.pop(pack_item_id(collection_id, sid), None)
+
+def _mail_norm_filter(filt):
+    if filt is None or filt == "":
+        return None
+    try:
+        return int(filt)
+    except (TypeError, ValueError):
+        return filt
+
+
+def _mail_store_gen(backend, collection_id: str):
+    try:
+        entry = backend.client.store.get("collections", {}).get(collection_id) or {}
+        return entry.get("generation")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _mail_fetch_pages(backend: bridge.EasBackend, params: dict) -> dict:
     """One UI 'list' request may need several ActiveSync Sync round-trips: some
     servers (Stalwart, used for the Seller account) return only a couple of
     changes per Sync response regardless of the requested limit, unlike
@@ -306,11 +415,13 @@ def _mail_list_paged(backend: bridge.EasBackend, params: dict) -> dict:
     actually returns a full page instead of 1-2 messages."""
     from outlook_activesync_mcp.commands import mail
     limit = int(params.get("limit") or 40)
-    kw0 = {k: v for k, v in params.items() if k not in ("cursor", "limit")}
+    kw0 = {k: v for k, v in params.items() if k not in ("cursor", "limit", "force", "full")}
     items: list = []
     next_cursor = params.get("cursor")
-    has_more, rounds = True, 0
+    has_more, rounds, t0 = True, 0, time.monotonic()
     while len(items) < limit and has_more and rounds < 60:
+        if items and time.monotonic() - t0 > _MAIL_PAGE_BUDGET:
+            break  # enough to show; has_more/next_cursor let the UI continue
         rounds += 1
         backend._pace()
         kw = dict(cursor=next_cursor) if next_cursor else dict(kw0)
@@ -326,6 +437,145 @@ def _mail_list_paged(backend: bridge.EasBackend, params: dict) -> dict:
             "has_more": has_more, "next_cursor": next_cursor}
 
 
+def _mail_apply_delta(backend, collection_id: str, label: str, filt, box: dict, fields) -> None:
+    """Continue the stored SyncKey and merge Add/Change/Delete into the box."""
+    from outlook_activesync_mcp.commands.mail import _read_options
+    from outlook_activesync_mcp.models import MAIL_FIELDS, resolve_fields
+
+    proj = resolve_fields(MAIL_FIELDS, fields)
+    opts = _read_options(proj, filt)
+    gen = box["gen"]
+    rounds, t0, drained = 0, time.monotonic(), False
+    while rounds < 30:
+        if rounds and time.monotonic() - t0 > _MAIL_PAGE_BUDGET:
+            break  # a slow server's backlog drains over the next refreshes
+        rounds += 1
+        backend._pace()
+        prev_gen = gen
+        tree, more, gen = backend.client.sync_round(
+            collection_id, generation=gen, window=100,
+            options_children=opts, get_changes=True)
+        # sync_round re-primes (SyncKey=0) on a dead key and then hands back a
+        # new generation: only then is this a fresh full listing that replaces
+        # the cache. Many Adds alone mean nothing — continuing an unfinished
+        # first dump legitimately delivers the older remainder as Adds, and
+        # wiping on that used to throw away the newest mail.
+        if gen != prev_gen:
+            box["by_id"].clear()
+        _mail_apply_tree(tree, collection_id, label, proj, box)
+        box["gen"] = gen
+        if not more:
+            drained = True
+            break
+    box["ts"] = time.time()
+    box["complete"] = drained
+    box["next_cursor"] = None
+
+
+def _mail_list_paged(a: Acct, backend: bridge.EasBackend, params: dict) -> dict:
+    """List mail with a per-folder cache: first open primes SyncKey=0, later
+    refreshes request only the delta (same FilterType + stored generation)."""
+    from outlook_activesync_mcp.commands import mail
+    from outlook_activesync_mcp.errors import CursorExpired, EasStatusError
+
+    # Unit tests use FakeBackend without a client — keep the old paging path.
+    if backend.client is None:
+        return _mail_fetch_pages(backend, params)
+
+    force = bool(params.get("force") or params.get("full"))
+    cursor = params.get("cursor")
+    filt = _mail_norm_filter(params.get("filter"))
+    fields = params.get("fields")
+    limit = int(params.get("limit") or 40)
+
+    # «Ещё»: continue the incomplete dump cursor and append into the box.
+    if cursor:
+        r = _mail_fetch_pages(backend, params)
+        if not r.get("ok", True):
+            return r
+        try:
+            collection_id, _ = mail.resolve_collection(backend.client, params.get("folder")) \
+                if params.get("folder") else (None, None)
+        except Exception:  # noqa: BLE001
+            collection_id = None
+        if collection_id is None and r.get("items"):
+            # Cursor embeds collection_id; recover from first item_id if needed.
+            try:
+                from outlook_activesync_mcp.models import unpack_item_id
+                collection_id, _ = unpack_item_id(r["items"][0]["item_id"])
+            except Exception:  # noqa: BLE001
+                collection_id = None
+        if collection_id:
+            box = _mail_box(a, collection_id)
+            for it in r.get("items") or []:
+                if it.get("item_id"):
+                    box["by_id"][it["item_id"]] = it
+            box["gen"] = _mail_store_gen(backend, collection_id) or box.get("gen")
+            box["complete"] = not r.get("has_more")
+            box["next_cursor"] = r.get("next_cursor")
+            box["ts"] = time.time()
+        return r
+
+    try:
+        collection_id, label = mail.resolve_collection(backend.client, params.get("folder"))
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "action": "list", "count": 0, "items": [],
+                "error": getattr(e, "code", None) or type(e).__name__, "message": str(e)}
+
+    box = _mail_box(a, collection_id)
+    # The box holds projections of the fields its first dump asked for: a request
+    # for other fields (a probe, a different caller) must not get rows missing
+    # sender/preview — nor rebuild the box the UI relies on with fewer fields.
+    want_fields = tuple(sorted(fields)) if fields else None
+    can_delta = (not force and box.get("gen") is not None
+                 and box.get("filter") == filt and bool(box.get("by_id"))
+                 and box.get("fields") == want_fields)
+
+    if can_delta:
+        try:
+            _mail_apply_delta(backend, collection_id, label, filt, box, fields)
+            items = _mail_sorted_items(box)
+            # Soft refresh wants the whole cached window; hard UI page still
+            # gets at least `limit` (usually the full box after first dump).
+            out = items if len(items) <= max(limit, _MAIL_BOX_CAP) else items[:_MAIL_BOX_CAP]
+            has_more = not box.get("complete") and bool(box.get("next_cursor"))
+            return {"ok": True, "action": "list", "count": len(out), "items": out,
+                    "has_more": has_more, "next_cursor": box.get("next_cursor") if has_more else None,
+                    "delta": True, "cached": len(box["by_id"])}
+        except CursorExpired:
+            log.info("[%s] mail delta cursor expired on %s — full dump", a.id, collection_id)
+            box["gen"], box["by_id"] = None, {}
+        except EasStatusError as e:
+            log.info("[%s] mail delta Sync status %s on %s — full dump", a.id,
+                     getattr(e, "status", "?"), collection_id)
+            box["gen"], box["by_id"] = None, {}
+        except Exception as e:  # noqa: BLE001
+            log.warning("[%s] mail delta failed on %s: %s — full dump", a.id, collection_id, e)
+            box["gen"] = None
+
+    # Full prime (SyncKey=0 via mail.handle).
+    box["filter"] = filt
+    box["fields"] = want_fields
+    box["label"] = label
+    box["by_id"] = {}
+    box["complete"] = False
+    box["next_cursor"] = None
+    box["gen"] = None
+    r = _mail_fetch_pages(backend, {**params, "filter": filt, "folder": params.get("folder") or collection_id})
+    if not r.get("ok", True):
+        return r
+    for it in r.get("items") or []:
+        if it.get("item_id"):
+            box["by_id"][it["item_id"]] = it
+    box["gen"] = _mail_store_gen(backend, collection_id)
+    box["complete"] = not r.get("has_more")
+    box["next_cursor"] = r.get("next_cursor")
+    box["ts"] = time.time()
+    r = dict(r)
+    r["delta"] = False
+    return r
+
+
 def call(a: Acct, domain: str, params: dict) -> dict:
     from outlook_activesync_mcp.commands import calendar, folders, mail, people, settings
     mods = {"mail": mail, "folders": folders, "events": calendar, "people": people, "settings": settings}
@@ -338,19 +588,218 @@ def call(a: Acct, domain: str, params: dict) -> dict:
     # we implement it here with a one-shot table patch.
     if domain == "folders" and action == "create":
         return folder_create(a, params.get("name") or "", params.get("parent_id") or "0")
+    if domain == "events" and action == "respond":
+        return respond_event(a, params)
+    if domain == "folders" and action == "delete":
+        return folder_delete(a, params.get("folder_id") or "")
     if domain == "folders" and action == "list":
         return folders_list(a, refresh=bool(params.get("refresh")))
+    if domain == "people" and action == "find_free_slots":
+        return _free_slots(a, params)
+    # GAL Search is slow (~0.5–2s); compose autocomplete fires on every pause.
+    # Cache identical queries briefly so retyping / To+Cc sharing a prefix is free.
+    if domain == "people" and action == "find":
+        cached = _people_find_cached(a, params)
+        if cached is not None:
+            return cached
+    if domain == "mail" and action in ("send", "reply", "forward") and time.time() < a.send_down_until:
+        return {"ok": False, "action": action, "count": 0, "items": [], "error": "send_down",
+                "message": str(_send_down_error(a))}
     backend = a.get()
     with backend.lock:
         try:
             if domain == "mail" and action == "list":
-                return _mail_list_paged(backend, params)
+                res = _mail_list_paged(a, backend, params)
+                fid = params.get("folder")
+                if fid and res.get("ok", True):
+                    box = a.mail_boxes.get(str(fid))
+                    if box is not None and box.get("by_id"):
+                        recount_unread_from_box(a, str(fid), box)
+                    elif not params.get("cursor"):
+                        recount_unread_from_items(a, str(fid), res.get("items") or [])
+                return res
             backend._pace()
-            return mod.handle(backend.client, action, **params)
+            res = mod.handle(backend.client, action, **params)
+            if domain == "people" and action == "find" and res.get("ok", True):
+                _people_find_store(a, params, res)
+            # Local mail-box patches after writes so the next delta refresh is coherent.
+            if domain == "mail" and res.get("ok", True):
+                _mail_box_after_write(a, action, params, res)
+            return res
         except Exception as e:  # noqa: BLE001 — surfaced to the UI as data
             log.warning("[%s] %s/%s failed: %s", a.id, domain, action, e)
+            if domain == "mail" and getattr(e, "status", None) == 120:
+                a.send_down_until = time.time() + SEND_OUTAGE_S
             return {"ok": False, "action": action, "count": 0, "items": [],
+                    "error": getattr(e, "code", None) or type(e).__name__,
+                    "message": _friendly_error(a, domain, action, e)}
+
+
+# MS-ASCMD MeetingResponse status codes → what the user can do about it.
+_MEETING_RESPONSE_STATUS = {
+    2: "сервер не принял ответ на это событие: скорее всего, встречу уже отменили или перенесли, "
+       "или это не приглашение. Обновите календарь (⟳) и попробуйте снова.",
+    3: "почтовый сервер временно не смог сохранить ответ. Попробуйте ещё раз через минуту.",
+    4: "сервер организатора не принял ответ. Попробуйте позже или ответьте из письма-приглашения.",
+}
+
+
+def _friendly_error(a: Acct, domain: str, action: str, e: Exception) -> str:
+    """Keep the raw text in the log; give the UI a sentence a person can act on."""
+    if getattr(e, "status", None) == 120 or "status 120" in str(e):
+        return (f"Сервер {a.name} не смог отправить письмо (ошибка 120 — отправка почты на сервере "
+                "не работает). Письмо не ушло. Если в веб-почте тоже не отправляется — это сбой сервера, "
+                "сообщите администратору.")
+    if getattr(e, "code", None) == "throttled":
+        return (f"Сервер {a.name} временно ограничил число запросов. Подождите минуту — "
+                "автосинхронизация повторит сама.")
+    if domain == "events" and action == "respond":
+        status = getattr(e, "status", None)
+        if status in _MEETING_RESPONSE_STATUS:
+            return f"Ответ на встречу: {_MEETING_RESPONSE_STATUS[status]} (код {status})"
+        if a.green:
+            return (f"Ответ на встречу не отправлен: сервер {a.name} не поддерживает этот способ ответа "
+                    f"через ActiveSync ({e}). Ответьте из письма-приглашения.")
+        return f"Ответ на встречу не отправлен: {e}"
+    return str(e)
+
+
+def _free_slots(a: Acct, params: dict) -> dict:
+    """«Свободно у всех»: a few options inside the user's working day.
+
+    Upstream takes only count×4 raw free slots from `start` before dropping the
+    ones outside working hours/weekends — mostly nights, so one option (or none)
+    survived, and 09:00 was hard-coded. Ask it for plenty, then keep `count`
+    slots that start *and end* inside the working day from Settings."""
+    from datetime import datetime
+    prefs = load_prefs()
+    ws, we = int(params.pop("work_start", prefs["work_start"])), int(params.pop("work_end", prefs["work_end"]))
+    want = max(1, min(int(params.pop("count", 3) or 3), 10))
+    params.update(work_start=ws, work_end=we, count=want * 12)
+    backend = a.get()
+    with backend.lock:
+        try:
+            from outlook_activesync_mcp.commands import people
+            backend._pace()
+            res = people.handle(backend.client, "find_free_slots", **params)
+        except Exception as e:  # noqa: BLE001
+            log.warning("[%s] people/find_free_slots failed: %s", a.id, e)
+            return {"ok": False, "action": "find_free_slots", "count": 0, "items": [],
                     "error": getattr(e, "code", None) or type(e).__name__, "message": str(e)}
+
+    def fits(slot) -> bool:
+        try:
+            end = datetime.fromisoformat(str(slot["end"]).replace(" ", "T"))
+        except (KeyError, ValueError):
+            return True
+        return end.hour < we or (end.hour == we and end.minute == 0)
+
+    items = [x for x in res.get("items") or [] if fits(x)][:want]
+    return {**res, "items": items, "count": len(items), "work_start": ws, "work_end": we}
+
+
+_WARM_FRESH_S = 120
+_WARM_MAX = 8
+
+
+def warm_folders(a: Acct, folders: list, filt, fields) -> dict:
+    """Pre-fetch folders the user is likely to open (favourites, recent, Inbox) in
+    the background, so switching to them is served from the in-memory box. One
+    folder at a time — the account lock is released between folders, so a click
+    waits for at most one folder. Folders refreshed recently are skipped."""
+    todo = [str(f) for f in (folders or []) if f][:_WARM_MAX]
+
+    def run():
+        for fid in todo:
+            try:
+                box = a.mail_boxes.get(fid)  # UI folder ids are the collection ids
+                if box and time.time() - box.get("ts", 0) < _WARM_FRESH_S:
+                    continue
+                call(a, "mail", {"action": "list", "folder": fid, "limit": 40, "filter": filt, "fields": fields})
+            except Exception:  # noqa: BLE001 — warming is best-effort
+                log.debug("[%s] warm %s failed", a.id, fid, exc_info=True)
+    threading.Thread(target=run, daemon=True).start()
+    return {"ok": True, "warming": len(todo)}
+
+
+def _mail_box_after_write(a: Acct, action: str, params: dict, res: dict) -> None:
+    """Best-effort update of the in-memory folder cache after mark/move/delete."""
+    ids = list(params.get("item_ids") or [])
+    if params.get("item_id"):
+        ids.append(params["item_id"])
+    if not ids:
+        return
+    try:
+        from outlook_activesync_mcp.models import unpack_item_id
+    except ImportError:
+        return
+    if action == "mark_read":
+        read = bool(params.get("read", True))
+        for iid in ids:
+            try:
+                cid, _ = unpack_item_id(iid)
+            except Exception:  # noqa: BLE001
+                continue
+            box = a.mail_boxes.get(cid)
+            row = (box or {}).get("by_id", {}).get(iid)
+            if row is not None:
+                row["is_read"] = read
+                recount_unread_from_box(a, cid, box)
+    elif action in ("delete", "move"):
+        for iid in ids:
+            try:
+                cid, _ = unpack_item_id(iid)
+            except Exception:  # noqa: BLE001
+                continue
+            box = a.mail_boxes.get(cid)
+            if box and iid in box.get("by_id", {}):
+                box["by_id"].pop(iid, None)
+                recount_unread_from_box(a, cid, box)
+
+
+# Short-lived GAL cache: (acct_id, query_lower, limit) → (expires_at, result)
+_PEOPLE_FIND_TTL = 90.0
+_people_find_cache: dict[tuple[str, str, int], tuple[float, dict]] = {}
+_people_find_lock = threading.Lock()
+
+
+def _people_find_key(a: Acct, params: dict) -> tuple[str, str, int] | None:
+    q = (params.get("query") or "").strip().lower()
+    if len(q) < 2:
+        return None
+    return (a.id, q, int(params.get("limit") or 15))
+
+
+def _people_find_cached(a: Acct, params: dict) -> dict | None:
+    key = _people_find_key(a, params)
+    if not key:
+        return None
+    with _people_find_lock:
+        hit = _people_find_cache.get(key)
+        if not hit:
+            return None
+        exp, res = hit
+        if exp < time.time():
+            _people_find_cache.pop(key, None)
+            return None
+        return dict(res)
+
+
+def _people_find_store(a: Acct, params: dict, res: dict) -> None:
+    key = _people_find_key(a, params)
+    if not key:
+        return
+    with _people_find_lock:
+        # Cap growth — drop expired first, then oldest half if still huge.
+        now = time.time()
+        dead = [k for k, (exp, _) in _people_find_cache.items() if exp < now]
+        for k in dead:
+            _people_find_cache.pop(k, None)
+        if len(_people_find_cache) > 200:
+            by_age = sorted(_people_find_cache.items(), key=lambda kv: kv[1][0])
+            for k, _ in by_age[:100]:
+                _people_find_cache.pop(k, None)
+        _people_find_cache[key] = (now + _PEOPLE_FIND_TTL, dict(res))
 
 
 def _parse_folder_changes(tree) -> tuple[dict[str, dict], str]:
@@ -381,80 +830,116 @@ def _parse_folder_changes(tree) -> tuple[dict[str, dict], str]:
     return rows, key
 
 
-def folders_list(a: Acct, refresh: bool = False) -> dict:
-    """Full folder tree for the account — deeper than upstream FolderSync(0)/Add."""
-    from datetime import datetime, timezone
+def _deep_folder_tree(client) -> tuple[list[dict], str]:
+    """Full folder tree: FolderSync(0) plus one follow-up round with the returned
+    key, merging Add *and* Update. Stalwart (Seller) sends user mailboxes only as
+    Update and/or only on the follow-up round; upstream reads just Add of round 0.
+    Rows use upstream's shape ({id, name, type, parent_id}). Returns (rows, key)."""
     from outlook_activesync_mcp.commands import provision as prov
+    from outlook_activesync_mcp.wbxml import find, find_all, text_of
+    client.ensure_provisioned()
+    by_id, key = _parse_folder_changes(client.command("FolderSync", prov.build_foldersync("0")))
+    if key and key != "0":
+        # Status 9 here (another FolderSync advanced the key) must not lose round 0.
+        try:
+            tree1 = client.command("FolderSync", prov.build_foldersync(key))
+            more, key2 = _parse_folder_changes(tree1)
+            by_id.update(more)
+            for node in find_all(tree1, "FolderHierarchy", "Delete"):
+                by_id.pop(text_of(find(node, "FolderHierarchy", "ServerId")) or "", None)
+            key = key2 or key
+        except Exception as e:  # noqa: BLE001
+            log.info("follow-up FolderSync skipped: %s", e)
+    return list(by_id.values()), key
+
+
+# Set while a hierarchy delta is in flight: a dead SyncKey must surface as an
+# error (→ full tree) instead of _patch_foldersync_invalid_key's quiet SyncKey=0
+# retry, whose shallow round-0 answer would be merged as if it were a delta.
+_fs_delta = threading.local()
+
+
+def _folder_delta(client, cache: dict) -> tuple[list[dict], str] | None:
+    """FolderSync with the stored key: only Add/Update/Delete since last time,
+    merged into the cached tree. None when there is no usable key."""
+    from outlook_activesync_mcp.commands import provision as prov
+    from outlook_activesync_mcp.wbxml import find, find_all, text_of
+    key = cache.get("sync_key")
+    if not key or key == "0" or cache.get("tree") is None:
+        return None
+    client.ensure_provisioned()
+    _fs_delta.strict = True
+    try:
+        tree = client.command("FolderSync", prov.build_foldersync(key))
+    finally:
+        _fs_delta.strict = False
+    status = text_of(find(tree, "FolderHierarchy", "Status"))
+    if status and status != "1":
+        return None
+    changes, new_key = _parse_folder_changes(tree)
+    by_id = {f["id"]: f for f in cache["tree"]}
+    by_id.update(changes)
+    for node in find_all(tree, "FolderHierarchy", "Delete"):
+        by_id.pop(text_of(find(node, "FolderHierarchy", "ServerId")) or "", None)
+    return list(by_id.values()), (new_key if new_key != "0" else key)
+
+
+def _patch_deep_foldersync():
+    """Make the client's own ``foldersync()`` deep. Every upstream path —
+    resolving a folder for mail/list, move, calendar lookup, the forced refresh
+    after FolderCreate — goes through it; while it stayed shallow it overwrote
+    the shared cache with system folders only, and opening a user folder failed
+    with «папка 'i/…' не найдена». Caches from the shallow era (no ``deep``
+    flag) are replaced on first use."""
+    try:
+        from outlook_activesync_mcp import client as client_mod
+        from outlook_activesync_mcp.client import EasClient
+    except ImportError:
+        return
+    if getattr(EasClient.foldersync, "_eas_deep", False):
+        return
+
+    def foldersync(self, *, force: bool = False, full: bool = False) -> list[dict]:
+        """``force`` skips the TTL; the refresh is then a hierarchy delta off the
+        stored SyncKey. ``full`` re-lists from SyncKey=0 — needed after our own
+        FolderCreate/Delete, which the server never echoes back in a delta."""
+        cache = self.store.get("folders")
+        deep = bool(cache and cache.get("deep") and cache.get("tree") is not None)
+        if not force and deep:
+            if time.time() - client_mod._cache_epoch(cache.get("cached_at")) < client_mod._FOLDER_TTL:
+                return cache["tree"]
+        got, mode = None, "full"
+        if deep and not full:
+            try:
+                got, mode = _folder_delta(self, cache), "delta"
+            except Exception as e:  # noqa: BLE001
+                log.info("folder delta failed (%s) — full FolderSync", e)
+        folders, key = got or _deep_folder_tree(self)
+        with self.store.transaction() as st:
+            st["folders"] = {"cached_at": client_mod._now_epoch_iso(), "tree": folders,
+                             "deep": True, "sync_key": key}
+        log.info("foldersync %s: %d folders (mail=%d)", mode if got else "full", len(folders),
+                 sum(1 for f in folders if str(f.get("type")) in MAIL_FOLDER_TYPES))
+        return folders
+
+    foldersync._eas_deep = True  # type: ignore[attr-defined]
+    EasClient.foldersync = foldersync
+
+
+def folders_list(a: Acct, refresh: bool = False) -> dict:
+    """Full folder tree for the account (deep sync lives in the patched client)."""
     from outlook_activesync_mcp.commands.provision import FOLDER_TYPES
     from outlook_activesync_mcp.models import envelope
-    from outlook_activesync_mcp.wbxml import find, find_all, text_of
-    import time as _time
-
-    def _rows(tree_list: list) -> list[dict]:
-        return [{
-            "folder_id": f["id"], "name": f["name"],
-            "kind": FOLDER_TYPES.get(f["type"], f"type-{f['type']}"),
-            "type": f["type"],
-            "parent_id": f.get("parent_id") or None,
-        } for f in tree_list]
-
-    def _cache_age(cached_at) -> float:
-        if not cached_at:
-            return 1e9
-        try:
-            if isinstance(cached_at, (int, float)):
-                return _time.time() - float(cached_at)
-            s = str(cached_at).replace("Z", "+00:00")
-            return _time.time() - datetime.fromisoformat(s).timestamp()
-        except Exception:
-            return 1e9
-
     backend = a.get()
     with backend.lock:
         try:
-            client = backend.client
-            if not refresh:
-                cache = client.store.get("folders") or {}
-                tree = cache.get("tree")
-                if tree is not None:
-                    mailish = [f for f in tree if str(f.get("type")) in MAIL_FOLDER_TYPES]
-                    # Stalwart often caches only the 6 system mail folders — don't
-                    # trust that as complete; force a deep sync next.
-                    truncated = a.id == "seller" and len(mailish) <= 6
-                    if _cache_age(cache.get("cached_at")) < 15 * 60 and not truncated:
-                        return envelope("list", _rows(tree), total=len(tree), has_more=False)
-
-            client.ensure_provisioned()
             backend._pace()
-            tree0 = client.command("FolderSync", prov.build_foldersync("0"))
-            by_id, key = _parse_folder_changes(tree0)
-            # Second round with the returned SyncKey — picks up user folders
-            # some servers withhold on the initial full sync.
-            if key and key != "0":
-                a._folder_sync_key = key
-                backend._pace()
-                tree1 = client.command("FolderSync", prov.build_foldersync(key))
-                more, key2 = _parse_folder_changes(tree1)
-                by_id.update(more)
-                for node in find_all(tree1, "FolderHierarchy", "Delete"):
-                    sid = text_of(find(node, "FolderHierarchy", "ServerId"))
-                    if sid:
-                        by_id.pop(sid, None)
-                if key2:
-                    a._folder_sync_key = key2
-
-            folders = list(by_id.values())
-            log.info("[%s] folders_list deep: %d folders (mail=%d)",
-                     a.id, len(folders),
-                     sum(1 for f in folders if str(f.get("type")) in MAIL_FOLDER_TYPES))
-            try:
-                from outlook_activesync_mcp.client import _now_epoch_iso
-                stamp = _now_epoch_iso()
-            except Exception:
-                stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-            with client.store.transaction() as st:
-                st["folders"] = {"cached_at": stamp, "tree": folders}
-            return envelope("list", _rows(folders), total=len(folders), has_more=False)
+            tree = backend.client.foldersync(force=refresh)
+            return envelope("list", [{
+                "folder_id": f["id"], "name": f["name"],
+                "kind": FOLDER_TYPES.get(f["type"], f"type-{f['type']}"),
+                "type": f["type"], "parent_id": f.get("parent_id") or None,
+            } for f in tree], total=len(tree), has_more=False)
         except Exception as e:  # noqa: BLE001
             log.warning("[%s] folders/list failed: %s", a.id, e)
             return {"ok": False, "action": "list", "count": 0, "items": [],
@@ -493,12 +978,10 @@ def folder_create(a: Acct, name: str, parent_id: str = "0") -> dict:
             # ever sends SyncKey 0 (full tree); Exchange answers with Status 9
             # until we do one FolderSync and read the returned key. We keep the
             # key on the account for the next create.
-            sync_key = getattr(a, "_folder_sync_key", None) or "0"
+            sync_key = (backend.client.store.get("folders") or {}).get("sync_key") or "0"
             if sync_key == "0":
-                from outlook_activesync_mcp.commands import provision as prov
-                tree0 = backend.client.command("FolderSync", prov.build_foldersync("0"))
-                sync_key = text_of(find(tree0, "FolderHierarchy", "SyncKey")) or "0"
-                a._folder_sync_key = sync_key
+                backend.client.foldersync(force=True, full=True)
+                sync_key = (backend.client.store.get("folders") or {}).get("sync_key") or "0"
             body = el("FolderHierarchy", "FolderCreate",
                       el("FolderHierarchy", "SyncKey", text=sync_key),
                       el("FolderHierarchy", "ParentId", text=parent_id),
@@ -509,12 +992,9 @@ def folder_create(a: Acct, name: str, parent_id: str = "0") -> dict:
             if status not in ("1", "1.0"):
                 return {"ok": False, "error": "eas_status", "message": f"FolderCreate status {status}",
                         "action": "create", "count": 0, "items": []}
-            new_key = text_of(find(tree, "FolderHierarchy", "SyncKey"))
-            if new_key:
-                a._folder_sync_key = new_key
             server_id = text_of(find(tree, "FolderHierarchy", "ServerId"))
-            # Invalidate the foldersync cache so the next list sees the new folder.
-            backend.client.foldersync(force=True)
+            # Full relist: a delta never echoes our own FolderCreate.
+            backend.client.foldersync(force=True, full=True)
             return {"ok": True, "action": "create", "count": 1,
                     "items": [{"folder_id": server_id, "name": name, "parent_id": parent_id, "type": "12"}]}
         except Exception as e:  # noqa: BLE001
@@ -523,63 +1003,195 @@ def folder_create(a: Acct, name: str, parent_id: str = "0") -> dict:
                     "error": type(e).__name__, "message": str(e)}
 
 
-def unread_snapshot(a: Acct) -> dict:
-    with a.unread_lock:
-        return {"ok": True, "folders": dict(a.unread), "total": sum(a.unread.values()), "ts": a.unread_ts}
-
-
-def refresh_unread(a: Acct, *, force: bool = False) -> dict:
-    """Best-effort unread counts for every mail folder. Counts the unread items
-    in the first page of each folder (filter=5 ≈ last month) — enough for
-    badges without a full-mailbox crawl."""
-    if not force and a.unread_ts and time.time() - a.unread_ts < 90:
-        return unread_snapshot(a)
-    from outlook_activesync_mcp.commands import folders as folders_mod
+def folder_delete(a: Acct, folder_id: str) -> dict:
+    """Delete a user mail folder (FolderDelete). System folders are refused."""
+    from outlook_activesync_mcp.wbxml import el, find, text_of
+    folder_id = (folder_id or "").strip()
+    _ensure_foldercreate_tokens()
     backend = a.get()
-    try:
-        with backend.lock:
-            backend._pace()
-            fl = folders_mod.handle(backend.client, "list", refresh=False)
-    except Exception as e:  # noqa: BLE001
-        log.warning("[%s] unread folders list failed: %s", a.id, e)
-        return unread_snapshot(a)
-    counts: dict[str, int] = {}
-    for f in fl.get("items") or []:
-        if str(f.get("type")) not in MAIL_FOLDER_TYPES:
-            continue
-        fid = f.get("folder_id")
-        if not fid:
-            continue
+    with backend.lock:
         try:
-            with backend.lock:
-                backend._pace()
-                page = _mail_list_paged(backend, {
-                    "folder": fid, "limit": 80, "filter": 5,
-                    "fields": ["is_read"],
-                })
-            counts[fid] = sum(1 for m in (page.get("items") or []) if not m.get("is_read"))
+            tree = {f["id"]: f for f in backend.client.foldersync()}
+            row = tree.get(folder_id)
+            if not row or str(row.get("type")) != "12":
+                return {"ok": False, "error": "bad_request", "message": "удалить можно только свою папку",
+                        "action": "delete", "count": 0, "items": []}
+            backend._pace()
+            sync_key = (backend.client.store.get("folders") or {}).get("sync_key") or "0"
+            res = backend.client.command("FolderDelete", el("FolderHierarchy", "FolderDelete",
+                                         el("FolderHierarchy", "SyncKey", text=sync_key),
+                                         el("FolderHierarchy", "ServerId", text=folder_id)))
+            status = text_of(find(res, "FolderHierarchy", "Status")) or "?"
+            if status != "1":
+                return {"ok": False, "error": "eas_status", "message": f"FolderDelete status {status}",
+                        "action": "delete", "count": 0, "items": []}
+            backend.client.foldersync(force=True, full=True)
+            return {"ok": True, "action": "delete", "count": 1, "items": [{"folder_id": folder_id}]}
         except Exception as e:  # noqa: BLE001
-            log.debug("[%s] unread %s: %s", a.id, fid, e)
+            log.warning("[%s] folder delete failed: %s", a.id, e)
+            return {"ok": False, "action": "delete", "count": 0, "items": [],
+                    "error": type(e).__name__, "message": str(e)}
+
+
+# Folders that count towards the account total: Inbox and user mail folders.
+# Drafts / Sent / Deleted / Outbox have no meaningful "unread" (Outlook agrees).
+UNREAD_TOTAL_TYPES = frozenset({"1", "2", "12"})
+
+
+def _counted_folder_ids(a: Acct) -> set[str] | None:
+    """Folder ids of UNREAD_TOTAL_TYPES from the stored tree (no network)."""
+    try:
+        tree = (a.backend.client.store.get("folders") or {}).get("tree") or []
+    except AttributeError:
+        return None
+    return {str(f["id"]) for f in tree if str(f.get("type")) in UNREAD_TOTAL_TYPES} or None
+
+
+def unread_snapshot(a: Acct) -> dict:
+    counted = _counted_folder_ids(a) if a.backend is not None else None
     with a.unread_lock:
-        a.unread = counts
+        notices, a.notices = a.notices, []  # delivered once
+        total = sum(n for f, n in a.unread.items() if counted is None or f in counted)
+        return {"ok": True, "folders": dict(a.unread), "total": total, "ts": a.unread_ts,
+                "partial": sorted(a.unread_partial), "sweeping": a.unread_sweeping, "notices": notices}
+
+
+def recount_unread_from_box(a: Acct, folder_id: str, box: dict) -> None:
+    """Exact count for the mail period once the box is drained; "N+" before."""
+    n = sum(1 for m in box["by_id"].values() if not m.get("is_read"))
+    with a.unread_lock:
+        a.unread[folder_id] = n
+        if box.get("complete"):
+            a.unread_partial.discard(folder_id)
+        else:
+            a.unread_partial.add(folder_id)
         a.unread_ts = time.time()
+
+
+_SWEEP_FRESH_S = 60     # a folder refreshed this recently is only recounted
+_SWEEP_DRAIN_CALLS = 6  # «Ещё» pages per folder per sweep (Stalwart: ~2.5 s each)
+_SWEEP_MIN_GAP_S = 240  # auto-sync ticks every 1–2 min; one Sync per folder that often invites Exchange throttling
+
+
+def unread_sweep(a: Acct, filt, fields, *, force: bool = False) -> dict:
+    """Count unread in every Inbox / user folder in the background. Each folder
+    goes through the same per-folder box as the list (first open = one prime,
+    later = SyncKey delta), then its dump is drained a few pages at a time until
+    the whole mail period is in — so badges are real counts, not the first page.
+    One folder at a time: the account lock is free between Sync calls."""
+    with a.unread_lock:
+        skip = a.unread_sweeping or (not force and time.time() - a.unread_sweep_ts < _SWEEP_MIN_GAP_S)
+        if not skip:
+            a.unread_sweeping = True
+    if skip:  # outside the lock: unread_snapshot takes it (not reentrant)
+        return unread_snapshot(a)
+
+    def run():
+        try:
+            backend = a.get()
+            with backend.lock:
+                tree = backend.client.foldersync()
+            counted = [f for f in tree if str(f.get("type")) in UNREAD_TOTAL_TYPES]
+            ids = [str(f["id"]) for f in sorted(counted, key=lambda f: str(f.get("type")) != "2")]  # Inbox first
+            for fid in ids:
+                try:
+                    box = a.mail_boxes.get(fid)
+                    if not (box and box.get("complete") and time.time() - box.get("ts", 0) < _SWEEP_FRESH_S):
+                        call(a, "mail", {"action": "list", "folder": fid, "limit": 40, "filter": filt, "fields": fields})
+                    for _ in range(_SWEEP_DRAIN_CALLS):
+                        box = a.mail_boxes.get(fid) or {}
+                        if box.get("complete") or not box.get("next_cursor") or len(box.get("by_id") or {}) >= _MAIL_BOX_CAP:
+                            break
+                        call(a, "mail", {"action": "list", "folder": fid, "cursor": box["next_cursor"], "limit": 100})
+                    box = a.mail_boxes.get(fid)
+                    if box is not None and box.get("by_id") is not None:
+                        recount_unread_from_box(a, fid, box)
+                except Exception:  # noqa: BLE001 — one bad folder must not stop the rest
+                    log.debug("[%s] unread sweep %s failed", a.id, fid, exc_info=True)
+        except Exception as e:  # noqa: BLE001
+            log.info("[%s] unread sweep failed: %s", a.id, e)
+        finally:
+            with a.unread_lock:
+                a.unread_sweeping = False
+                a.unread_ts = a.unread_sweep_ts = time.time()
+
+    threading.Thread(target=run, daemon=True).start()
     return unread_snapshot(a)
 
 
-def _unread_keepfresh():
-    while True:
-        time.sleep(120)
-        if time.time() - _last_activity[0] > 900:
-            continue
-        for a in list(ACCTS.values()):
-            try:
-                refresh_unread(a)
-            except Exception:  # noqa: BLE001
-                log.debug("[%s] unread refresh failed", a.id, exc_info=True)
+def refresh_unread(a: Acct, *, force: bool = False) -> dict:
+    """Best-effort unread badges without advancing folder SyncKeys.
+
+    Walking every folder via ``mail.list`` (Sync GetChanges) used to burn the
+    Inbox SyncKey through years of older mail — new messages never reached the
+    UI. Counts are taken only from folders the UI already listed this session
+    (``a.unread`` seeds) plus a cheap Inbox-only estimate from the last list
+    snapshot when present; otherwise we skip Sync entirely and keep the last
+    known badges.
+    """
+    if not force and a.unread_ts and time.time() - a.unread_ts < 90:
+        return unread_snapshot(a)
+    # Do not call Sync/list here — badges update when the user opens a folder
+    # (see loadList) or when the sync button forces a recount from the current
+    # in-memory page.
+    with a.unread_lock:
+        if a.unread:
+            a.unread_ts = time.time()
+    return unread_snapshot(a)
+
+
+def recount_unread_from_items(a: Acct, folder_id: str, items: list) -> None:
+    """Update one folder's badge from a mail.list page (no extra Sync)."""
+    if not folder_id:
+        return
+    n = sum(1 for m in items if not m.get("is_read"))
+    with a.unread_lock:
+        a.unread[folder_id] = n
+        a.unread_ts = time.time()
+
+
 # -- iMIP invitations ---------------------------------------------------------
 # Stalwart (the Seller server) does not mail invitations for ActiveSync meetings and Exchange
 # does not always deliver them to external domains, so the bridge can send the invitation itself:
 # a text/calendar METHOD:REQUEST message, which Outlook/Gmail/Stalwart show as a meeting request.
+
+SEND_OUTAGE_S = 300
+
+
+def _send_down_error(a: Acct) -> Exception:
+    return RuntimeError(f"Сервер {a.name} сейчас не отправляет почту (ошибка 120 при прошлой попытке). "
+                        "Повторите через несколько минут; если не проходит и в веб-почте — это сбой на сервере.")
+
+
+def _send_mime(a: Acct, mime: bytes) -> None:
+    """SendMail with the outage guard (see Acct.send_down_until)."""
+    if time.time() < a.send_down_until:
+        raise _send_down_error(a)
+    try:
+        a.get().send(mime)
+    except Exception as e:  # noqa: BLE001
+        if getattr(e, "status", None) == 120:
+            a.send_down_until = time.time() + SEND_OUTAGE_S
+        raise
+
+
+def _notice(a: Acct, text: str, error: bool = False) -> None:
+    with a.unread_lock:
+        a.notices = (a.notices + [{"text": text, "error": error, "ts": time.time()}])[-10:]
+
+
+def _send_invites_bg(a: Acct, p: dict, attendees: list[str]) -> None:
+    """Invitation mails after the meeting is already created: a slow or broken
+    mail server must not keep the «Создать» button spinning for minutes."""
+    try:
+        sent = send_invites(a, p, attendees)
+        if sent:
+            _notice(a, f"Приглашения «{p.get('subject') or 'встреча'}» отправлены: {', '.join(sent)}")
+    except Exception as e:  # noqa: BLE001
+        log.warning("[%s] invite mail failed: %s", a.id, e)
+        _notice(a, f"Встреча «{p.get('subject') or ''}» создана, но приглашения письмом не ушли: "
+                   f"{_friendly_error(a, 'mail', 'send', e)}", error=True)
+
 
 def send_invites(a: Acct, p: dict, attendees: list[str]) -> list[str]:
     import uuid
@@ -616,17 +1228,22 @@ def send_invites(a: Acct, p: dict, attendees: list[str]) -> list[str]:
     m.set_content(f"{a.name} приглашает вас на встречу «{p.get('subject') or ''}»\n{p['start'].replace('T', ' ')} – {p['end'].replace('T', ' ')}\n"
                   + (f"\n{p['location']}\n" if p.get("location") else "") + (f"\n{p['body']}\n" if p.get("body") else ""))
     m.add_alternative("\r\n".join(lines) + "\r\n", subtype="calendar", params={"method": "REQUEST", "charset": "UTF-8"})
-    a.get().send(m.as_bytes())
+    _send_mime(a, m.as_bytes())
     return to
 
 # -- calendar cache -----------------------------------------------------------
 # One ActiveSync calendar sync costs ~30 s whatever the window (server side), so
 # the whole window [today-7d, today+60d] is fetched once per account, kept in
-# memory and refreshed in the background. Mail calls are not blocked meanwhile:
-# the calendar fetch does not take backend.lock (the client guards its own state).
+# memory and refreshed in the background.
+#
+# MUST hold backend.lock for the Sync round-trips. The upstream client only
+# locks its state file around read/write of SyncKeys, not across the network
+# SyncKey=0 prime. Two concurrent primes on the same DeviceId → EAS 135
+# (SyncStateAlreadyExists) and both mail/list and calendar die.
 
 CAL_FIELDS = ["subject", "start", "end", "location", "is_all_day", "is_recurring", "organizer",
-              "busy_status", "attendees", "response_type", "meeting_status", "body", "reminder"]
+              "busy_status", "attendees", "response_type", "meeting_status", "body", "reminder",
+              "categories", "uid"]
 CAL_TTL = 180
 _last_activity = [time.time()]  # last UI request; the refresher idles when the app is not in use
 
@@ -641,46 +1258,475 @@ def _cal_keepfresh():
                 _cal_refresh(a)
 
 
-def _cal_refresh(a: Acct):
-    from datetime import date, timedelta
-    from outlook_activesync_mcp.commands import calendar
+def _cal_claim(a: Acct) -> bool:
+    """Mark a refresh as in flight; False if one already is. Done synchronously
+    by whoever starts the refresh, so a waiter never sees loaded=False and
+    loading=False in the gap before a background thread gets scheduled."""
+    with a.cv:
+        if a.cal["loading"]:
+            return False
+        a.cal["loading"] = True
+        return True
+
+
+def _cal_expand(masters: dict, calendar_id: str, win_start, win_end, fields) -> tuple[list, list]:
+    """Expand stored masters into occurrence rows for the UI window."""
+    import copy
+    from outlook_activesync_mcp.commands import calendar as cal_mod
+    from outlook_activesync_mcp.models import EVENT_FIELDS, pack_item_id, resolve_fields
+    from outlook_activesync_mcp.model.mapping import project_event
+
+    from outlook_activesync_mcp.utils import default_window
+
+    proj = resolve_fields(EVENT_FIELDS, fields)
+    # Upstream compares occurrences against tz-aware datetimes; the cache window
+    # is kept as dates — normalise exactly like calendar.list does.
+    win_start, win_end = default_window(str(win_start), str(win_end), days=7)
+    notes: list = []
+    items = []
+    for server_id, master in masters.items():
+        # One odd series must never blank the whole calendar: fall back to the
+        # plain upstream expansion, and failing that skip just this meeting.
+        try:
+            occs = cal_mod._occurrences(_cal_inherit_exceptions(copy.deepcopy(master)), win_start, win_end, notes)
+        except Exception as e:  # noqa: BLE001
+            log.warning("calendar: series %s not expanded with exceptions (%s: %s)", server_id, type(e).__name__, e)
+            try:
+                occs = cal_mod._occurrences(copy.deepcopy(master), win_start, win_end, notes)
+            except Exception as e2:  # noqa: BLE001
+                log.warning("calendar: series %s skipped (%s: %s)", server_id, type(e2).__name__, e2)
+                continue
+        for occ in occs:
+            occ_item_id = pack_item_id(calendar_id, server_id, instance=occ.get("instance_start"))
+            items.append(project_event(occ, proj, item_id=occ_item_id))
+    items.sort(key=lambda e: e.get("start_iso") or "")
+    return items, notes
+
+
+def _cal_inherit_exceptions(master: dict) -> dict:
+    """An EAS Exception carries only what changed for that occurrence (moved
+    time, new subject…). Upstream builds the occurrence from the exception alone,
+    so a moved meeting lost its subject, organizer, attendees and status — and
+    one with only a new subject got start=None. Fill the gaps from the series."""
+    from datetime import timedelta
+    from outlook_activesync_mcp.utils import parse_datetime
+    exceptions = master.get("exceptions") or []
+    if not exceptions:
+        return master
+    base = {k: v for k, v in master.items() if k != "exceptions"}
+    dur = (master["end"] - master["start"]) if master.get("start") and master.get("end") else timedelta(hours=1)
+    out = []
+    for ex in exceptions:
+        if ex.get("deleted"):
+            out.append(ex)
+            continue
+        row = {**base, **{k: v for k, v in ex.items() if v not in (None, "")}}  # "" = not overridden
+        if ex.get("start") is None:
+            try:
+                row["start"] = parse_datetime(ex.get("exception_start"))  # "" → None, no error
+            except (TypeError, ValueError, AttributeError):
+                row["start"] = None
+        if row["start"] is None:
+            out.append(ex)  # no usable ExceptionStartTime: upstream ignores such an entry
+            continue
+        if ex.get("end") is None:
+            row["end"] = row["start"] + dur
+        out.append(row)
+    master["exceptions"] = out
+    return master
+
+
+def _meeting_status(raw: str | None) -> str | None:
+    """MS-ASCAL MeetingStatus is a bit field: 1 = meeting, 2 = received,
+    4 = cancelled (8 = "same as"). Upstream maps 5 (organizer cancelled) to
+    «meeting» and 9 (plain meeting) to «cancelled»."""
+    try:
+        v = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return "appointment" if v == 0 else "cancelled" if v & 4 else "meeting"
+
+
+def _cal_parse(appdata) -> dict:
+    """parse_event plus what upstream drops: correct MeetingStatus, and
+    per-occurrence status/busy for cancelled or changed occurrences of a series."""
+    from outlook_activesync_mcp.model import mapping
+    from outlook_activesync_mcp.wbxml import find, find_all, text_of
+    ev = mapping.parse_event(appdata)
+    # find() searches descendants: take the item's own MeetingStatus, not an Exception's.
+    own = next((c for c in appdata.children if c.tag == "MeetingStatus"), None)
+    if own is not None:
+        ev["meeting_status"] = _meeting_status(text_of(own))
+    box = find(appdata, "Calendar", "Exceptions")
+    if box is not None and ev.get("exceptions"):
+        for ex, node in zip(ev["exceptions"], find_all(box, "Calendar", "Exception")):
+            st = _meeting_status(text_of(find(node, "Calendar", "MeetingStatus")))
+            if st:
+                ex["meeting_status"] = st
+            busy = mapping._BUSY.get(text_of(find(node, "Calendar", "BusyStatus")))
+            if busy:
+                ex["busy_status"] = busy
+    return ev
+
+
+def _cal_apply_tree(tree, masters: dict) -> tuple[int, int]:
+    """Apply one calendar Sync tree into masters. Returns (n_add, n_del)."""
+    from outlook_activesync_mcp.wbxml import find, find_all, text_of
+
+    n_add = 0
+    for node in find_all(tree, "AirSync", "Add") + find_all(tree, "AirSync", "Change"):
+        sid = text_of(find(node, "AirSync", "ServerId"))
+        appdata = find(node, "AirSync", "ApplicationData")
+        if not sid or appdata is None:
+            continue
+        masters[sid] = _cal_parse(appdata)
+        n_add += 1
+    n_del = 0
+    for node in find_all(tree, "AirSync", "Delete") + find_all(tree, "AirSync", "SoftDelete"):
+        sid = text_of(find(node, "AirSync", "ServerId"))
+        if sid and sid in masters:
+            masters.pop(sid, None)
+            n_del += 1
+    return n_add, n_del
+
+
+# -- calendar cache on disk -----------------------------------------------------
+# Masters + the SyncKey generation survive a restart, so launch shows the last
+# known calendar at once and catches up with a delta (~0.5 s) instead of a
+# SyncKey=0 prime (~30 s). The generation is checked against the client's state
+# file on the first round: a mismatch is CursorExpired → full sync.
+CAL_CACHE_VERSION = 1
+
+
+def _cal_cache_path(a: Acct):
+    return bridge.DATA_DIR / f"calcache-{a.id}.pkl"
+
+
+def _cal_cache_owner(a: Acct) -> list:
+    return [a.cfg.get("username"), a.cfg.get("url")]
+
+
+def _cal_save(a: Acct) -> None:
+    import pickle
     c = a.cal
     with a.cv:
-        if c["loading"]:
-            return
-        c["loading"] = True
+        blob = {"v": CAL_CACHE_VERSION, "owner": _cal_cache_owner(a), "ts": c["ts"], "gen": c["gen"],
+                "cal_id": c["cal_id"], "filter": c.get("filter"), "masters": c["masters"],
+                "truncated": c["truncated"]}
+    path = _cal_cache_path(a)
+    tmp = path.with_suffix(".tmp")
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            pickle.dump(blob, f, protocol=pickle.HIGHEST_PROTOCOL)
+        os.replace(tmp, path)
+    except Exception as e:  # noqa: BLE001
+        log.info("[%s] calendar cache not saved: %s", a.id, e)
+
+
+def _cal_forget(a: Acct) -> None:
+    """Our own write is not in the masters (the server never echoes it): the
+    next launch must not trust the file, or a cancelled meeting comes back."""
+    _cal_cache_path(a).unlink(missing_ok=True)
+
+
+def _cal_load(a: Acct, start, end) -> bool:
+    """Fill the in-memory cache from disk (not yet refreshed: ts is the save time)."""
+    import pickle
+    try:
+        with open(_cal_cache_path(a), "rb") as f:
+            blob = pickle.load(f)
+        if blob.get("v") != CAL_CACHE_VERSION or blob.get("owner") != _cal_cache_owner(a):
+            return False
+        items, _ = _cal_expand(blob["masters"], blob["cal_id"], start, end, CAL_FIELDS)
+    except FileNotFoundError:
+        return False
+    except Exception as e:  # noqa: BLE001
+        log.info("[%s] calendar cache unreadable: %s", a.id, e)
+        return False
+    with a.cv:
+        a.cal.update(items=items, masters=blob["masters"], gen=blob["gen"], cal_id=blob["cal_id"],
+                     filter=blob.get("filter"), ts=blob["ts"], loaded=True, error=None,
+                     range=(start, end), truncated=bool(blob.get("truncated")))
+        a.cv.notify_all()  # a cold cal_events() is waiting for loaded
+    log.info("[%s] calendar from disk: %d masters → %d events", a.id, len(blob["masters"]), len(items))
+    return True
+
+
+def _cal_full_sync(a: Acct, backend, start, end) -> None:
+    """Prime SyncKey=0 and fill masters + expanded items (same window as before)."""
+    from outlook_activesync_mcp.commands import calendar as cal_mod
+    from outlook_activesync_mcp.commands.sync import body_preference
+    from outlook_activesync_mcp.wbxml import el, find_all
+
+    days = max(1, (end - start).days)
+    t0 = time.time()
+    calendar_id = cal_mod._calendar_id(backend.client)
+    opts = [el("AirSync", "FilterType", text=cal_mod._filter_type(days)),
+            body_preference(type_code="1", truncation=1024)]
+    masters: dict = {}
+    truncated = False
+    backend._pace()
+    tree, more, gen = backend.client.sync_round(
+        calendar_id, generation=None, window=cal_mod._WINDOW,
+        options_children=opts, get_changes=True)
+    _cal_apply_tree(tree, masters)
+    pages = 1
+    while more and pages < cal_mod._PAGE_CAP:
+        backend._pace()
+        tree, more, gen = backend.client.sync_round(
+            calendar_id, generation=gen, window=cal_mod._WINDOW)
+        n_add, _ = _cal_apply_tree(tree, masters)
+        # Ignore empty progress; still count the page.
+        pages += 1
+        if n_add == 0 and not more:
+            break
+    if more:
+        truncated = True
+    items, _notes = _cal_expand(masters, calendar_id, start, end, CAL_FIELDS)
+    with a.cv:
+        a.cal.update(items=items, masters=masters, gen=gen, cal_id=calendar_id,
+                     ts=time.time(), loaded=True, error=None, range=(start, end),
+                     truncated=truncated, filter=cal_mod._filter_type(days))
+        _cal_overlay_prune(a.cal, t0)  # the server's view now includes earlier writes
+    _cal_save(a)
+    log.info("[%s] calendar full: %d masters → %d events%s", a.id, len(masters), len(items),
+             " (truncated)" if truncated else "")
+
+
+def _cal_delta_sync(a: Acct, backend, start, end) -> None:
+    """Continue calendar SyncKey; merge Add/Change/Delete and re-expand."""
+    from outlook_activesync_mcp.commands import calendar as cal_mod
+    from outlook_activesync_mcp.commands.sync import body_preference
+    from outlook_activesync_mcp.wbxml import el
+
+    c = a.cal
+    calendar_id = c["cal_id"]
+    days = max(1, (end - start).days)
+    opts = [el("AirSync", "FilterType", text=cal_mod._filter_type(days)),
+            body_preference(type_code="1", truncation=1024)]
+    masters = dict(c.get("masters") or {})
+    gen = c["gen"]
+    pages = changed = 0
+    while pages < cal_mod._PAGE_CAP:
+        pages += 1
+        backend._pace()
+        prev_gen = gen
+        tree, more, gen = backend.client.sync_round(
+            calendar_id, generation=gen, window=cal_mod._WINDOW,
+            options_children=opts if pages == 1 else None, get_changes=True)
+        # A new generation means sync_round re-primed a dead key: this is a
+        # fresh full listing, so it replaces the cache (a count of Adds is not
+        # a reliable signal — a busy day of invitations would wipe everything).
+        if gen != prev_gen:
+            masters = {}
+        n_add, n_del = _cal_apply_tree(tree, masters)
+        changed += n_add + n_del
+        if not more:
+            break
+    items, _notes = _cal_expand(masters, calendar_id, start, end, CAL_FIELDS)
+    with a.cv:
+        a.cal.update(items=items, masters=masters, gen=gen, cal_id=calendar_id,
+                     ts=time.time(), loaded=True, error=None, range=(start, end),
+                     truncated=bool(c.get("truncated")), filter=cal_mod._filter_type(days))
+    _cal_save(a)
+    log.info("[%s] calendar delta: %d changes, %d masters → %d events", a.id, changed, len(masters), len(items))
+
+
+def _cal_refresh(a: Acct, claimed: bool = False, force: bool = False):
+    from datetime import date, timedelta
+    from outlook_activesync_mcp.commands import calendar
+    from outlook_activesync_mcp.errors import CursorExpired, EasStatusError
+    c = a.cal
+    if not claimed and not _cal_claim(a):
+        return
+    force = force or bool(c.pop("force_next", False))
     try:
         backend = a.get()
         today = date.today()
         start, end = today - timedelta(days=7), today + timedelta(days=60)
-        backend._pace()
-        r = calendar.handle(backend.client, "list", start=start.isoformat(), end=end.isoformat(),
-                            limit=1000, fields=CAL_FIELDS)
-        with a.cv:
-            c.update(items=r.get("items", []), ts=time.time(), loaded=True, error=None,
-                     range=(start, end), truncated=bool(r.get("truncated")))
-        log.info("[%s] calendar cache: %d events%s", a.id, len(r.get("items", [])), " (truncated)" if r.get("truncated") else "")
+        # Tests / no client: keep the old calendar.handle path.
+        if backend.client is None:
+            with backend.lock:
+                backend._pace()
+                r = calendar.handle(backend.client, "list", start=start.isoformat(), end=end.isoformat(),
+                                    limit=1000, fields=CAL_FIELDS)
+            with a.cv:
+                c.update(items=r.get("items", []), ts=time.time(), loaded=True, error=None,
+                         range=(start, end), truncated=bool(r.get("truncated")),
+                         gen=None, masters={}, cal_id=None)
+            log.info("[%s] calendar cache: %d events%s", a.id, len(r.get("items", [])),
+                     " (truncated)" if r.get("truncated") else "")
+            return
+
+        if not c.get("loaded") and not force:
+            _cal_load(a, start, end)
+        # The day rolling over shifts the window but not the server FilterType:
+        # the masters already cover it, so the delta just re-expands them.
+        same_filter = c.get("filter") == calendar._filter_type(max(1, (end - start).days))
+        can_delta = (not force and c.get("loaded") and c.get("gen") is not None
+                     and c.get("cal_id") and same_filter and c.get("masters") is not None)
+        with backend.lock:
+            if can_delta:
+                try:
+                    _cal_delta_sync(a, backend, start, end)
+                    return
+                except CursorExpired:
+                    log.info("[%s] calendar delta cursor expired — full sync", a.id)
+                except EasStatusError as e:
+                    log.info("[%s] calendar delta Sync status %s — full sync",
+                             a.id, getattr(e, "status", "?"))
+                except Exception as e:  # noqa: BLE001
+                    log.warning("[%s] calendar delta failed: %s — full sync", a.id, e)
+            _cal_full_sync(a, backend, start, end)
     except Exception as e:  # noqa: BLE001
         log.warning("[%s] calendar refresh failed: %s", a.id, e)
         with a.cv:
-            c["error"] = str(e)
+            c["error"], c["error_ts"] = str(e), time.time()
     finally:
         with a.cv:
             c["loading"] = False
             a.cv.notify_all()
 
 
-def cal_refresh_bg(a: Acct):
-    threading.Thread(target=_cal_refresh, args=(a,), daemon=True).start()
+def cal_refresh_bg(a: Acct, force: bool = False):
+    if _cal_claim(a):
+        threading.Thread(target=_cal_refresh, args=(a, True, force), daemon=True).start()
+    elif force:
+        a.cal["force_next"] = True  # the running (delta) refresh cannot see our write
+
+
+# -- local overlay for our own calendar writes ---------------------------------
+# ActiveSync never echoes a client's own Sync commands back to it, so the delta
+# refresh cannot see an event we just deleted, answered or created — it stayed on
+# screen until a manual full sync. Writes are mirrored here right away; a full
+# sync that started after the write drops the overlay (the server has it then).
+
+def _utc_iso(local: str) -> str:
+    from datetime import datetime, timezone
+    return datetime.fromisoformat(str(local)[:16]).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _cal_overlay_prune(c: dict, before: float) -> None:
+    c["hidden"] = {k: t for k, t in (c.get("hidden") or {}).items() if t >= before}
+    c["overrides"] = {k: v for k, v in (c.get("overrides") or {}).items() if v[0] >= before}
+    c["pending"] = [e for e in (c.get("pending") or []) if e.get("_ts", 0) >= before]
+
+
+def _cal_after_write(a: Acct, params: dict, res: dict) -> None:
+    action, iid, now = params.get("action"), params.get("item_id"), time.time()
+    if action in ("cancel", "respond", "update", "create"):
+        _cal_forget(a)
+    c = a.cal
+    with a.cv:
+        hidden = c.setdefault("hidden", {})
+        overrides = c.setdefault("overrides", {})
+        pending = c.setdefault("pending", [])
+        if action == "cancel" and iid:
+            hidden[iid] = now
+        elif action == "respond" and iid:
+            resp = str(params.get("response") or "").lower()
+            if resp == "decline":
+                hidden[iid] = now  # Exchange removes a declined meeting from the calendar
+            else:
+                patch = {"response_type": {"accept": "accepted"}.get(resp, resp)}
+                overrides[iid] = (now, {**overrides.get(iid, (0, {}))[1], **patch})
+        elif action == "update" and iid:
+            patch = {k: params[k] for k in ("subject", "location", "body") if params.get(k) is not None}
+            if params.get("start"):
+                patch.update(start=str(params["start"]).replace("T", " ")[:16], start_iso=_utc_iso(params["start"]))
+            if params.get("end"):
+                patch["end"] = str(params["end"]).replace("T", " ")[:16]
+            if params.get("attendees") is not None:
+                patch["attendees"] = [{"address": x} for x in params["attendees"]]
+            overrides[iid] = (now, {**overrides.get(iid, (0, {}))[1], **patch})
+        elif action == "create" and params.get("start"):
+            made = (res.get("items") or [{}])[0]
+            att = params.get("attendees") or []
+            pending.append({
+                "_ts": now, "item_id": made.get("item_id") or f"pending-{now}",
+                "subject": params.get("subject") or "", "location": params.get("location") or None,
+                "body": params.get("body") or None, "is_all_day": bool(params.get("all_day")),
+                "start": str(params["start"]).replace("T", " ")[:16], "start_iso": _utc_iso(params["start"]),
+                "end": str(params.get("end") or params["start"]).replace("T", " ")[:16],
+                "busy_status": "busy", "is_recurring": bool(params.get("repeat")),
+                "meeting_status": "meeting" if att else "appointment", "response_type": "organizer",
+                "organizer": {"name": a.name, "address": a.email},
+                "attendees": [{"address": x} for x in att],
+            })
+    if action in ("create", "update"):
+        cal_refresh_bg(a, force=True)  # converge on the server's version in the background
+
+
+# -- RSVPs that went out by mail ------------------------------------------------
+# When Exchange refuses MeetingResponse (status 2/3) the answer reaches the
+# organizer as an iTIP mail, but the server copy of the meeting never changes:
+# a full sync brought a declined meeting back and showed an accepted one as
+# «без ответа». These answers are kept on disk until the meeting is over.
+_RSVP_TYPE = {"accept": "accepted", "tentative": "tentative", "decline": "declined"}
+
+
+def _rsvp_path(a: Acct):
+    return bridge.DATA_DIR / f"rsvp-{a.id}.json"
+
+
+def _rsvp_answers(a: Acct) -> dict:
+    c = a.cal
+    if "answered" not in c:
+        try:
+            c["answered"] = json.loads(_rsvp_path(a).read_text())
+        except (OSError, ValueError):
+            c["answered"] = {}
+    now = time.time()
+    c["answered"] = {k: v for k, v in c["answered"].items() if v.get("until", 0) > now}
+    return c["answered"]
+
+
+def _rsvp_remember(a: Acct, item_id: str, response: str) -> None:
+    from datetime import datetime
+    ev = _cal_item(a, item_id=item_id) or {}
+    try:
+        until = datetime.fromisoformat(str(ev["end"]).replace(" ", "T")).timestamp()
+    except (KeyError, ValueError):
+        until = time.time() + 14 * 86400
+    with a.cv:
+        answers = _rsvp_answers(a)
+        answers[item_id] = {"response": response, "until": until}
+        blob = json.dumps(answers)
+    try:
+        fd = os.open(_rsvp_path(a), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(blob)
+    except OSError as e:
+        log.info("[%s] RSVP not saved: %s", a.id, e)
+
+
+def _cal_overlay(c: dict, items: list) -> list:
+    hidden, overrides = c.get("hidden") or {}, c.get("overrides") or {}
+    answered = c.get("answered") or {}
+    if answered:
+        items = [({**e, "response_type": _RSVP_TYPE[answered[e["item_id"]]["response"]]}
+                  if e.get("item_id") in answered else e)
+                 for e in items if answered.get(e.get("item_id"), {}).get("response") != "decline"]
+    out = [({**e, **overrides[e["item_id"]][1]} if e.get("item_id") in overrides else e)
+           for e in items if e.get("item_id") not in hidden]
+    have = {e.get("item_id") for e in out}
+    out += [{k: v for k, v in e.items() if k != "_ts"} for e in c.get("pending") or []
+            if e["item_id"] not in have and e["item_id"] not in hidden]
+    out.sort(key=lambda e: e.get("start_iso") or "")
+    return out
 
 
 def cal_events(a: Acct, start: str, end: str) -> dict:
     from datetime import date, datetime
     c = a.cal
     ds, de = date.fromisoformat(start[:10]), date.fromisoformat(end[:10])
-    with a.cv:
+    with a.cv:  # RLock-backed: cal_refresh_bg may re-acquire it
         stale = time.time() - c["ts"] > CAL_TTL
-        if not c["loading"] and (stale or not c["loaded"]) and not (c["error"] and not c["loaded"] and time.time() - c["ts"] < 5):
+        # After a failed first load, answer with that error for a few seconds
+        # instead of hammering the server on every UI/tray request.
+        backoff = c["error"] and not c["loaded"] and time.time() - c.get("error_ts", 0) < 5
+        if (stale or not c["loaded"]) and not backoff:
             cal_refresh_bg(a)
         if not c["loaded"]:
             a.cv.wait_for(lambda: c["loaded"] or not c["loading"], timeout=150)
@@ -688,7 +1734,8 @@ def cal_events(a: Acct, start: str, end: str) -> dict:
             return {"ok": False, "action": "list", "count": 0, "items": [],
                     "error": "calendar_unavailable", "message": c["error"] or "календарь ещё загружается, повторите через минуту"}
         lo, hi = c["range"]
-        items = list(c["items"])
+        _rsvp_answers(a)
+        items = _cal_overlay(c, c["items"])
     if ds < lo or de > hi:  # outside the cached window: ask Exchange directly
         return call(a, "events", {"action": "list", "start": start, "end": end, "limit": 1000, "fields": CAL_FIELDS})
 
@@ -707,13 +1754,18 @@ def cal_events(a: Acct, start: str, end: str) -> dict:
             "truncated": c["truncated"], "cached_age": int(time.time() - c["ts"])}
 
 
-def cal_refresh_wait(a: Acct):
-    """Forced calendar sync: run (or join) a refresh and return when it is done."""
-    with a.cv:
-        if a.cal["loading"]:
-            a.cv.wait_for(lambda: not a.cal["loading"], timeout=120)
+def cal_refresh_wait(a: Acct, force: bool = False):
+    """Run a calendar refresh and return when it is done. A plain request joins
+    one already in flight; a forced one waits for it and then does its own full
+    sync (the in-flight one may be a delta that cannot fix a drifted cache)."""
+    for _ in range(2):
+        if _cal_claim(a):
+            _cal_refresh(a, claimed=True, force=force)
             return
-    _cal_refresh(a)
+        with a.cv:
+            a.cv.wait_for(lambda: not a.cal["loading"], timeout=120)
+        if not force:
+            return
 
 
 def retry_login(a: Acct) -> dict:
@@ -734,6 +1786,21 @@ DEFAULT_PREFS = {
     "auto_sync": 2, "cal_view": "week", "links": [],
     # Pinned mail folders as "acct:folderId" strings (e.g. "main:42").
     "favorite_folders": [],
+    # Category name → "#RRGGBB". ActiveSync carries category names but not
+    # Outlook's colour table, so colours are picked here (auto or by the user).
+    "category_colors": {},
+    # The Seller mailbox has its own tags: same name, different category.
+    "category_colors_seller": {},
+    # Appearance: "system" follows macOS, or force "light" / "dark".
+    "theme": "system",
+    # Meeting reminder lead (minutes) for the banner + macOS notification; 0 = off.
+    "reminder_minutes": 5,
+    # New-mail alert sound: bundled CAF name, or "none" for a silent banner.
+    "mail_sound": "notice14",
+    # Mail period filter (EAS FilterType) shared by all accounts: 3=1 wk, 4=2 wk, 5=1 mo, 0=all.
+    "mail_window": 5,
+    # Working day for «Свободно у всех» suggestions (local hours).
+    "work_start": 9, "work_end": 18,
 }
 _prefs_lock = threading.Lock()
 
@@ -765,6 +1832,11 @@ def update_prefs(patch: dict) -> dict:
                     continue
                 cur[k] = [str(x)[:80] for x in v if isinstance(x, str)][:80]
                 continue
+            if k.startswith("category_colors"):
+                if isinstance(v, dict):
+                    cur[k] = {str(n)[:60]: c for n, c in list(v.items())[:80]
+                              if isinstance(c, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", c)}
+                continue
             if type(v) is not type(DEFAULT_PREFS[k]):
                 continue
             if k in ("signature", "signature2"):
@@ -773,10 +1845,28 @@ def update_prefs(patch: dict) -> dict:
                 continue
             if k == "auto_sync" and v not in (0, 1, 2, 5, 10):
                 continue
+            if k == "mail_window" and v not in (0, 3, 4, 5):
+                continue
+            # Appearance: system | light | dark | StylesBA palettes (dark + light).
+            if k == "theme" and v not in (
+                "system", "light", "dark",
+                "navy-orange", "navy-orange-light",
+                "royal-velvet", "royal-velvet-light",
+                "eclipse-almond", "eclipse-almond-light",
+            ):
+                continue
+            if k == "reminder_minutes" and v not in (0, 1, 2, 5, 10, 15, 30):
+                continue
+            if k == "mail_sound" and v not in ("notice14", "short", "none"):
+                continue
+            if k in ("work_start", "work_end") and not 0 <= v <= 24:
+                continue
             if k == "links":
                 v = [{"name": str(x.get("name", ""))[:80], "url": str(x.get("url", ""))[:500]}
                      for x in v[:30] if isinstance(x, dict) and str(x.get("url", "")).startswith(("http://", "https://"))]
             cur[k] = v
+        if cur["work_end"] <= cur["work_start"]:
+            cur["work_start"], cur["work_end"] = DEFAULT_PREFS["work_start"], DEFAULT_PREFS["work_end"]
         PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
         PREFS_PATH.write_text(json.dumps(cur, ensure_ascii=False))
         os.chmod(PREFS_PATH, 0o600)
@@ -914,6 +2004,232 @@ def parse_raw(raw: bytes):
         return email.message_from_bytes(raw, policy=email.policy.default)
 
 
+# -- meeting invitations inside mail (iCalendar) ---------------------------------
+
+def _ics_parse(text: str) -> tuple[str, dict[str, tuple[str, str]]]:
+    """Minimal RFC 5545 reader: METHOD and the first VEVENT's properties as
+    {NAME: (params, value)}. Lines are unfolded; later duplicates are ignored."""
+    method, props, in_ev = "", {}, False
+    for ln in re.sub(r"\r?\n[ \t]", "", text).splitlines():
+        # Name/params end at the first ':' outside quotes — Exchange writes
+        # TZID="(UTC+03:00) Moscow, St. Petersburg", with a colon inside.
+        m = re.match(r'((?:[^:"]|"[^"]*")*):(.*)', ln)
+        if not m:
+            continue
+        head, val = m.group(1), m.group(2)
+        name, _, params = head.partition(";")
+        name = name.strip().upper()
+        if name == "METHOD" and not in_ev:
+            method = val.strip().upper()
+        elif name == "BEGIN" and val.strip().upper() == "VEVENT":
+            in_ev = True
+        elif name == "END" and val.strip().upper() == "VEVENT":
+            break
+        elif in_ev and name not in props:
+            props[name] = (params, val)
+    return method, props
+
+
+def _ics_unescape(v: str) -> str:
+    return re.sub(r"\\([\\;,nN])", lambda m: "\n" if m.group(1) in "nN" else m.group(1), v or "").strip()
+
+
+def _ics_time(prop: tuple[str, str] | None) -> tuple[str, str, bool]:
+    """(local "YYYY-MM-DD HH:MM", UTC ISO or "", all_day). A TZID time is shown as
+    written — invitations here come from the same (Moscow) time zone."""
+    from datetime import datetime, timezone
+    if not prop:
+        return "", "", False
+    params, v = prop[0].upper(), prop[1].strip()
+    if "VALUE=DATE" in params and len(v) == 8:
+        return f"{v[:4]}-{v[4:6]}-{v[6:8]}", "", True
+    try:
+        if v.endswith("Z"):
+            d = datetime.strptime(v, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+            return d.astimezone().strftime("%Y-%m-%d %H:%M"), d.strftime("%Y-%m-%dT%H:%M:%SZ"), False
+        d = datetime.strptime(v[:15], "%Y%m%dT%H%M%S")
+        return d.strftime("%Y-%m-%d %H:%M"), d.astimezone().astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), False
+    except ValueError:
+        return "", "", False
+
+
+def _find_invite(msg) -> tuple[dict | None, object | None, dict]:
+    """(invite for the UI, the text/calendar part, raw VEVENT props) or (None, None, {})."""
+    for p in msg.walk():
+        if p.get_content_type() != "text/calendar":
+            continue
+        # iCalendar is UTF-8 by spec; the declared charset (often a bare
+        # "us-ascii" default) is only a fallback — trusting it garbled Cyrillic.
+        data = p.get_payload(decode=True) or b""
+        try:
+            txt = data.decode("utf-8")
+        except UnicodeDecodeError:
+            txt = data.decode(p.get_content_charset() or "cp1251", "replace")
+        method, props = _ics_parse(txt)
+        if method not in ("REQUEST", "CANCEL") or "DTSTART" not in props:
+            continue
+        start, start_iso, all_day = _ics_time(props.get("DTSTART"))
+        end, _, _ = _ics_time(props.get("DTEND"))
+        org_params, org_val = props.get("ORGANIZER", ("", ""))
+        cn = re.search(r"CN=(\"[^\"]*\"|[^;:]*)", org_params, re.I)
+        invite = {
+            "method": method.lower(), "uid": props.get("UID", ("", ""))[1].strip(),
+            "subject": _ics_unescape(props.get("SUMMARY", ("", ""))[1]),
+            "location": _ics_unescape(props.get("LOCATION", ("", ""))[1]),
+            "start": start, "end": end, "start_iso": start_iso, "all_day": all_day,
+            "organizer": {"name": (cn.group(1).strip('"') if cn else ""),
+                          "address": re.sub(r"^mailto:", "", org_val.strip(), flags=re.I)},
+        }
+        return invite, p, props
+    return None, None, {}
+
+
+_RSVP_WORD = {"accept": "Принято", "tentative": "Под вопросом", "decline": "Отклонено"}
+_RSVP_PARTSTAT = {"accept": "ACCEPTED", "tentative": "TENTATIVE", "decline": "DECLINED"}
+
+
+def _mail_itip_reply(a: Acct, *, organizer: str, uid: str, subject: str, when: str,
+                     event_lines: list[str], response: str) -> str:
+    """Send an iTIP METHOD:REPLY — how Outlook/Gmail answer when the server cannot
+    record a MeetingResponse. `event_lines` carry DTSTART/DTEND/… of the meeting."""
+    from datetime import datetime, timezone
+    from email.message import EmailMessage
+    from email.utils import formatdate, make_msgid
+    if "@" not in (organizer or "") or not uid:
+        raise ValueError("не хватает организатора или идентификатора встречи для ответа письмом")
+    lines = ["BEGIN:VCALENDAR", "PRODID:-//eas-mail//RU", "VERSION:2.0", "METHOD:REPLY", "BEGIN:VEVENT",
+             f"UID:{uid}", f"DTSTAMP:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}", *event_lines,
+             f"ATTENDEE;PARTSTAT={_RSVP_PARTSTAT[response]};CN={a.name}:mailto:{a.email}",
+             "END:VEVENT", "END:VCALENDAR"]
+    word = _RSVP_WORD[response]
+    m = EmailMessage()
+    m["From"], m["To"] = a.email, organizer
+    m["Subject"] = f"{word}: {subject or '(без темы)'}"
+    m["Date"], m["Message-ID"] = formatdate(localtime=True), make_msgid(domain="eas-mail")
+    m.set_content(f"{word}: {subject}\n{when}\n")
+    m.add_alternative("\r\n".join(lines) + "\r\n", subtype="calendar", params={"method": "REPLY", "charset": "UTF-8"})
+    _send_mime(a, m.as_bytes())
+    return organizer
+
+
+def _send_imip_reply(a: Acct, item_id: str, response: str) -> str:
+    """Answer the invitation contained in mail `item_id` by iTIP reply. Returns organizer."""
+    invite, _part, props = _find_invite(parse_raw(get_mime(a, item_id)))
+    if not invite or invite["method"] != "request":
+        raise ValueError("в письме нет приглашения, на которое можно ответить")
+    raw = lambda n: f"{n}{';' + props[n][0] if props[n][0] else ''}:{props[n][1]}"  # noqa: E731
+    return _mail_itip_reply(
+        a, organizer=invite["organizer"]["address"], uid=invite["uid"], subject=invite["subject"],
+        when=f"{invite['start']} – {invite['end']}", response=response,
+        event_lines=[raw(n) for n in ("DTSTART", "DTEND", "SEQUENCE", "RECURRENCE-ID", "ORGANIZER", "SUMMARY") if n in props])
+
+
+def _cal_item(a: Acct, *, item_id: str | None = None, uid: str | None = None) -> dict | None:
+    with a.cv:
+        items = _cal_overlay(a.cal, a.cal.get("items") or [])
+    for e in items:
+        if (item_id and e.get("item_id") == item_id) or (uid and e.get("uid") and e.get("uid") == uid):
+            return e
+    return None
+
+
+def _reply_from_calendar(a: Acct, item_id: str, response: str) -> str:
+    """iTIP reply built from a cached calendar item (answer from the calendar view)."""
+    from datetime import datetime, timezone
+    from outlook_activesync_mcp.models import instance_of
+    ev = _cal_item(a, item_id=item_id)
+    if not ev:
+        raise ValueError("встреча не найдена в календаре — обновите календарь")
+    start = datetime.fromisoformat(str(ev.get("start_iso")).replace("Z", "+00:00"))
+    lines = [f"DTSTART:{start.strftime('%Y%m%dT%H%M%SZ')}"]
+    if ev.get("end"):
+        end = datetime.fromisoformat(str(ev["end"]).replace(" ", "T")).astimezone(timezone.utc)
+        lines.append(f"DTEND:{end.strftime('%Y%m%dT%H%M%SZ')}")
+    inst = instance_of(item_id)
+    if inst:
+        lines.append(f"RECURRENCE-ID:{inst}")  # this one occurrence of a series
+    org = (ev.get("organizer") or {}).get("address") or ""
+    lines.append(f"ORGANIZER:mailto:{org}")
+    return _mail_itip_reply(a, organizer=org, uid=ev.get("uid") or "", subject=ev.get("subject") or "",
+                            when=f"{ev.get('start', '')} – {ev.get('end', '')}", event_lines=lines, response=response)
+
+
+def respond_event(a: Acct, params: dict) -> dict:
+    """RSVP from the calendar (web/tray). Exchange's MeetingResponse first; if the
+    server refuses it (status 2/3 were seen live), answer the organizer by mail so
+    the answer still goes through instead of an error."""
+    from outlook_activesync_mcp.commands import calendar
+    item_id, response = params.get("item_id") or "", str(params.get("response") or "").lower()
+    if response not in _RSVP_WORD:
+        return {"ok": False, "action": "respond", "count": 0, "items": [], "error": "bad_request",
+                "message": "ответ: accept, tentative или decline"}
+    backend = a.get()
+    try:
+        with backend.lock:
+            backend._pace()
+            res = calendar.handle(backend.client, "respond", item_id=item_id, response=response,
+                                  notify=params.get("notify", True))
+        if item_id in _rsvp_answers(a):  # the server has the answer now: an older mail one must not mask it
+            _rsvp_remember(a, item_id, response)
+        return res
+    except Exception as e:  # noqa: BLE001
+        log.warning("[%s] MeetingResponse failed (%s) — answering by mail", a.id, e)
+        first = e
+    try:
+        org = _reply_from_calendar(a, item_id, response)
+        _rsvp_remember(a, item_id, response)
+    except Exception as e2:  # noqa: BLE001
+        log.warning("[%s] mail reply fallback failed: %s", a.id, e2)
+        return {"ok": False, "action": "respond", "count": 0, "items": [],
+                "error": getattr(first, "code", None) or type(first).__name__,
+                "message": _friendly_error(a, "events", "respond", first)}
+    return {"ok": True, "action": "respond", "count": 1, "via": "mail",
+            "items": [{"responded": response, "item_id": item_id, "organizer": org}]}
+
+
+def invite_respond(a: Acct, item_id: str, response: str) -> dict:
+    """Accept / tentative / decline an invitation right from the mail. Exchange's
+    MeetingResponse (updates your calendar and notifies the organizer) first; if the
+    server can't do it, fall back to a standard iTIP reply by mail."""
+    response = str(response or "").lower()
+    if response not in ("accept", "tentative", "decline"):
+        return {"ok": False, "error": "bad_request", "message": "ответ: accept, tentative или decline"}
+    from outlook_activesync_mcp.commands import calendar
+    backend = a.get()
+
+    def meeting_response(target: str) -> bool:
+        try:
+            with backend.lock:
+                backend._pace()
+                calendar.handle(backend.client, "respond", item_id=target, response=response, notify=True)
+            return True
+        except Exception as e:  # noqa: BLE001
+            log.info("[%s] MeetingResponse on %s failed: %s", a.id, target[:12], e)
+            return False
+
+    if meeting_response(item_id):  # the invitation letter itself
+        cal_refresh_bg(a)
+        return {"ok": True, "via": "server"}
+    # Same meeting in the calendar (matched by iCalendar UID) — Exchange accepts
+    # answers on the calendar item even when it refuses them on the letter.
+    try:
+        invite, _p, _props = _find_invite(parse_raw(get_mime(a, item_id)))
+    except Exception:  # noqa: BLE001
+        invite = None
+    ev = _cal_item(a, uid=invite["uid"]) if invite and invite.get("uid") else None
+    if ev and meeting_response(ev["item_id"]):
+        cal_refresh_bg(a)
+        return {"ok": True, "via": "server"}
+    res = {"message": "сервер не принял ответ"}
+    try:
+        org = _send_imip_reply(a, item_id, response)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": "respond_failed", "message": res.get("message") or str(e)}
+    if ev:
+        _rsvp_remember(a, ev["item_id"], response)
+    return {"ok": True, "via": "mail", "organizer": org}
+
+
 def render_message(a: Acct, item_id: str, has_att: bool = False) -> dict:
     raw = get_mime(a, item_id)
     msg = parse_raw(raw)
@@ -929,22 +2245,24 @@ def render_message(a: Acct, item_id: str, has_att: bool = False) -> dict:
         else:
             text = content
     parts = _attachment_parts(msg, html_doc)
+    invite, invite_part, _ = _find_invite(msg)
+    # The .ics is shown as the invitation card — don't list it as a file too.
     atts = [{"idx": i, "name": _att_name(p, i), "type": p.get_content_type(), "size": len(_part_bytes(p))}
-            for i, p in enumerate(parts)]
+            for i, p in enumerate(parts) if p is not invite_part]
     if not atts and has_att:
         try:
             atts = eas_attachments(a, item_id)
         except Exception:  # noqa: BLE001 — the message itself still opens
             log.warning("attachment list from server failed", exc_info=True)
-    if html_doc:
+    if html_doc and "cid:" in html_doc:
         for p in msg.walk():
             cid = (p.get("Content-ID") or "").strip("<> ")
-            if cid and p.get_content_maintype() == "image":
+            if cid and p.get_content_maintype() == "image" and f"cid:{cid}" in html_doc:
                 data = base64.b64encode(p.get_payload(decode=True) or b"").decode()
                 html_doc = html_doc.replace(f"cid:{cid}", f"data:{p.get_content_type()};base64,{data}")
     return {"subject": str(msg.get("Subject", "")), "date": str(msg.get("Date", "")),
             "from": _addr_list(msg, "From"), "to": _addr_list(msg, "To"), "cc": _addr_list(msg, "Cc"),
-            "html": html_doc, "text": text, "attachments": atts,
+            "html": html_doc, "text": text, "attachments": atts, "invite": invite,
             "message_id": str(msg.get("Message-ID", ""))}
 
 
@@ -997,9 +2315,28 @@ class Handler(BaseHTTPRequestHandler):
         q = parse_qs(u.query)
         if u.path in ("/", "/index.html"):
             page = (WEB / "index.html").read_text(encoding="utf-8").replace("__TOKEN__", TOKEN)
-            csp = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
-                   "img-src 'self' data: https:; frame-src 'self'; connect-src 'self'; frame-ancestors 'none'")
+            csp = (
+                "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "font-src 'self' https://fonts.gstatic.com data:; "
+                "img-src 'self' data: https:; frame-src 'self'; connect-src 'self'; "
+                "frame-ancestors 'none'"
+            )
             return self._send(200, page.encode(), "text/html; charset=utf-8", {"Content-Security-Policy": csp})
+        # Design system + kit showcase under web/ui-kit/
+        if u.path.startswith("/ui-kit/"):
+            target = (WEB / u.path.lstrip("/")).resolve()
+            root = WEB.resolve()
+            if not str(target).startswith(str(root) + os.sep) and target != root:
+                return self.send_error(403)
+            if not target.is_file():
+                return self.send_error(404)
+            ctype = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+            if target.suffix == ".css":
+                ctype = "text/css; charset=utf-8"
+            elif target.suffix == ".html":
+                ctype = "text/html; charset=utf-8"
+            return self._send(200, target.read_bytes(), ctype)
         if u.path == "/attachment":
             if q.get("t", [""])[0] != TOKEN:
                 return self.send_error(403)
@@ -1033,9 +2370,11 @@ class Handler(BaseHTTPRequestHandler):
         try:
             params = json.loads(self.rfile.read(n) or b"{}")
         except ValueError:
+            params = None
+        if not isinstance(params, dict):
             return self._json({"ok": False, "error": "bad_request", "message": "invalid JSON"}, 400)
         path = urlparse(self.path).path
-        aid = params.pop("acct", "main") if isinstance(params, dict) else "main"
+        aid = params.pop("acct", "main")
         try:
             if path == "/api/prefs":
                 return self._json({"ok": True, "prefs": update_prefs(params.get("set") or {}) if params.get("set") is not None else load_prefs()})
@@ -1056,25 +2395,34 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": False, "error": "bad_request", "message": "unknown action"}, 400)
             a = acct_of(aid)
             if path == "/api/unread":
-                if params.get("refresh"):
-                    return self._json(refresh_unread(a, force=True))
-                snap = unread_snapshot(a)
-                if not snap["folders"]:
-                    threading.Thread(target=lambda: refresh_unread(a), daemon=True).start()
-                return self._json(snap)
+                if params.get("sweep"):
+                    return self._json(unread_sweep(a, params.get("filter"), params.get("fields"),
+                                                   force=bool(params.get("force"))))
+                return self._json(refresh_unread(a, force=bool(params.get("refresh"))))
             if path == "/api/message":
+                # No account lock here: fetch_mime / eas_attachments take it only
+                # for their round-trips, so parsing a big MIME does not stall
+                # mail lists and calendar syncs of the same account.
                 try:
-                    with a.get().lock:
-                        return self._json({"ok": True, **render_message(a, params["item_id"], bool(params.get("has_att")))})
+                    return self._json({"ok": True, **render_message(a, params["item_id"], bool(params.get("has_att")))})
                 except Gone as e:
                     return self._json({"ok": False, "error": "gone", "message": str(e)})
+            if path == "/api/warm":
+                return self._json(warm_folders(a, params.get("folders") or [], params.get("filter"), params.get("fields")))
+            if path == "/api/invite":
+                return self._json(invite_respond(a, params.get("item_id") or "", params.get("response")))
             if path == "/api/retry":
                 r = retry_login(a)
                 return self._json({"ok": True, "result": r.get("items")})
             if path == "/api/sync":
-                if params.get("calendar"):
+                if params.get("calendar") == "delta":
+                    # Tab switch / app launch: catch up with the server's changes
+                    # (moved or cancelled meetings) — a delta, well under a second.
                     cal_refresh_wait(a)
-                threading.Thread(target=lambda: refresh_unread(a, force=True), daemon=True).start()
+                elif params.get("calendar"):
+                    # The explicit «Синхронизировать» button is the user's escape hatch:
+                    # a full resync, not another delta on top of a possibly drifted cache.
+                    cal_refresh_wait(a, force=True)
                 return self._json({"ok": True, "calendar_error": a.cal["error"]})
             if path == "/api/events" and params.get("action") == "list":
                 return self._json(cal_events(a, params["start"], params["end"]))
@@ -1082,14 +2430,11 @@ class Handler(BaseHTTPRequestHandler):
                 invite = params.pop("mime_invite", False) if path == "/api/events" else False
                 res = call(a, path[5:], dict(params))
                 if invite and res.get("ok", True) and params.get("action") == "create" and params.get("attendees"):
-                    try:
-                        sent = send_invites(a, params, params["attendees"])
-                        res["mime_invited"] = sent
-                    except Exception as e:  # noqa: BLE001
-                        log.warning("[%s] invite mail failed: %s", a.id, e)
-                        res["mime_error"] = str(e)
+                    res["mime_invite_pending"] = True
+                    threading.Thread(target=_send_invites_bg, args=(a, dict(params), list(params["attendees"])),
+                                     daemon=True).start()
                 if path == "/api/events" and res.get("ok", True):
-                    cal_refresh_bg(a)  # a write happened: refresh the cache
+                    _cal_after_write(a, params, res)  # show our own write right away
                 return self._json(res)
         except LookupError as e:
             return self._json({"ok": False, "error": "unknown_account", "message": str(e)})
@@ -1211,6 +2556,167 @@ def _patch_event_update_attendees():
     calendar._update = wrapped
 
 
+def _patch_sync_status_135():
+    """EAS 135 SyncStateAlreadyExists (MS-ASCMD): SyncKey=0 while the server
+    already has state — typically a race of concurrent primes (mail + calendar
+    on the same DeviceId).
+
+    Serialize ``_prime`` per collection and share a *fresh* key via a short-lived
+    in-process cache for concurrent peers. Do **not** keep that cache forever:
+    Stalwart/Exchange invalidate keys, and a stale cache entry made every
+    subsequent list fail with Sync status 3.
+
+    Also: never fall back to the on-disk SyncKey after 135 — that key is exactly
+    what the caller asked to replace with SyncKey=0.
+    """
+    try:
+        from outlook_activesync_mcp.client import EasClient
+        from outlook_activesync_mcp.errors import EasStatusError
+        from outlook_activesync_mcp.commands import provision as prov
+    except ImportError:
+        return
+    locks: dict[tuple[int, str], threading.Lock] = {}
+    # (client_id, collection_id) → (sync_key, expires_monotonic)
+    cache: dict[tuple[int, str], tuple[str, float]] = {}
+    locks_guard = threading.Lock()
+    CACHE_TTL = 8.0  # only covers the concurrent-prime race window
+
+    def _lock_for(client, collection_id: str) -> tuple[threading.Lock, tuple[int, str]]:
+        key = (id(client), collection_id)
+        with locks_guard:
+            lock = locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                locks[key] = lock
+            return lock, key
+
+    def _cache_get(ckey):
+        hit = cache.get(ckey)
+        if not hit:
+            return None
+        sk, exp = hit
+        if exp < time.monotonic():
+            cache.pop(ckey, None)
+            return None
+        return sk
+
+    def _cache_put(ckey, sk):
+        cache[ckey] = (sk, time.monotonic() + CACHE_TTL)
+
+    def _cache_drop(ckey):
+        cache.pop(ckey, None)
+
+    def _drop_stored(client, collection_id: str) -> None:
+        try:
+            with client.store.transaction() as st:
+                cols = st.setdefault("collections", {})
+                cols.pop(collection_id, None)
+        except Exception:
+            pass
+
+    orig_prime = getattr(EasClient._prime, "_eas_135_orig", None) or EasClient._prime
+
+    def _prime_safe(self, collection_id: str) -> str:
+        lock, ckey = _lock_for(self, collection_id)
+        with lock:
+            existing = _cache_get(ckey)
+            if existing:
+                return existing
+            last_err = None
+            for attempt in range(4):
+                try:
+                    sk = orig_prime(self, collection_id)
+                    _cache_put(ckey, sk)
+                    return sk
+                except EasStatusError as e:
+                    last_err = e
+                    if getattr(e, "status", None) != 135:
+                        raise
+                    time.sleep(0.35 * (attempt + 1))
+                    peer = _cache_get(ckey)
+                    if peer:
+                        log.info("Sync 135 on %s: reusing in-flight peer SyncKey", collection_id)
+                        return peer
+            # Do NOT reuse the on-disk SyncKey — it is what SyncKey=0 was meant
+            # to replace, and feeding it back causes a status-3 loop on Stalwart.
+            _drop_stored(self, collection_id)
+            _cache_drop(ckey)
+            raise EasStatusError(
+                "Sync", 135,
+                f"SyncStateAlreadyExists на {collection_id} — нет свежего SyncKey после ретраев"
+            ) from last_err
+
+    _prime_safe._eas_135_safe = True  # type: ignore[attr-defined]
+    _prime_safe._eas_135_orig = orig_prime  # type: ignore[attr-defined]
+    EasClient._prime = _prime_safe
+
+    # On Sync status 3/132/134 that escapes sync_round's one retry (stale peer
+    # cache): drop cache + stored key and force one more fresh listing.
+    orig_round = getattr(EasClient.sync_round, "_eas_3_orig", None) or EasClient.sync_round
+
+    def sync_round_safe(self, collection_id: str, *, generation=None, window=None,
+                        options_children=None, command_children=None, get_changes=True):
+        try:
+            return orig_round(self, collection_id, generation=generation, window=window,
+                              options_children=options_children,
+                              command_children=command_children, get_changes=get_changes)
+        except EasStatusError as e:
+            if getattr(e, "status", None) not in prov.NEEDS_RESYNC:
+                raise
+            # Writes (command_children) must not be silently reissued as a list.
+            if command_children is not None:
+                raise
+            log.info("Sync status %s on %s — clearing SyncKey cache and re-priming",
+                     e.status, collection_id)
+            _cache_drop((id(self), collection_id))
+            _drop_stored(self, collection_id)
+            return orig_round(self, collection_id, generation=None, window=window,
+                              options_children=options_children,
+                              command_children=None, get_changes=get_changes)
+
+    sync_round_safe._eas_3_orig = orig_round  # type: ignore[attr-defined]
+    EasClient.sync_round = sync_round_safe
+
+
+def _patch_foldersync_invalid_key():
+    """FolderSync status 9 = invalid SyncKey (MS-ASCMD). Upstream treats it as
+    «transient» and resends the *same* body — if that body had a non-zero SyncKey
+    (our deep folders_list second round), three identical retries exhaust and the
+    UI shows «восстановление исчерпано». Retry once with SyncKey=0 instead."""
+    try:
+        from outlook_activesync_mcp.client import EasClient
+        from outlook_activesync_mcp.commands import provision as prov
+        from outlook_activesync_mcp.errors import EasStatusError
+        from outlook_activesync_mcp.wbxml import find, text_of
+    except ImportError:
+        return
+    if getattr(EasClient._run, "_eas_fs9_safe", False):
+        return
+    orig_run = EasClient._run
+
+    def _run(self, cmd, node, *, policy_key, allow_empty, applied, attempts):
+        try:
+            return orig_run(self, cmd, node, policy_key=policy_key, allow_empty=allow_empty,
+                            applied=applied, attempts=attempts)
+        except EasStatusError as e:
+            msg = str(e)
+            is_fs9 = (cmd == "FolderSync" and (
+                getattr(e, "status", None) == 9
+                or "восстановление исчерпано" in msg))
+            if not is_fs9:
+                raise
+            req_key = text_of(find(node, "FolderHierarchy", "SyncKey")) or "0"
+            if req_key == "0" or "foldersync:0" in applied or getattr(_fs_delta, "strict", False):
+                raise
+            log.info("FolderSync fail with SyncKey=%s — retry with SyncKey=0", req_key)
+            return orig_run(self, cmd, prov.build_foldersync("0"),
+                            policy_key=policy_key, allow_empty=allow_empty,
+                            applied=applied | {"foldersync:0"}, attempts=0)
+
+    _run._eas_fs9_safe = True  # type: ignore[attr-defined]
+    EasClient._run = _run
+
+
 def _patch_empty_sync_tree():
     """Exchange sometimes answers Sync with HTTP 200 and an empty body.
     Upstream ``command()`` returns ``None``; ``sync_round`` then calls
@@ -1291,6 +2797,9 @@ def main():
     logging.basicConfig(level=os.environ.get("EAS_MAIL_LOG", "INFO"),
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     _patch_empty_sync_tree()
+    _patch_deep_foldersync()
+    _patch_sync_status_135()
+    _patch_foldersync_invalid_key()
     _patch_calendar_attendees()
     _patch_event_update_attendees()
     _write_runtime_token()
@@ -1302,7 +2811,6 @@ def main():
         main_acct.get()               # identity check runs in the background
         cal_refresh_bg(main_acct)     # warm the main calendar while the UI loads
     threading.Thread(target=_cal_keepfresh, daemon=True).start()
-    threading.Thread(target=_unread_keepfresh, daemon=True).start()
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     log.info("eas-mail on http://127.0.0.1:%s (accounts: %s%s)", PORT, ", ".join(ACCTS),
              "; needs_setup" if account_needs_setup(cfg) else "")

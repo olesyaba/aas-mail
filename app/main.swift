@@ -19,7 +19,7 @@ let projectDir: String = {
        let s = try? String(contentsOfFile: p, encoding: .utf8) {
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    return home + "/пробы/eas-bridge"
+    return home + "/пробы/aas-mail"
 }()
 
 func portOpen() -> Bool {
@@ -35,7 +35,30 @@ func portOpen() -> Bool {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
+/// Settings → Оформление, forwarded from the web UI: drives the native chrome too
+/// (window, tray popover, reminder banners) so the whole app shares one theme.
+enum AppTheme {
+    static let key = "appTheme"
+    static let lightLooks: Set<String> = [
+        "light", "navy-orange-light", "royal-velvet-light", "eclipse-almond-light"
+    ]
+    static let darkLooks: Set<String> = [
+        "dark", "navy-orange", "royal-velvet", "eclipse-almond"
+    ]
+    static func apply(_ value: String) {
+        if lightLooks.contains(value) {
+            NSApp.appearance = NSAppearance(named: .aqua)
+        } else if darkLooks.contains(value) {
+            NSApp.appearance = NSAppearance(named: .darkAqua)
+        } else {
+            NSApp.appearance = nil  // follow macOS
+        }
+        UserDefaults.standard.set(value, forKey: key)
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate,
+                         WKScriptMessageHandler {
     var window: NSWindow!
     var web: WKWebView!
     var server: Process?
@@ -44,7 +67,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     let url = URL(string: "http://127.0.0.1:\(port)/")!
 
     func applicationDidFinishLaunching(_ n: Notification) {
+        AppTheme.apply(UserDefaults.standard.string(forKey: AppTheme.key) ?? "system")  // before any window shows
         let cfg = WKWebViewConfiguration()
+        cfg.userContentController.add(self, name: "aasTheme")
+        cfg.userContentController.add(self, name: "aasPrefs")
+        cfg.userContentController.add(self, name: "aasNewMail")
+        cfg.userContentController.add(self, name: "aasPlaySound")
         web = WKWebView(frame: .zero, configuration: cfg)
         web.navigationDelegate = self
         web.uiDelegate = self
@@ -59,6 +87,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.makeKeyAndOrderFront(nil)
         buildMenu()
         NSApp.activate(ignoringOtherApps: true)
+        NotificationCenter.default.addObserver(
+            forName: .easShowCalendar, object: nil, queue: .main
+        ) { [weak self] _ in self?.showCalendarFromTray() }
+        NotificationCenter.default.addObserver(
+            forName: .easCreateEvent, object: nil, queue: .main
+        ) { [weak self] note in
+            let day = note.userInfo?["day"] as? String
+            let hour = note.userInfo?["hour"] as? Int
+            let minute = note.userInfo?["minute"] as? Int
+            self?.createEventFromTray(day: day, hour: hour, minute: minute)
+        }
         showMessage("Запуск…")
         if !portOpen() { startServer() }
         Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] t in
@@ -66,7 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             if portOpen() {
                 t.invalidate()
                 self.web.load(URLRequest(url: self.url))
-                self.tray = TrayStatusController()
+                self.tray = MainActor.assumeIsolated { TrayStatusController() }
             }
             else if Date().timeIntervalSince(self.startedAt) > 90 {
                 t.invalidate()
@@ -75,28 +114,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
+    /// Tray footer "Календарь" — raise the mail window and switch to the cal tab.
+    func showCalendarFromTray() {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        web.evaluateJavaScript(
+            "typeof showView==='function' ? (showView('cal'), location.hash='cal') : (location.hash='cal')"
+        ) { [weak self] _, err in
+            guard let self = self, err != nil else { return }
+            var c = URLComponents(url: self.url, resolvingAgainstBaseURL: false)
+            c?.fragment = "cal"
+            if let u = c?.url { self.web.load(URLRequest(url: u)) }
+        }
+    }
+
+    /// Tray «Создать» / click on an hour slot: the one «Новое событие» form
+    /// (main window) — same fields, availability and saved links as the calendar.
+    func createEventFromTray(day: String?, hour: Int? = nil, minute: Int? = nil) {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        let dayArg = day.map { "'\($0.filter { $0.isNumber || $0 == "-" })'" } ?? "null"
+        let hourArg = hour.map(String.init) ?? "null"
+        let minuteArg = minute.map(String.init) ?? "0"
+        web.evaluateJavaScript(
+            "typeof eventForm==='function' && (showView('cal'), eventForm(null, {day: \(dayArg), hour: \(hourArg), minute: \(minuteArg)}))")
+    }
+
     func startServer() {
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/bin/bash")
-        let uv = FileManager.default.isExecutableFile(atPath: home + "/.local/bin/uv")
-            ? home + "/.local/bin/uv" : "uv"
-        let venvPy = (projectDir as NSString).appendingPathComponent(".venv/bin/python")
-        let vendor = (projectDir as NSString).appendingPathComponent("vendor")
-        // Prefer the bundled venv (offline-friendly dist). Fall back to uv + PYTHONPATH.
-        let cmd: String
-        if FileManager.default.isExecutableFile(atPath: venvPy) {
-            cmd = "cd \"\(projectDir)\" && export PYTHONPATH=\"\(vendor)${PYTHONPATH:+:$PYTHONPATH}\" && exec \"\(venvPy)\" webapp.py"
-        } else {
-            cmd = "cd \"\(projectDir)\" && export PYTHONPATH=\"\(vendor)${PYTHONPATH:+:$PYTHONPATH}\" && exec \"\(uv)\" run --python 3.12 --with requests --with urllib3 --with python-dateutil python webapp.py"
-        }
-        p.arguments = ["-c", cmd]
+        let fm = FileManager.default
+        let dir = projectDir as NSString
+        let vendor = dir.appendingPathComponent("vendor")
+        let bundledPy = dir.appendingPathComponent("python/bin/python3")
+        let venvPy = dir.appendingPathComponent(".venv/bin/python")
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = home + "/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
+        p.currentDirectoryURL = URL(fileURLWithPath: projectDir)
+        if fm.isExecutableFile(atPath: bundledPy) {
+            // Dist build: embedded interpreter + precompiled deps, started directly —
+            // no shell, no network, no uv. The bundle stays read-only (signed).
+            p.executableURL = URL(fileURLWithPath: bundledPy)
+            p.arguments = ["-s", "webapp.py"]
+            env["PYTHONPATH"] = vendor + ":" + dir.appendingPathComponent("site-packages")
+            env["PYTHONDONTWRITEBYTECODE"] = "1"
+            env["PYTHONNOUSERSITE"] = "1"
+            env.removeValue(forKey: "PYTHONHOME")
+        } else {
+            // Dev build: project .venv if present, otherwise uv resolves the deps.
+            let uv = fm.isExecutableFile(atPath: home + "/.local/bin/uv") ? home + "/.local/bin/uv" : "uv"
+            // Without a vendored client (dev checkout) uv fetches it from GitHub.
+            let client = fm.fileExists(atPath: vendor) ? "" : "--with git+https://github.com/mainpart/outlook-activesync-mcp "
+            let run = fm.isExecutableFile(atPath: venvPy)
+                ? "exec \"\(venvPy)\" webapp.py"
+                : "exec \"\(uv)\" run --python 3.12 \(client)--with requests --with urllib3 --with python-dateutil python webapp.py"
+            p.executableURL = URL(fileURLWithPath: "/bin/bash")
+            p.arguments = ["-c", "export PYTHONPATH=\"\(vendor)${PYTHONPATH:+:$PYTHONPATH}\" && \(run)"]
+        }
         p.environment = env
         let logPath = home + "/.config/eas-bridge/webapp.log"
         try? FileManager.default.createDirectory(atPath: home + "/.config/eas-bridge",
                                                  withIntermediateDirectories: true)
-        FileManager.default.createFile(atPath: logPath, contents: nil)
+        // Append across launches (the log used to be truncated on every start,
+        // losing the error that prompted the restart); rotate once it gets big.
+        if let size = (try? FileManager.default.attributesOfItem(atPath: logPath))?[.size] as? Int,
+           size > 5_000_000 {
+            try? FileManager.default.removeItem(atPath: logPath + ".1")
+            try? FileManager.default.moveItem(atPath: logPath, toPath: logPath + ".1")
+        }
+        if !FileManager.default.fileExists(atPath: logPath) {
+            FileManager.default.createFile(atPath: logPath, contents: nil)
+        }
         if let h = FileHandle(forWritingAtPath: logPath) { h.seekToEndOfFile(); p.standardOutput = h; p.standardError = h }
         do { try p.run(); server = p } catch { showMessage("Не удалось запустить сервер: \(error.localizedDescription)") }
         startedAt = Date()
@@ -159,6 +246,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         return nil
     }
     func webViewWebContentProcessDidTerminate(_ w: WKWebView) { w.reload() }
+
+    func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "aasTheme", let value = message.body as? String { AppTheme.apply(value) }
+        if message.name == "aasPrefs", let p = message.body as? [String: Any] {
+            if let m = (p["reminder_minutes"] as? NSNumber)?.intValue, ReminderLead.allowed.contains(m),
+               m != ReminderLead.minutes {
+                ReminderLead.minutes = m
+                NotificationCenter.default.post(name: .easReminderLeadChanged, object: nil)
+            }
+            if let s = p["mail_sound"] as? String, MailSound.allowed.contains(s),
+               s != MailSound.current.rawValue {
+                MailSound.current = MailSound(rawValue: s) ?? .default
+            }
+        }
+        if message.name == "aasPlaySound", let s = message.body as? String,
+           let sound = MailSound(rawValue: s) {
+            sound.playPreview()
+        }
+        if message.name == "aasNewMail", let p = message.body as? [String: Any] {
+            let count = (p["count"] as? NSNumber)?.intValue ?? 1
+            NewMailNotifier.notify(
+                from: p["from"] as? String ?? "",
+                subject: p["subject"] as? String ?? "",
+                preview: p["preview"] as? String ?? "",
+                count: max(1, count),
+                account: p["account"] as? String ?? "")
+        }
+    }
 
     @objc func reload() { web.load(URLRequest(url: url)) }
 

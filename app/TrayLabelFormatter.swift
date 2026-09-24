@@ -2,10 +2,10 @@ import Foundation
 import AppKit
 
 enum TrayLabelFormatter {
-    /// Events that may drive the menu-bar label. All-day / free stay in the
-    /// popover but never own the countdown (same filter as OWA Widget).
+    /// Events that may drive the menu-bar label. All-day / free / cancelled stay
+    /// in the popover but never own the countdown (same filter as OWA Widget).
     static func labelCandidates(_ events: [TrayEvent]) -> [TrayEvent] {
-        events.filter { !$0.isAllDay && $0.busyStatus?.lowercased() != "free" }
+        events.filter { !$0.isAllDay && !$0.isCancelled && $0.busyStatus?.lowercased() != "free" }
     }
 
     /// Plain fallback when nothing upcoming (OWA leaves the icon alone).
@@ -98,10 +98,6 @@ enum TrayLabelFormatter {
     }
 
     private static func shortTime(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "HH:mm"
-        f.timeZone = .current
-        return f.string(from: date)
+        TrayFormatters.hm.string(from: date)
     }
 }

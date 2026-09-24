@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AAS mail · UI Kit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="components.css" />
+  <style>
+    .kit { min-height: 100vh; }
+    .kit-shell {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      min-height: 100vh;
+    }
+    .kit-side {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 28px 18px;
+      border-right: 1px solid var(--aas-line);
+      background: var(--aas-panel);
+      overflow-y: auto;
+    }
+    .kit-side__meta {
+      font-size: 12px;
+      color: var(--aas-muted);
+      margin: 6px 0 24px;
+      line-height: 1.4;
+    }
+    .kit-nav { display: flex; flex-direction: column; gap: 2px; }
+    .kit-nav a {
+      display: block;
+      padding: 8px 10px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--aas-muted);
+    }
+    .kit-nav a:hover { background: var(--aas-panel-2); color: var(--aas-text); }
+    .kit-main {
+      padding: 36px clamp(18px, 3.5vw, 48px) 72px;
+      max-width: 1120px;
+    }
+    .kit-hero {
+      margin-bottom: 48px;
+      padding-bottom: 36px;
+      border-bottom: 1px solid var(--aas-line);
+    }
+    .kit-hero__grid {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 32px;
+      align-items: end;
+    }
+    .kit-hero__lead {
+      max-width: 44ch;
+      color: var(--aas-muted);
+      margin: 12px 0 20px;
+    }
+    .kit-hero__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    .kit-hero__panel {
+      background: var(--aas-ink);
+      color: #fff;
+      border-radius: 20px;
+      padding: 24px;
+      min-height: 200px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+    }
+    .kit-hero__panel::after {
+      content: "EAS";
+      position: absolute;
+      right: -4px;
+      bottom: -16px;
+      font-size: 56px;
+      font-weight: 700;
+      letter-spacing: -0.05em;
+      color: var(--aas-lime);
+      opacity: 0.85;
+      transform: rotate(-8deg);
+      pointer-events: none;
+    }
+    .kit-hero__panel p {
+      margin: 0;
+      max-width: 24ch;
+      position: relative;
+      z-index: 1;
+      color: rgb(255 255 255 / 88%);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .kit-theme {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    .kit-section {
+      margin-bottom: 56px;
+      scroll-margin-top: 20px;
+    }
+    .kit-section__head {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .kit-section__head .aas-h2 { flex: 1; }
+    .kit-lead {
+      color: var(--aas-muted);
+      margin: 0 0 20px;
+      max-width: 58ch;
+      font-size: 14px;
+    }
+    .kit-swatches {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 12px;
+    }
+    .kit-swatch {
+      border: 1px solid var(--aas-line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--aas-panel);
+    }
+    .kit-swatch__chip { height: 56px; }
+    .kit-swatch__meta { padding: 8px 10px; font-size: 12px; }
+    .kit-swatch__meta strong { display: block; font-size: 13px; }
+    .kit-swatch__meta span { color: var(--aas-muted); font-family: var(--aas-font-mono); font-size: 11px; }
+    .kit-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .kit-demo {
+      border: 1px solid var(--aas-line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: var(--aas-bg);
+    }
+    .kit-demo__label {
+      padding: 8px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--aas-muted);
+      background: var(--aas-panel);
+      border-bottom: 1px solid var(--aas-line);
+    }
+    .kit-demo__body { padding: 0; }
+    .kit-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .kit-cal-fake {
+      display: grid;
+      grid-template-columns: 48px 1fr 1fr 1fr;
+      gap: 0;
+      min-height: 160px;
+      background: var(--aas-panel);
+      border: 1px solid var(--aas-line);
+      border-radius: 10px;
+      overflow: hidden;
+      font-size: 11px;
+    }
+    .kit-cal-fake .h {
+      padding: 8px;
+      text-align: center;
+      border-bottom: 1px solid var(--aas-line);
+      border-left: 1px solid var(--aas-line);
+      font-weight: 600;
+    }
+    .kit-cal-fake .gutter {
+      color: var(--aas-muted);
+      text-align: right;
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--aas-line);
+    }
+    .kit-cal-fake .cell {
+      position: relative;
+      border-left: 1px solid var(--aas-line);
+      border-bottom: 1px solid var(--aas-line);
+      background-image: linear-gradient(var(--aas-line) 1px, transparent 1px);
+      background-size: 100% 32px;
+      min-height: 96px;
+      padding: 4px;
+    }
+    .kit-map {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .kit-map th,
+    .kit-map td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--aas-line);
+      vertical-align: top;
+    }
+    .kit-map th { color: var(--aas-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .kit-map code {
+      font-family: var(--aas-font-mono);
+      font-size: 11px;
+      background: var(--aas-panel-2);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    @media (max-width: 860px) {
+      .kit-shell { grid-template-columns: 1fr; }
+      .kit-side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--aas-line); }
+      .kit-hero__grid,
+      .kit-grid-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body class="aas-root theme-bank kit" id="root">
+  <div class="kit-shell">
+    <aside class="kit-side">
+      <div class="aas-dual-bar aas-dual-bar--lime" style="margin-bottom:14px;height:6px"></div>
+      <strong style="font-size:15px;letter-spacing:-0.02em">AAS mail</strong>
+      <p class="kit-side__meta">UI Kit · dual Bank / Seller<br />почта · календарь · трей</p>
+      <nav class="kit-nav">
+        <a href="#tokens">Токены</a>
+        <a href="#buttons">Кнопки</a>
+        <a href="#accounts">Аккаунты</a>
+        <a href="#mail">Почта</a>
+        <a href="#calendar">Календарь</a>
+        <a href="#rsvp">RSVP / availability</a>
+        <a href="#tray">Трей</a>
+        <a href="#settings">Настройки</a>
+        <a href="#feedback">Feedback</a>
+        <a href="#map">Карта функций</a>
+      </nav>
+    </aside>
+
+    <main class="kit-main">
+      <header class="kit-hero">
+        <div class="aas-marker aas-marker--lime"></div>
+        <div class="kit-hero__grid">
+          <div>
+            <p class="aas-eyebrow">Design system · v1</p>
+            <h1 class="aas-display">Два аккаунта.<br />Один кит.</h1>
+            <p class="kit-hero__lead">
+              Компоненты под реальные сценарии AAS mail: папки и избранное,
+              цепочки, RSVP, availability и menu-bar трей — с переключением
+              Vinho ↔ Verde.
+            </p>
+            <div class="kit-hero__actions">
+              <button type="button" class="aas-btn aas-btn--lime" id="btn-seller">Тема Seller</button>
+              <button type="button" class="aas-btn aas-btn--primary" id="btn-bank">Тема Bank</button>
+              <a class="aas-btn" href="DESIGN.md">DESIGN.md</a>
+            </div>
+            <div class="kit-theme">
+              <span class="aas-pill aas-pill--bank" id="theme-label">Bank · Vinho</span>
+              <span class="aas-caption">body.theme-bank | body.theme-seller</span>
+            </div>
+          </div>
+          <div class="kit-hero__panel">
+            <span class="aas-pill aas-pill--lime">ActiveSync</span>
+            <p>Локальный клиент Alfa-Bank + Alfa-Seller: почта, календарь, Keychain, без кредов в дистрибутиве.</p>
+          </div>
+        </div>
+      </header>
+
+      <!-- Tokens -->
+      <section class="kit-section" id="tokens">
+        <div class="kit-section__head">
+          <h2 class="aas-h2">Токены</h2>
+          <span class="aas-pill aas-pill--ink">tokens.css</span>
+        </div>
+        <p class="kit-lead">Палитра dual-brand. Акцент (`--aas-accent`) следует теме аккаунта.</p>
+        <div class="kit-swatches">
+          <div class="kit-swatch"><div class="kit-swatch__chip" style="background:#501820"></div><div class="kit-swatch__meta"><strong>Bank</strong><span>#501820</span></div></div>
+          <div class="kit-swatch"><div class="kit-swatch__chip" style="background:#003830"></div><div class="kit-swatch__meta"><strong>Seller</strong><span>#003830</span></div></div>
+          <div class="kit-swatch"><div class="kit-swatch__chip" style="background:#30E203"></div><div class="kit-swatch__meta"><strong>Lime</strong><span>#30E203</span></div></div>
+          <div class="kit-swatch"><div class="kit-swatch__chip" style="background:#EF3124"></div><div class="kit-swatch__meta"><strong>Alfa red</strong><span>#EF3124</span></div></div>
+          <div class="kit-swatch"><div class="kit-swatch__chip" style="background:#E4FBDD"></div><div class="kit-swatch__meta"><strong>Mint</strong><span>#E4FBDD</span></div></div>
+          <div class="kit-swatch"><div class="kit-swatch__chip" style="background:#F5F6F8;border-bottom:1px solid var(--aas-line)"></div><div class="kit-swatch__meta"><strong>BG</strong><span>#F5F6F8</span></div></div>
+        </div>
+      </section>
+
+      <!-- Buttons -->
+      <section class="kit-section" id="buttons">
+        <div class="kit-section__head">
+          <h2 class="aas-h2">Кнопки и pills</h2>
+        </div>
+        <p class="kit-lead">Primary = accent аккаунта. Lime — явный CTA (Создать на Seller, kit actions).</p>
+        <div class="kit-row">
+          <button type="button" class="aas-btn aas-btn--primary">Синхронизировать</button>
+          <button type="button" class="aas-btn aas-btn--lime">Создать</button>
+          <button type="button" class="aas-btn">Переместить</button>
+          <button type="button" class="aas-btn aas-btn--ghost">Отмена</button>
+          <button type="button" class="aas-btn aas-btn--danger">Удалить</button>
+          <button type="button" class="aas-btn aas-btn--sm">Сегодня</button>
+          <button type="button" class="aas-btn aas-btn--lg aas-btn--primary">Сохранить</button>
+        </div>
+        <div class="kit-row">
+          <span class="aas-pill aas-pill--bank">Alfa почта</span>
+          <span class="aas-pill aas-pill--seller">Seller почта</span>
+          <span class="aas-pill aas-pill--lime">lime</span>
+          <span class="aas-pill aas-pill--ink">ink</span>
+          <span class="aas-pill aas-pill--danger">ошибка sync</span>
+          <span class="aas-badge">12</span>
+          <span class="aas-badge aas-badge--soft">3</span>
+        </div>
+      </section>
+
+      <!-- Accounts / topnav -->
+      <section class="kit-section" id="accounts">
+        <div class="kit-section__head">
+          <h2 class="aas-h2">Аккаунты и topnav</h2>
+        </div>
+        <p class="kit-lead">Четыре вкладки: почта/календарь × Bank/Seller. Unread badge на mail-вкладках. Sync + status dot.</p>
+        <div class="kit-demo">
+          <div class="kit-demo__label">Topnav · Bank active</div>
+          <header class="aas-topnav aas-topnav--bank">
+            <h1 class="aas-brand">AAS mail</h1>
+            <div class="aas-tabs">
+              <button type="button" class="aas-tab aas-tab--bank on"><span class="aas-tab__dot"></span>Alfa почта<span class="aas-badge">7</span></button>
+              <button type="button" class="aas-tab aas-tab--bank"><span class="aas-tab__dot"></span>Alfa календарь</button>
+              <span class="aas-sep"></span>
+              <button type="button" class="aas-tab aas-tab--seller"><span class="aas-tab__dot"></span>Seller почта<span class="aas-badge aas-badge--soft">2</span></button>
+              <button type="button" class="aas-tab aas-tab--seller"><span class="aas-tab__dot"></span>Seller календарь</button>
+            </div>
+            <span class="aas-spacer"></span>
+            <input class="aas-input" type="search" placeholder="Поиск по почте" style="max-width:200px" />
+            <span class="aas-sync"><span class="aas-sync__ic">⟳</span><span class="aas-sync__txt">Обновлено 10:28</span></span>
+            <button type="button" class="aas-btn aas-btn--sm">Синхронизировать</button>
+            <button type="button" class="aas-btn aas-btn--primary aas-btn--sm">Создать</button>
+            <button type="button" class="aas-btn aas-btn--ghost aas-btn--sm" title="Настройки">⚙</button>
+            <span class="aas-status-dot aas-status-dot--ok" title="OK"></span>
+          </header>
+        </div>
+        <div class="kit-demo" style="margin-top:14px">
+          <div class="kit-demo__label">Topnav · Seller active</div>
+          <header class="aas-topnav aas-topnav--seller">
+            <h1 class="aas-brand" style="color:var(--aas-seller)">AAS mail</h1>
+            <div class="aas-tabs">
+              <button type="button" class="aas-tab aas-tab--bank"><span class="aas-tab__dot"></span>Alfa почта</button>
+              <button type="button" class="aas-tab aas-tab--seller on"><span class="aas-tab__dot"></span>Seller почта<span class="aas-badge">2</span></button>
+              <button type="button" class="aas-tab aas-tab--seller"><span class="aas-tab__dot"></span>Seller календарь</button>
+            </div>
+            <span class="aas-spacer"></span>
+            <button type="button" class="aas-btn aas-btn--lime aas-btn--sm">Создать</button>
+            <span class="aas-status-dot aas-status-dot--err" title="Err"></span>
+          </header>
+        </div>
+      </section>
+
+      <!-- Mail shell -->
+      <section class="kit-section" id="mail">
+        <div class="kit-section__head">
+          <h2 class="aas-h2">Почта</h2>
+        </div>
+        <p class="kit-lead">Папки (избранные ★, unread, «＋ Папка»), список с read/unread icons, reader toolbar (ответ / перенос / прочитано).</p>
+        <div class="aas-shell">
+          <div class="aas-shell__body">
+            <nav class="aas-folders" style="display:flex;flex-direction:column">
+              <div class="aas-folder-sec">Избранное</div>
+              <div class="aas-folder on">
+                <span class="aas-folder__name">Входящие</span>
+                <span class="aas-badge">7</span>
+                <button type="button" class="aas-folder__pin on" title="Избранное">★</button>
+              </div>
+              <div class="aas-folder">
+                <span class="aas-folder__name">Приоритет</span>
+                <button type="button" class="aas-folder__pin on">★</button>
+              </div>
+              <div class="aas-folder-sec">Папки</div>
+              <div class="aas-folder">
+                <span class="aas-folder__name">Отправленные</span>
+                <button type="button" class="aas-folder__pin">☆</button>
+              </div>
+              <div class="aas-folder">
+                <span class="aas-folder__name">Черновики</span>
+                <span class="aas-badge aas-badge--soft">1</span>
+                <button type="button" class="aas-folder__pin">☆</button>
+              </div>
+              <div class="aas-spacer"></div>
+              <div class="aas-folder-tools">
+                <button type="button" class="aas-btn">＋ Папка</button>
+              </div>
+            </nav>
+            <div class="aas-shell__list">
+              <div class="aas-listbar">
+                <span class="aas-listbar__title">Входящие</span>
+                <span class="aas-spacer"></span>
+                <label class="aas-chk" style="font-size:12px"><input type="checkbox" checked /> Цепочки</label>
+                <select class="aas-select" style="width:auto;padding:3px 8px;font-size:12px">
+                  <option>5 дней</option>
+                  <option>2 недели</option>
+                </select>
+              </div>
+              <div class="aas-row unread on">
+                <div class="aas-row__top">
+                  <span class="aas-row__ico" title="Непрочитано">●</span>
+                  <span class="aas-row__from">Ирина К.</span>
+                  <span class="aas-row__date">10:12</span>
+                </div>
+                <div class="aas-row__subj">Статус Open 03.12</div>
+                <div class="aas-row__prev">Нужен апдейт по MUST к пятнице…</div>
+              </div>
+              <div class="aas-row">
+                <div class="aas-row__top">
+                  <span class="aas-row__ico" title="Прочитано">○</span>
+                  <span class="aas-row__from">Calendar</span>
+                  <span class="aas-row__date">Вч</span>
+                </div>
+                <div class="aas-row__subj">Приглашение: Warroom</div>
+                <div class="aas-row__prev">Когда: завтра 11:00–12:00</div>
+              </div>
+              <div class="aas-row unread">
+                <div class="aas-row__top">
+                  <span class="aas-row__ico">●</span>
+                  <span class="aas-row__from">noreply@alfa</span>
+                  <span class="aas-row__date">Пн</span>
+                </div>
+                <div class="aas-row__subj">Отчёт по sync</div>
+                <div class="aas-row__prev">Еженедельная сводка…</div>
+              </div>
+            </div>
+            <div class="aas-shell__reader">
+              <div class="aas-reader-tools">
+                <button type="button" class="aas-btn aas-btn--sm">Ответить</button>
+                <button type="button" class="aas-btn aas-btn--sm">Всем</button>
+                <button type="button" class="aas-btn aas-btn--sm">Переслать</button>
+                <select class="aas-select" style="width:auto;padding:3px 8px;font-size:12px">
+                  <option>Переместить…</option>
+                  <option>Архив</option>
+                </select>
+                <button type="button" class="aas-btn aas-btn--sm">Прочитано</button>
+                <button type="button" class="aas-btn aas-btn--danger aas-btn--sm">Удалить</button>
+              </div>
+              <div style="padding:14px 18px 6px">
+                <h3 class="aas-h3">Статус Open 03.12</h3>
+                <p class="aas-caption">Ирина К. · сегодня 10:12</p>
+              </div>
+              <div class="aas-mc unread" style="margin:10px 16px">
+                <div class="aas-mc__head">
+                  <span class="aas-mc__who">Ирина К.</span>
+                  <span class="aas-mc__snip">Нужен апдейт по MUST…</span>
+                  <span class="aas-mc__when">10:12</span>
+                </div>
+                <div style="padding:10px 14px;font-size:14px;line-height:1.45">
+                  Привет! Нужен апдейт по MUST к пятнице. Можно коротко в треде.
+                  <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+                    <a class="aas-att" href="#">roadmap.pdf</a>
+                    <a class="aas-att" href="#">screenshot.png</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Calendar -->
+      <section class="kit-section" id="calendar">
+        <div class="kit-section__head">
+          <h2 class="aas-h2">Календарь</h2>
+        </div>
+        <p class="kit-lead">Режимы день / раб. неделя / неделя. Busy · tentative · free · OOF. Now-line.</p>
+        <div class="kit-row">
+          <button type="button" class="aas-btn aas-btn--sm">‹</button>
+          <button type="button" class="aas-btn aas-btn--sm">Сегодня</button>
+          <button type="button" class="aas-btn aas-btn--sm">›</button>
+          <strong style="margin:0 8px">23–27 сент 2026</strong>
+          <div class="aas-seg">
+            <button type="button">День</button>
+            <button type="button" class="on">Раб. неделя</button>
+            <button type="button">Неделя</button>
+          </div>
+        </div>
+        <div class="kit-cal-fake">
+          <div></div>
+          <div class="h">Пн 23</div>
+          <div class="h">Вт 24 <span class="aas-pill aas-pill--bank" style="padding:0 6px">сегодня</span></div>
+          <div class="h">Ср 25</div>
+          <div class="gutter">10</div>
+          <div class="cell"><div class="aas-ev" style="height:40px">1:1 · Product</div></div>
+          <div class="cell"><div class="aas-ev aas-ev--tentative" style="height:48px;margin-top:8px">Warroom?</div></div>
+          <div class="cell"></div>
+          <div class="gutter">11</div>
+          <div class="cell"></div>
+          <div class="cell" style="position:relative">
+            <div class="aas-nowline" style="top:12px;position:absolute;left:0;right:0"></div>
+            <div class="aas-ev aas-ev--free" style="height:28px;margin-top:28px">Focus</div>
+          </div>
+          <div class="cell"><div class="aas-ev aas-ev--oof" style="height:36px">OOF</div></div>
+        </div>
+        <div class="kit-row" style="margin-top:14px">
+          <span class="aas-chip">All-day: День рождения</span>
+          <span class="aas-caption">busy · tentative · free · oof</span>
+        </div>
+      </section>
+
+      <!-- RSVP -->
+      <section class="kit-section" id="rsvp">
+        <div class="kit-section__head">
+          <h2 class="aas-h2">RSVP и availability</h2>
+        </div>
+        <p class="kit-lead">Accept / tentative / decline; правка участников; проверка занятости.</p>
+        <div class="kit-grid-2">
+          <div class="aas-card">
+            <span class="aas-marker"></span>
+            <h3 class="aas-h3" style="margin-bottom:8px">Warroom 3.12</h3>
+            <p class="aas-caption" style="margin-bottom:12px">Вт 24 сен · 11:00–12:00 · Teams</p>
+            <div class="aas-rsvp">
+              <button type="button" class="aas-btn aas-btn--sm on">Принять</button>
+              <button type="button" class="aas-btn aas-btn--sm">Под вопросом</button>
+              <button type="button" class="aas-btn aas-btn--danger aas-btn--sm">Отклонить</button>
+            </div>
+            <div style="margin-top:14px">
+              <span class="aas-label">Участники</span>
+              <span class="aas-attendee">olesya.ba<button type="button" aria-label="Убрать">×</button></span>
+              <span class="aas-attendee">irina.k<button type="button">×</button></span>
+              <span class="aas-attendee">pm.lead<button type="button">×</button></span>
+            </div>
+          </div>
+          <div class="aas-card aas-card--surface">
+            <h3 class="aas-h3" style="margin-bottom:10px">Availability</h3>
+            <div class="aas-avail">
+              <div class="aas-avail__row aas-avail--ok"><span class="aas-avail__ico">●</span> olesya.ba — свободна</div>
+              <div class="aas-avail__row aas-avail--warn"><span class="aas-avail__ico">◐</span> irina.k — частично занята</div>
+              <div class="aas-avail__row aas-avail--bad"><span class="aas-avail__ico">■</span> pm.lead — занят</div>
+              <div class="aas-avail__row aas-avail--unk"><span class="aas-avail__ico">?</span> guest@ext — неизвестно</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tray -->
+      <section class="kit-section" id="tray">
+        <div class="kit-section__head">
+          <h2 class="aas-h2">Трей</h2>
+        </div>
+        <p class="kit-lead">Menu-bar: now-strip, сегодняшние встречи, start–end, RSVP, цвет аккаунта. Без создания из трея (создание — в основном окне / native create).</p>
+        <div class="aas-tray">
+          <div class="aas-tray__now">Сейчас 10:32 · следующее через 28 мин</div>
+          <div class="aas-tray__item">
+            <div class="aas-tray__bar aas-tray__bar--bank"></div>
+            <div>
+              <div class="aas-tray__time">11:00 – 12:00 · Bank</div>
+              <div class="aas-tray__title">Warroom 3.12</div>
+              <div class="aas-tray__rsvp">
+                <button type="button" class="aas-btn aas-btn--sm">Принять</button>
+                <button type="button" class="aas-btn aas-btn--sm">?</button>
+                <button type="button" class="aas-btn aas-btn--danger aas-btn--sm">Нет</button>
+              </div>
+            </div>
+          </div>
+          <div class="aas-tray__item">
+            <div class="aas-tray__bar aas-tray__bar--seller"></div>
+            <div>
+              <div class="aas-tray__time">14:00 – 14:30 · Seller</div>
+              <div class="aas-tray__title">Sync с логистикой</div>
+            </div>
+          </div>
+          <div class="aas-tray__item" style="opacity:.7">
+            <div class="aas-tray__bar aas-tray__bar--bank"></div>
+            <div>
+              <div class="aas-tray__time">09:00 – 09:25 · прошло</div>
+              <div class="aas-tray__title">Daily standup</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings -->
+      <section class="kit-section" id="settings">
+        <div class="kit-section__head">
+          <h2 class="aas-h2">Настройки</h2>
+        </div>
+        <p class="kit-lead">Аккаунты Bank/Seller (серверы по умолчанию), подписи, About.</p>
+        <div class="aas-card" style="max-width:520px">
+          <div class="aas-settings-tabs">
+            <button type="button" class="aas-btn aas-btn--sm on">Аккаунты</button>
+            <button type="button" class="aas-btn aas-btn--sm">Подписи</button>
+            <button type="button" class="aas-btn aas-btn--sm">О приложении</button>
+          </div>
+          <div class="aas-card aas-card--acct-bank" style="padding:10px 12px;margin-bottom:12px">
+            <div class="aas-acct-title">Alfa-Bank</div>
+            <div class="aas-field">
+              <label class="aas-label">Логин</label>
+              <input class="aas-input" value="olesya.ba" readonly />
+            </div>
+            <p class="aas-hint">owa.alfabank.ru · пароль в Keychain</p>
+          </div>
+          <div class="aas-card aas-card--acct-seller" style="padding:10px 12px;margin-bottom:12px">
+            <div class="aas-acct-title">Alfa-Seller</div>
+            <div class="aas-field">
+              <label class="aas-label">Логин</label>
+              <input class="aas-input" value="seller.user" readonly />
+            </div>
+            <p class="aas-hint">sync.alfaops.ru · пароль в Keychain</p>
+          </div>
+          <div class="aas-about" style="border-top:1px solid var(--aas-line);padding-top:14px">
+            <div class="aas-about__title">AAS mail</div>
+            <div class="aas-about__ver">версия 1.2.1</div>
+            <p style="margin:0;font-size:14px">Локальный клиент почты и календаря. Контакт: <a href="#" style="color:var(--aas-accent)">@olesya_ba</a></p>
+            <div class="aas-about__thanks">
+              <div class="aas-about__thanks-head">Спасибо за тест-рейды и светлые идеи:</div>
+              <ul class="aas-about__thanks-list">
+                <li>🧚 фее <span class="aas-about__handle">@vdgrekova</span> Грековой Владене</li>
+                <li>🧙 магу <span class="aas-about__handle">@ivan.rachenko</span> Раченко Ивану</li>
+              </ul>
+              <div class="aas-about__thanks-out">Спасибо — вы сделали AAS mail чуть волшебнее ✨</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Feedback -->
+      <section class="kit-section" id="feedback">
+        <div class="kit-section__head">
+          <h2 class="aas-h2">Feedback</h2>
+        </div>
+        <div class="kit-row" style="align-items:stretch">
+          <div class="aas-alert aas-alert--ok" style="flex:1">Синхронизация завершена</div>
+          <div class="aas-alert aas-alert--err" style="flex:1">EAS 135: повторите sync</div>
+          <div class="aas-toast">Письмо перемещено</div>
+        </div>
+        <div class="aas-empty">Выберите письмо</div>
+        <div style="display:flex;flex-direction:column;gap:8px;max-width:280px;margin-top:12px">
+          <div class="aas-skeleton"></div>
+          <div class="aas-skeleton" style="width:70%"></div>
+          <div class="aas-skeleton" style="width:40%"></div>
+        </div>
+      </section>
+
+      <!-- Map -->
+      <section class="kit-section" id="map">
+        <div class="kit-section__head">
+          <h2 class="aas-h2">Карта функций → классы</h2>
+        </div>
+        <div class="aas-card" style="padding:0;overflow:auto">
+          <table class="kit-map">
+            <thead>
+              <tr><th>Функция</th><th>Классы</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Dual accounts / вкладки</td><td><code>.aas-tab--bank/seller</code> <code>.aas-topnav--*</code> <code>.aas-dual-bar</code></td></tr>
+              <tr><td>Unread на вкладках и папках</td><td><code>.aas-badge</code> <code>.aas-badge--soft</code></td></tr>
+              <tr><td>Папки, избранное, создать</td><td><code>.aas-folder</code> <code>.aas-folder__pin</code> <code>.aas-folder-tools</code></td></tr>
+              <tr><td>Список + read icons</td><td><code>.aas-row</code> <code>.unread</code> <code>.aas-row__ico</code></td></tr>
+              <tr><td>Письмо, вложения, move</td><td><code>.aas-mc</code> <code>.aas-att</code> <code>.aas-reader-tools</code></td></tr>
+              <tr><td>Календарь режимы / статусы</td><td><code>.aas-seg</code> <code>.aas-ev--*</code> <code>.aas-nowline</code></td></tr>
+              <tr><td>RSVP + attendees + availability</td><td><code>.aas-rsvp</code> <code>.aas-attendee</code> <code>.aas-avail</code></td></tr>
+              <tr><td>Трей (now / prev / RSVP)</td><td><code>.aas-tray</code> <code>.aas-tray__now</code> <code>.aas-tray__rsvp</code></td></tr>
+              <tr><td>Настройки / About</td><td><code>.aas-settings-tabs</code> <code>.aas-about</code> <code>.aas-card--acct-*</code></td></tr>
+              <tr><td>Sync / connection</td><td><code>.aas-sync</code> <code>.aas-status-dot</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const root = document.getElementById('root');
+    const label = document.getElementById('theme-label');
+    function setTheme(seller) {
+      root.classList.toggle('theme-seller', seller);
+      root.classList.toggle('theme-bank', !seller);
+      root.classList.toggle('green', seller);
+      label.textContent = seller ? 'Seller · Verde + lime' : 'Bank · Vinho';
+      label.className = seller ? 'aas-pill aas-pill--seller' : 'aas-pill aas-pill--bank';
+    }
+    document.getElementById('btn-seller').onclick = () => setTheme(true);
+    document.getElementById('btn-bank').onclick = () => setTheme(false);
+  </script>
+</body>
+</html>

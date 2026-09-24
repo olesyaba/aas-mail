@@ -1,0 +1,91 @@
+/* Альфа-Селлер design tokens — from positioning deck */
+:root {
+  /* Brand */
+  --as-white: #ffffff;
+  --as-ink: #000000;
+  --as-lime: #30e203;
+  --as-lime-hover: #28c402;
+  --as-lime-pressed: #22a802;
+  --as-alfa-red: #ef3124;
+  --as-alfa-red-hover: #d62b1f;
+
+  /* Surfaces */
+  --as-surface: #f2f2f2;
+  --as-surface-2: #eaeaea;
+  --as-mint: #e4fbdd;
+  --as-mint-deep: #d7face;
+
+  /* Text */
+  --as-muted: #8a9ba8;
+  --as-muted-ink: #5c6b75;
+  --as-ghost-type: #e8e8e8;
+
+  /* Lines */
+  --as-line: #e6e6e6;
+  --as-line-strong: #cfd6db;
+
+  /* Semantic */
+  --as-success: var(--as-lime);
+  --as-danger: var(--as-alfa-red);
+  --as-warning: #ffb020;
+  --as-info: #3b82f6;
+
+  /* Focus */
+  --as-focus: #30e203;
+  --as-focus-ring: 0 0 0 3px rgb(48 226 3 / 35%);
+
+  /* Radius */
+  --as-r-sm: 8px;
+  --as-r-md: 12px;
+  --as-r-lg: 20px;
+  --as-r-xl: 28px;
+  --as-r-pill: 999px;
+
+  /* Space */
+  --as-s-1: 4px;
+  --as-s-2: 8px;
+  --as-s-3: 12px;
+  --as-s-4: 16px;
+  --as-s-5: 24px;
+  --as-s-6: 32px;
+  --as-s-7: 48px;
+  --as-s-8: 64px;
+
+  /* Type */
+  --as-font: "Golos Text", "Segoe UI", system-ui, sans-serif;
+  --as-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --as-lh-tight: 1.15;
+  --as-lh-body: 1.5;
+  --as-lh-loose: 1.65;
+
+  /* Type scale */
+  --as-t-xs: 0.75rem;   /* 12 */
+  --as-t-sm: 0.875rem;  /* 14 */
+  --as-t-md: 1rem;      /* 16 */
+  --as-t-lg: 1.25rem;   /* 20 */
+  --as-t-xl: 1.75rem;   /* 28 */
+  --as-t-2xl: 2.5rem;   /* 40 */
+  --as-t-3xl: 3.5rem;   /* 56 */
+
+  /* Motion */
+  --as-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --as-dur: 180ms;
+
+  /* Elevation */
+  --as-shadow: 0 16px 40px rgb(0 0 0 / 12%);
+  --as-shadow-sm: 0 4px 16px rgb(0 0 0 / 8%);
+
+  /* Z */
+  --as-z-dropdown: 100;
+  --as-z-sticky: 200;
+  --as-z-modal-bg: 300;
+  --as-z-modal: 400;
+  --as-z-toast: 500;
+  --as-z-tooltip: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --as-dur: 0ms;
+  }
+}

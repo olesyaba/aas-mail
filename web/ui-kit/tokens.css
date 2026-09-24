@@ -1,0 +1,473 @@
+/* AAS mail — design tokens
+   Dual brand: Alfa-Bank (Vinho) · Alfa-Seller (Verde + lime CTA) */
+
+:root {
+  color-scheme: light;  /* native controls (selects, date pickers, scrollbars) follow the theme */
+  /* Canvas */
+  --aas-bg: #f5f6f8;
+  --aas-panel: #ffffff;
+  --aas-panel-2: #fafbfc;
+  --aas-line: #e3e6ea;
+  --aas-line-strong: #cfd4da;
+  --aas-text: #1f2328;
+  --aas-muted: #66707a;
+  --aas-on-accent: #ffffff;
+  --aas-warning-text: #8a5a00;
+  --aas-cat-lift: 0%;
+
+  /* Bank — Vinho */
+  --aas-bank: #501820;
+  --aas-bank-bg: #f3e8ea;
+  --aas-bank-mid: #8a4a55;
+  --aas-bank-soft: #b07a82;
+  --aas-bank-fill: #501820;   /* fills: tabs, buttons */
+  --aas-bank-ink: #501820;    /* brand as text/icon on panels */
+
+  /* Seller — Verde + Альфа-Селлер lime */
+  --aas-seller: #003830;
+  --aas-seller-bg: #e4efec;
+  --aas-seller-mid: #2a5c4a;
+  --aas-seller-soft: #6a9a88;
+  --aas-seller-fill: #003830;
+  --aas-seller-ink: #00503f;
+  --aas-lime: #30e203;
+  --aas-lime-hover: #28c402;
+  --aas-ink: #000000;
+  --aas-alfa-red: #ef3124;
+  --aas-mint: #e4fbdd;
+
+  /* Semantic */
+  --aas-danger: #c4314b;
+  --aas-ok: #107c41;
+  --aas-warning: #ffb020;
+
+  /* Active account (default = Bank) */
+  --aas-accent: var(--aas-bank-fill);
+  --aas-accent-text: var(--aas-bank-ink);
+  --aas-accent-bg: var(--aas-bank-bg);
+  --aas-unread: var(--aas-bank-ink);
+  --aas-busy: var(--aas-bank);
+  --aas-tent: var(--aas-bank-mid);
+  --aas-free: var(--aas-bank-soft);
+  --aas-oof: var(--aas-bank);
+
+  /* Type */
+  --aas-font: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --aas-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --aas-t-xs: 0.75rem;
+  --aas-t-sm: 0.8125rem;
+  --aas-t-md: 0.875rem;
+  --aas-t-lg: 1rem;
+  --aas-t-xl: 1.125rem;
+  --aas-t-2xl: 1.375rem;
+  --aas-lh: 1.4;
+
+  /* Radius */
+  --aas-r-sm: 6px;
+  --aas-r-md: 10px;
+  --aas-r-control: 10px;  /* form fields */
+  --aas-r-lg: 14px;
+  --aas-r-pill: 999px;
+
+  /* Space */
+  --aas-s-1: 4px;
+  --aas-s-2: 8px;
+  --aas-s-3: 12px;
+  --aas-s-4: 16px;
+  --aas-s-5: 24px;
+
+  /* Motion / elevation */
+  --aas-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --aas-dur: 180ms;
+  --aas-shadow: 0 8px 32px rgb(0 0 0 / 18%);
+  --aas-focus-ring: 0 0 0 3px color-mix(in srgb, var(--aas-accent) 35%, transparent);
+
+  /* Legacy aliases used by app shell */
+  --bg: var(--aas-bg);
+  --panel: var(--aas-panel);
+  --panel2: var(--aas-panel-2);
+  --line: var(--aas-line);
+  --text: var(--aas-text);
+  --muted: var(--aas-muted);
+  --accent: var(--aas-accent);
+  --accent-bg: var(--aas-accent-bg);
+  --unread: var(--aas-unread);
+  --danger: var(--aas-danger);
+  --ok: var(--aas-ok);
+  --busy: var(--aas-busy);
+  --tent: var(--aas-tent);
+  --free: var(--aas-free);
+  --oof: var(--aas-oof);
+  --shadow: var(--aas-shadow);
+}
+
+/* Account themes: each account maps the shared roles onto its brand.
+   --aas-accent        fill (buttons, active tab, badges) — text on it is --aas-on-accent
+   --aas-accent-text   the brand colour used AS text/icons on panels (links, active folder)
+   Keeping the two apart is what makes dark mode readable: a fill must stay dark
+   under white text, while brand-coloured text must turn light on a dark panel. */
+body.theme-bank,
+body:not(.green):not(.theme-seller) {
+  --aas-accent: var(--aas-bank-fill);
+  --aas-accent-text: var(--aas-bank-ink);
+  --aas-accent-bg: var(--aas-bank-bg);
+  --aas-unread: var(--aas-bank-ink);
+  --aas-busy: #501820;
+  --aas-tent: #7a3a46;
+  --aas-free: #8f5d66;
+  --aas-oof: var(--aas-bank-fill);
+}
+
+body.theme-seller,
+body.green {
+  --aas-accent: var(--aas-seller-fill);
+  --aas-accent-text: var(--aas-seller-ink);
+  --aas-accent-bg: var(--aas-seller-bg);
+  --aas-unread: var(--aas-seller-ink);
+  --aas-busy: #003830;
+  --aas-tent: #2a5c4a;
+  --aas-free: #3f7564;
+  --aas-oof: var(--aas-bank-fill);
+}
+
+/* Dark palette — one definition, two triggers: the Settings choice «Тёмная»
+   (data-theme="dark") and «Как в системе» (no data-theme) following macOS.
+   Style BA looks use their own data-theme=* and must not inherit this block.
+   Every text/fill pair here is ≥ 4.5:1 (WCAG AA). */
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --aas-bg: #181a1d;
+    --aas-panel: #212428;
+    --aas-panel-2: #1c1f22;
+    --aas-line: #33383e;
+    --aas-line-strong: #454b52;
+    --aas-text: #e6e8ea;
+    --aas-muted: #9aa3ac;
+    --aas-danger: #ff8a9c;
+    --aas-ok: #5cc98b;
+    --aas-warning-text: #ffc857;
+    --aas-shadow: 0 8px 32px rgb(0 0 0 / 50%);
+    --aas-bank-fill: #8c2f3d;
+    --aas-bank-ink: #f2a7b1;
+    --aas-bank-bg: #3a2227;
+    --aas-seller-fill: #1e6b57;
+    --aas-seller-ink: #6fd6b8;
+    --aas-seller-bg: #16312a;
+    --aas-cat-lift: 55%;
+}
+:root[data-theme="dark"] body.theme-bank,
+:root[data-theme="dark"] body:not(.green):not(.theme-seller) {
+    --aas-busy: #7a2a36;
+    --aas-tent: #6e3b45;
+    --aas-free: #5d4a4e;
+}
+:root[data-theme="dark"] body.theme-seller,
+:root[data-theme="dark"] body.green {
+    --aas-busy: #1d5c4c;
+    --aas-tent: #2f5a4c;
+    --aas-free: #3a5550;
+}
+
+@media (prefers-color-scheme: dark) {
+/* Only when theme = system (no data-theme). Forced light/dark/Style BA set their own. */
+:root:not([data-theme]) {
+    color-scheme: dark;
+    --aas-bg: #181a1d;
+    --aas-panel: #212428;
+    --aas-panel-2: #1c1f22;
+    --aas-line: #33383e;
+    --aas-line-strong: #454b52;
+    --aas-text: #e6e8ea;
+    --aas-muted: #9aa3ac;
+    --aas-danger: #ff8a9c;
+    --aas-ok: #5cc98b;
+    --aas-warning-text: #ffc857;
+    --aas-shadow: 0 8px 32px rgb(0 0 0 / 50%);
+    --aas-bank-fill: #8c2f3d;
+    --aas-bank-ink: #f2a7b1;
+    --aas-bank-bg: #3a2227;
+    --aas-seller-fill: #1e6b57;
+    --aas-seller-ink: #6fd6b8;
+    --aas-seller-bg: #16312a;
+    --aas-cat-lift: 55%;
+}
+:root:not([data-theme]) body.theme-bank,
+:root:not([data-theme]) body:not(.green):not(.theme-seller) {
+    --aas-busy: #7a2a36;
+    --aas-tent: #6e3b45;
+    --aas-free: #5d4a4e;
+}
+:root:not([data-theme]) body.theme-seller,
+:root:not([data-theme]) body.green {
+    --aas-busy: #1d5c4c;
+    --aas-tent: #2f5a4c;
+    --aas-free: #3a5550;
+}
+}
+
+/* ——— StylesBA looks (Documents/StylesBA/theme-blocks) ———
+   Each palette has dark + light. Bank → block accent; Seller → teal/green. */
+
+/* Navy + Orange — dark: navy #092634 + coral #EF6E42 */
+:root[data-theme="navy-orange"] {
+    color-scheme: dark;
+    --aas-bg: #092634;
+    --aas-panel: #183340;
+    --aas-panel-2: #0d2c3a;
+    --aas-line: #3e545f;
+    --aas-line-strong: #4a636e;
+    --aas-text: #f9f9f9;
+    --aas-muted: #8d9aa0;
+    --aas-on-accent: #0a0a0a;
+    --aas-danger: #ff8a9c;
+    --aas-ok: #5cb88a;
+    --aas-warning-text: #e8b86d;
+    --aas-shadow: 0 8px 32px rgb(0 0 0 / 50%);
+    --aas-cat-lift: 40%;
+    --aas-bank: #ef6e42;
+    --aas-bank-fill: #ef6e42;
+    --aas-bank-ink: #f58a66;
+    --aas-bank-bg: #3a2a28;
+    --aas-bank-mid: #ef6e42;
+    --aas-bank-soft: #8d6a5c;
+    --aas-seller-fill: #2a8f72;
+    --aas-seller-ink: #7dceb0;
+    --aas-seller-bg: #16382f;
+}
+:root[data-theme="navy-orange"] body.theme-bank,
+:root[data-theme="navy-orange"] body:not(.green):not(.theme-seller) {
+    --aas-on-accent: #0a0a0a;
+    --aas-busy: #ef6e42;
+    --aas-tent: #c47a4a;
+    --aas-free: #6b8088;
+    --aas-oof: #004e72;
+}
+:root[data-theme="navy-orange"] body.theme-seller,
+:root[data-theme="navy-orange"] body.green {
+    --aas-on-accent: #ffffff;
+    --aas-busy: #2a8f72;
+    --aas-tent: #4a7a6a;
+    --aas-free: #5a7068;
+    --aas-oof: #ef6e42;
+}
+
+/* Navy + Orange — light */
+:root[data-theme="navy-orange-light"] {
+    color-scheme: light;
+    --aas-bg: #f9f9f9;
+    --aas-panel: #ffffff;
+    --aas-panel-2: #f3f4f5;
+    --aas-line: #ced3d6;
+    --aas-line-strong: #b8c0c4;
+    --aas-text: #092634;
+    --aas-muted: #75858d;
+    --aas-on-accent: #0a0a0a;
+    --aas-danger: #c4314b;
+    --aas-ok: #107c41;
+    --aas-warning-text: #8a5a00;
+    --aas-shadow: 0 8px 32px rgb(9 38 52 / 14%);
+    --aas-cat-lift: 0%;
+    --aas-bank: #ef6e42;
+    --aas-bank-fill: #ef6e42;
+    --aas-bank-ink: #c44e28;
+    --aas-bank-bg: #fdeee8;
+    --aas-bank-mid: #ef6e42;
+    --aas-bank-soft: #c49080;
+    --aas-seller-fill: #003830;
+    --aas-seller-ink: #00503f;
+    --aas-seller-bg: #e4efec;
+}
+:root[data-theme="navy-orange-light"] body.theme-bank,
+:root[data-theme="navy-orange-light"] body:not(.green):not(.theme-seller) {
+    --aas-on-accent: #0a0a0a;
+    --aas-busy: #ef6e42;
+    --aas-tent: #c47a4a;
+    --aas-free: #8d9aa0;
+    --aas-oof: #004e72;
+}
+:root[data-theme="navy-orange-light"] body.theme-seller,
+:root[data-theme="navy-orange-light"] body.green {
+    --aas-on-accent: #ffffff;
+    --aas-busy: #003830;
+    --aas-tent: #2a5c4a;
+    --aas-free: #3f7564;
+    --aas-oof: #ef6e42;
+}
+
+/* Royal Velvet — dark: velvet + pink #FF80BF */
+:root[data-theme="royal-velvet"] {
+    color-scheme: dark;
+    --aas-bg: #1d1e26;
+    --aas-panel: #21222c;
+    --aas-panel-2: #14141b;
+    --aas-line: #414558;
+    --aas-line-strong: #52566a;
+    --aas-text: #f8f8f2;
+    --aas-muted: #a8a8a0;
+    --aas-on-accent: #21222c;
+    --aas-danger: #ff80bf;
+    --aas-ok: #8aff80;
+    --aas-warning-text: #ffca80;
+    --aas-shadow: 0 8px 32px rgb(0 0 0 / 55%);
+    --aas-cat-lift: 35%;
+    --aas-bank: #ff80bf;
+    --aas-bank-fill: #ff80bf;
+    --aas-bank-ink: #ff9fce;
+    --aas-bank-bg: #3a2a35;
+    --aas-bank-mid: #ff80bf;
+    --aas-bank-soft: #a87898;
+    --aas-seller-fill: #5cb85c;
+    --aas-seller-ink: #8aff80;
+    --aas-seller-bg: #1e2e22;
+}
+:root[data-theme="royal-velvet"] body.theme-bank,
+:root[data-theme="royal-velvet"] body:not(.green):not(.theme-seller) {
+    --aas-on-accent: #21222c;
+    --aas-busy: #ff80bf;
+    --aas-tent: #c490a8;
+    --aas-free: #6a6a70;
+    --aas-oof: #ffff80;
+}
+:root[data-theme="royal-velvet"] body.theme-seller,
+:root[data-theme="royal-velvet"] body.green {
+    --aas-on-accent: #14141b;
+    --aas-busy: #5cb85c;
+    --aas-tent: #6a9a6a;
+    --aas-free: #5a6a5a;
+    --aas-oof: #ff80bf;
+}
+
+/* Royal Velvet — light: soft cream + pink #D94F9A */
+:root[data-theme="royal-velvet-light"] {
+    color-scheme: light;
+    --aas-bg: #f8f8f2;
+    --aas-panel: #ffffff;
+    --aas-panel-2: #f0f0ea;
+    --aas-line: #e0e0d8;
+    --aas-line-strong: #c8c8c0;
+    --aas-text: #21222c;
+    --aas-muted: #6a6a70;
+    --aas-on-accent: #f8f8f2;
+    --aas-danger: #c4314b;
+    --aas-ok: #107c41;
+    --aas-warning-text: #8a5a00;
+    --aas-shadow: 0 8px 32px rgb(33 34 44 / 12%);
+    --aas-cat-lift: 0%;
+    --aas-bank: #d94f9a;
+    --aas-bank-fill: #d94f9a;
+    --aas-bank-ink: #b0387a;
+    --aas-bank-bg: #ffe8f3;
+    --aas-bank-mid: #d94f9a;
+    --aas-bank-soft: #c490a8;
+    --aas-seller-fill: #2a5c4a;
+    --aas-seller-ink: #1a4a3a;
+    --aas-seller-bg: #e4efec;
+}
+:root[data-theme="royal-velvet-light"] body.theme-bank,
+:root[data-theme="royal-velvet-light"] body:not(.green):not(.theme-seller) {
+    --aas-on-accent: #f8f8f2;
+    --aas-busy: #d94f9a;
+    --aas-tent: #c490a8;
+    --aas-free: #8a8a90;
+    --aas-oof: #21222c;
+}
+:root[data-theme="royal-velvet-light"] body.theme-seller,
+:root[data-theme="royal-velvet-light"] body.green {
+    --aas-on-accent: #ffffff;
+    --aas-busy: #2a5c4a;
+    --aas-tent: #3f7564;
+    --aas-free: #6a9a88;
+    --aas-oof: #d94f9a;
+}
+
+/* Eclipse + Almond — dark: teal #1A3636 + almond #D6BD98 */
+:root[data-theme="eclipse-almond"] {
+    color-scheme: dark;
+    --aas-bg: #1a3636;
+    --aas-panel: #284242;
+    --aas-panel-2: #152e2e;
+    --aas-line: #43544c;
+    --aas-line-strong: #54665c;
+    --aas-text: #d6bd98;
+    --aas-muted: #8a9a8c;
+    --aas-on-accent: #0a0a0a;
+    --aas-danger: #e8a0a0;
+    --aas-ok: #8ab890;
+    --aas-warning-text: #d6bd98;
+    --aas-shadow: 0 8px 32px rgb(0 0 0 / 50%);
+    --aas-cat-lift: 35%;
+    --aas-bank: #d6bd98;
+    --aas-bank-fill: #d6bd98;
+    --aas-bank-ink: #e4d0b0;
+    --aas-bank-bg: #3a4034;
+    --aas-bank-mid: #d6bd98;
+    --aas-bank-soft: #8a8070;
+    --aas-seller-fill: #677d6a;
+    --aas-seller-ink: #a8c4a8;
+    --aas-seller-bg: #243830;
+}
+:root[data-theme="eclipse-almond"] body.theme-bank,
+:root[data-theme="eclipse-almond"] body:not(.green):not(.theme-seller) {
+    --aas-on-accent: #0a0a0a;
+    --aas-busy: #d6bd98;
+    --aas-tent: #a09070;
+    --aas-free: #677d6a;
+    --aas-oof: #40534c;
+}
+:root[data-theme="eclipse-almond"] body.theme-seller,
+:root[data-theme="eclipse-almond"] body.green {
+    --aas-on-accent: #ffffff;
+    --aas-busy: #677d6a;
+    --aas-tent: #54665c;
+    --aas-free: #4a5a50;
+    --aas-oof: #d6bd98;
+}
+
+/* Eclipse + Almond — light: warm almond canvas (softened from raw #D6BD98 bg) */
+:root[data-theme="eclipse-almond-light"] {
+    color-scheme: light;
+    --aas-bg: #f4ebe0;
+    --aas-panel: #ffffff;
+    --aas-panel-2: #f7f1e8;
+    --aas-line: #b4a586;
+    --aas-line-strong: #9a8c70;
+    --aas-text: #1a3636;
+    --aas-muted: #6f7362;
+    --aas-on-accent: #0a0a0a;
+    --aas-danger: #c4314b;
+    --aas-ok: #40534c;
+    --aas-warning-text: #6f5a30;
+    --aas-shadow: 0 8px 32px rgb(26 54 54 / 12%);
+    --aas-cat-lift: 0%;
+    --aas-bank: #a89068;
+    --aas-bank-fill: #c4a878;
+    --aas-bank-ink: #5a4a30;
+    --aas-bank-bg: #efe4d4;
+    --aas-bank-mid: #a89068;
+    --aas-bank-soft: #8a8070;
+    --aas-seller-fill: #40534c;
+    --aas-seller-ink: #2a3a34;
+    --aas-seller-bg: #e4ebe6;
+}
+:root[data-theme="eclipse-almond-light"] body.theme-bank,
+:root[data-theme="eclipse-almond-light"] body:not(.green):not(.theme-seller) {
+    --aas-on-accent: #0a0a0a;
+    --aas-busy: #c4a878;
+    --aas-tent: #a09070;
+    --aas-free: #8a9a8c;
+    --aas-oof: #40534c;
+}
+:root[data-theme="eclipse-almond-light"] body.theme-seller,
+:root[data-theme="eclipse-almond-light"] body.green {
+    --aas-on-accent: #ffffff;
+    --aas-busy: #40534c;
+    --aas-tent: #677d6a;
+    --aas-free: #8a9a8c;
+    --aas-oof: #c4a878;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --aas-dur: 0ms;
+  }
+}

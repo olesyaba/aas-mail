@@ -15,12 +15,15 @@ fi
 APP_NAME="${APP_NAME:-AAS mail}"
 APP="${APP_DIR:-$HOME/Applications}/${APP_NAME}.app"
 BUNDLE_SERVER="${BUNDLE_SERVER:-0}"
-VERSION="${VERSION:-1.2.0}"
+VERSION="${VERSION:-$(sed -n 's/^ *"version": "\([^"]*\)".*/\1/p' "$ROOT/webapp.py" | head -1)}"  # single source: APP_META
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-swiftc -O *.swift -o "$APP/Contents/MacOS/EASMail" \
+# Deployment target must match LSMinimumSystemVersion below — without it swiftc
+# targets the build machine's macOS and the app silently needs that version.
+MACOS_MIN="${MACOS_MIN:-12.0}"
+swiftc -O -target "$(uname -m)-apple-macos${MACOS_MIN}" *.swift -o "$APP/Contents/MacOS/EASMail" \
   -framework Cocoa -framework WebKit -framework SwiftUI -framework Combine -framework UserNotifications
 
 [ -f AppIcon.icns ] || python3 make_icon.py
@@ -28,6 +31,10 @@ cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 [ -f TrayIcon.png ] || python3 make_icon.py
 cp TrayIcon.png "$APP/Contents/Resources/TrayIcon.png"
 [ -f "TrayIcon@2x.png" ] && cp "TrayIcon@2x.png" "$APP/Contents/Resources/TrayIcon@2x.png"
+# New-mail alert sounds for UNNotificationSound.named (must sit in Resources root).
+if [ -d Sounds ]; then
+  cp Sounds/*.caf "$APP/Contents/Resources/" 2>/dev/null || true
+fi
 
 if [ "$BUNDLE_SERVER" = "1" ]; then
   echo "Bundling eas-bridge server into the app…"
@@ -52,6 +59,9 @@ if [ "$BUNDLE_SERVER" = "1" ]; then
   fi
   rm -rf "$DEST/vendor/outlook_activesync_mcp"
   cp -R "$MCP_SRC" "$DEST/vendor/outlook_activesync_mcp"
+  # Bytecode from the builder's uv cache embeds that cache's path (/Users/<you>/…);
+  # the bundle compiles its own below.
+  find "$DEST/vendor" -name "__pycache__" -type d -prune -exec rm -rf {} +
   # Drop MCP-server-only module if present (keeps import surface lean).
   rm -f "$DEST/vendor/outlook_activesync_mcp/server.py" 2>/dev/null || true
 
@@ -61,8 +71,34 @@ if [ "$BUNDLE_SERVER" = "1" ]; then
     echo "error: uv not found — needed to create the bundled Python venv" >&2
     exit 1
   fi
-  "$UV" venv "$DEST/.venv" --python 3.12
-  "$UV" pip install --python "$DEST/.venv" "requests" "urllib3" "python-dateutil"
+  # Embed the interpreter itself, not a venv: a venv's bin/python is a symlink
+  # to the builder's ~/.local/share/uv/…, which does not exist on colleagues'
+  # Macs. uv-managed CPython (python-build-standalone) is a static, relocatable
+  # binary that finds its stdlib relative to itself.
+  "$UV" python install 3.12 >/dev/null
+  PY_BIN="$("$UV" python find --managed-python 3.12)"
+  PY_HOME="$(cd "$(dirname "$(readlink -f "$PY_BIN")")/.." && pwd)"
+  PY_LIB="$(basename "$(ls -d "$PY_HOME"/lib/python3.*/ | head -1)")"   # python3.12
+  mkdir -p "$DEST/python/bin" "$DEST/python/lib"
+  cp "$(readlink -f "$PY_BIN")" "$DEST/python/bin/python3"
+  # Stdlib minus what a headless HTTP server never imports (GUI, tests, pip, headers).
+  rsync -a --exclude '__pycache__' --exclude 'test/' --exclude 'idlelib/' --exclude 'tkinter/' \
+    --exclude 'turtledemo/' --exclude 'ensurepip/' --exclude 'lib2to3/' --exclude 'pydoc_data/' \
+    --exclude 'site-packages/*' --exclude 'config-3.*' --exclude '_tkinter*' --exclude '_test*' \
+    --exclude 'xxlimited*' "$PY_HOME/lib/$PY_LIB" "$DEST/python/lib/"
+  # sysconfig's build-time data records where the interpreter was installed — the
+  # builder's home directory. Nothing at runtime needs it; neutralise the path so a
+  # shared package carries no trace of who built it.
+  for f in "$DEST/python/lib/$PY_LIB"/_sysconfigdata*.py; do
+    [ -f "$f" ] && LC_ALL=C sed -i '' "s#${PY_HOME}#/opt/aas-mail/python#g; s#${HOME}#/Users/builder#g" "$f"
+  done
+  "$UV" pip install --quiet --python "$DEST/python/bin/python3" --target "$DEST/site-packages" \
+    "requests" "urllib3" "python-dateutil"
+  # Precompile once at build time: the bundle is read-only at runtime
+  # (PYTHONDONTWRITEBYTECODE) and must not be modified after signing, and
+  # hash-based .pyc stay valid whatever mtimes the zip round-trip leaves.
+  "$DEST/python/bin/python3" -m compileall -q -j0 --invalidation-mode unchecked-hash \
+    "$DEST/python/lib/$PY_LIB" "$DEST/site-packages" "$DEST/vendor" "$DEST/bridge.py" >/dev/null
   # No project_dir.txt → main.swift uses Resources/eas-bridge
 else
   echo "$ROOT" > "$APP/Contents/Resources/project_dir.txt"
@@ -80,7 +116,7 @@ cat > "$APP/Contents/Info.plist" <<P
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>${VERSION}</string>
 <key>CFBundleVersion</key><string>${VERSION}</string>
-<key>LSMinimumSystemVersion</key><string>12.0</string>
+<key>LSMinimumSystemVersion</key><string>${MACOS_MIN}</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
 </dict></plist>

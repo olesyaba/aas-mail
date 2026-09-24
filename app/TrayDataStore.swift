@@ -13,20 +13,39 @@ final class TrayDataStore: ObservableObject {
     @Published var dayOffset: Int = 0
     @Published var lastError: String?
     @Published var isRefreshing = false
+    /// Wall-clock of the last successful (or partial) day refresh — for footer “обновлено”.
+    @Published var lastRefreshed: Date?
     private(set) var hasSeller = false
+    /// Calendars the user switched off in the popover legend (account ids). Only
+    /// the popover view is filtered — the menu-bar countdown and reminders keep
+    /// covering every account.
+    @Published var hiddenAccounts: Set<String> =
+        Set(UserDefaults.standard.stringArray(forKey: "trayHiddenAccounts") ?? []) {
+        didSet { UserDefaults.standard.set(Array(hiddenAccounts), forKey: "trayHiddenAccounts") }
+    }
+    var visibleEvents: [TrayEvent] { events.filter { !hiddenAccounts.contains($0.accountId) } }
+
+    func toggleAccount(_ id: String) {
+        if hiddenAccounts.contains(id) { hiddenAccounts.remove(id) } else { hiddenAccounts.insert(id) }
+    }
 
     static let mainColor = "#501820"
     static let sellerColor = "#003830"
 
     /// Poll interval while the popover is open — the user is watching the list.
     static let activeInterval: TimeInterval = 60
-    /// Poll interval while the popover is closed. Every request resets
-    /// webapp.py's 15-minute idle window (`_last_activity` / `_cal_keepfresh`),
-    /// so polling on a short beat for the whole life of the app would force a
-    /// full ActiveSync sync every few minutes forever. A 20-minute beat is
-    /// longer than that window, so the backend actually gets to idle, while
-    /// the menu-bar label still notices events created/cancelled elsewhere.
-    static let idleInterval: TimeInterval = 20 * 60
+    /// Poll interval while the popover is closed. The backend's calendar refresh
+    /// is a SyncKey delta (a few changes, not a full resync), so a 5-minute beat
+    /// is cheap — and it bounds how long a reminder for a meeting moved or
+    /// cancelled elsewhere can stay scheduled at the old time.
+    static let idleInterval: TimeInterval = 5 * 60
+
+    private static let dayFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withFullDate]
+        f.timeZone = .autoupdatingCurrent
+        return f
+    }()
 
     private let client = TrayAPIClient()
     private var timer: Timer?
@@ -57,10 +76,28 @@ final class TrayDataStore: ObservableObject {
         Task { await refresh() }
     }
 
+    func setDayOffset(_ offset: Int) {
+        guard offset != dayOffset else { return }
+        dayOffset = offset
+        Task { await refresh() }
+    }
+
+    /// Refreshes asked for while one is running (timer tick + day switch + popover
+    /// open often coincide) collapse into a single follow-up pass, so the
+    /// backend never sees overlapping 2–6-request bursts from the tray.
+    private var refreshPending = false
+
     func refresh() async {
+        if isRefreshing { refreshPending = true; return }
         isRefreshing = true
         defer { isRefreshing = false }
+        repeat {
+            refreshPending = false
+            await refreshOnce()
+        } while refreshPending
+    }
 
+    private func refreshOnce() async {
         if !accountsResolved {
             do {
                 hasSeller = try await client.accountIds().contains("seller")
@@ -72,7 +109,7 @@ final class TrayDataStore: ObservableObject {
         }
         let cal = Calendar.current
         let now = Date()
-        let df = ISO8601DateFormatter(); df.formatOptions = [.withFullDate]; df.timeZone = TimeZone.current
+        let df = Self.dayFormatter
 
         // Menu-bar feed: today (upcoming only), fall back to tomorrow if empty.
         let todayStart = cal.startOfDay(for: now)
@@ -129,6 +166,7 @@ final class TrayDataStore: ObservableObject {
         lastError = notes.isEmpty ? nil : notes.joined(separator: " · ")
         labelEvents = label
         events = dayEvents
+        lastRefreshed = Date()
     }
 
     /// One account's fetch, as a Result so a failure on one side never
