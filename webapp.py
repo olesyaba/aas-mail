@@ -41,7 +41,7 @@ MAX_BODY = 40 * 1024 * 1024
 # Product identity (About page + UI chrome).
 APP_META = {
     "name": "AAS mail",
-    "version": "1.2.10",
+    "version": "1.2.11",
     "description": "Локальный клиент почты и календаря Alfa / Alfa-Seller поверх Exchange ActiveSync.",
     "contact_mm": "@olesya_ba",
     "thanks_intro": "Спасибо за тест-рейды и светлые идеи:",
@@ -299,12 +299,27 @@ def save_account_config(p: dict) -> dict:
     _write_config(cfg)
     backend = bridge.EasBackend(merged)
     login_ok, message = True, None
+    new_acct = Acct(aid, name, merged, green)
     try:
         with backend.lock:
-            settings_cmd.handle(backend.client, "status")
+            # The user just typed this password: try it for real. The upstream
+            # latch remembers an earlier 401 by password hash, so re-saving the
+            # same (correct) password failed at once without a single request.
+            backend.client.store.clear_auth_failed()
+            try:
+                settings_cmd.handle(backend.client, "status")
+            except Exception as e:  # noqa: BLE001
+                if getattr(e, "code", None) != "auth_failed":
+                    raise
+                # Exchange answers an odd 401 under load; one retry tells a
+                # wrong password from a hiccup (two tries cannot lock the account).
+                log.info("[%s] login check: 401, one retry", aid)
+                time.sleep(2)
+                backend.client.store.clear_auth_failed()
+                settings_cmd.handle(backend.client, "status")
     except Exception as e:  # noqa: BLE001
-        login_ok, message = False, str(e)
-    new_acct = Acct(aid, name, merged, green)
+        log.warning("[%s] login check after save failed: %s", aid, e)
+        login_ok, message = False, _friendly_error(new_acct, "settings", "status", e)
     new_acct.backend = backend
     ACCTS[aid] = new_acct
     if login_ok:
@@ -520,7 +535,8 @@ def _mail_list_paged(a: Acct, backend: bridge.EasBackend, params: dict) -> dict:
         collection_id, label = mail.resolve_collection(backend.client, params.get("folder"))
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "action": "list", "count": 0, "items": [],
-                "error": getattr(e, "code", None) or type(e).__name__, "message": str(e)}
+                "error": getattr(e, "code", None) or type(e).__name__,
+                "message": _friendly_error(a, "mail", "list", e)}
 
     box = _mail_box(a, collection_id)
     # The box holds projections of the fields its first dump asked for: a request
@@ -550,6 +566,19 @@ def _mail_list_paged(a: Acct, backend: bridge.EasBackend, params: dict) -> dict:
                      getattr(e, "status", "?"), collection_id)
             box["gen"], box["by_id"] = None, {}
         except Exception as e:  # noqa: BLE001
+            if getattr(e, "code", None) == "auth_failed":
+                raise  # keep the box, but never hide a password problem behind cached mail
+            if _is_backoff(e):
+                # Throttled: keep the box and its SyncKey and show what we have. A full
+                # dump now is exactly the extra load that kept Exchange throttling us
+                # (13:55, 17:14 on 24.09).
+                log.info("[%s] mail delta on %s deferred: %s", a.id, collection_id, e)
+                items = _mail_sorted_items(box)
+                has_more = not box.get("complete") and bool(box.get("next_cursor"))
+                return {"ok": True, "action": "list", "count": len(items), "items": items,
+                        "has_more": has_more, "next_cursor": box.get("next_cursor") if has_more else None,
+                        "delta": True, "stale": True, "cached": len(box["by_id"]),
+                        "message": _friendly_error(a, "mail", "list", e)}
             log.warning("[%s] mail delta failed on %s: %s — full dump", a.id, collection_id, e)
             box["gen"] = None
 
@@ -647,15 +676,43 @@ _MEETING_RESPONSE_STATUS = {
 }
 
 
+def _is_backoff(e) -> bool:
+    """Throttled (503) or password latch (401): more requests only make it worse —
+    never answer these with a heavier fallback (full dump / full sync)."""
+    return getattr(e, "code", None) in ("throttled", "auth_failed")
+
+
+def _auth_message(a: Acct) -> str:
+    """Which account refused the password — name and login (AAS-24-01)."""
+    login = (a.cfg.get("username") or "").strip()
+    who = f"«{a.name}»" + (f" (логин {login})" if login and login != "pending" else "")
+    return (f"Сервер {who} не принял логин или пароль. Проверьте их в Настройках → Аккаунты "
+            "(и подключение к VPN) и нажмите «Сохранить».")
+
+
+def _auth_refused(a: Acct) -> bool:
+    """True while the client's 401 latch is set — without creating a client."""
+    try:
+        return bool(a.backend and a.backend.client.store.auth_failed())
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _friendly_error(a: Acct, domain: str, action: str, e: Exception) -> str:
     """Keep the raw text in the log; give the UI a sentence a person can act on."""
     if getattr(e, "status", None) == 120 or "status 120" in str(e):
         return (f"Сервер {a.name} не смог отправить письмо (ошибка 120 — отправка почты на сервере "
                 "не работает). Письмо не ушло. Если в веб-почте тоже не отправляется — это сбой сервера, "
                 "сообщите администратору.")
+    status = getattr(e, "status", None)
+    if isinstance(status, int) and status > MOVE_STATUS_BASE:
+        why = _MOVE_FAILURE.get(status - MOVE_STATUS_BASE, f"код {status - MOVE_STATUS_BASE}")
+        return f"Письмо не перемещено: {why}."
     if getattr(e, "code", None) == "throttled":
         return (f"Сервер {a.name} временно ограничил число запросов. Подождите минуту — "
                 "автосинхронизация повторит сама.")
+    if getattr(e, "code", None) == "auth_failed":
+        return _auth_message(a)
     if domain == "events" and action == "respond":
         status = getattr(e, "status", None)
         if status in _MEETING_RESPONSE_STATUS:
@@ -946,7 +1003,8 @@ def folders_list(a: Acct, refresh: bool = False) -> dict:
         except Exception as e:  # noqa: BLE001
             log.warning("[%s] folders/list failed: %s", a.id, e)
             return {"ok": False, "action": "list", "count": 0, "items": [],
-                    "error": getattr(e, "code", None) or type(e).__name__, "message": str(e)}
+                    "error": getattr(e, "code", None) or type(e).__name__,
+                    "message": _friendly_error(a, "folders", "list", e)}
 
 
 def _ensure_foldercreate_tokens():
@@ -1026,7 +1084,10 @@ def folder_delete(a: Acct, folder_id: str) -> dict:
                                          el("FolderHierarchy", "ServerId", text=folder_id)))
             status = text_of(find(res, "FolderHierarchy", "Status")) or "?"
             if status != "1":
-                return {"ok": False, "error": "eas_status", "message": f"FolderDelete status {status}",
+                why = {"3": "это системная папка", "4": "папка уже удалена — обновите список папок",
+                       "6": "ошибка сервера, повторите через минуту",
+                       "9": "список папок устарел — обновите его и повторите"}.get(status, f"код {status}")
+                return {"ok": False, "error": "eas_status", "message": f"Папка не удалена: {why}",
                         "action": "delete", "count": 0, "items": []}
             backend.client.foldersync(force=True, full=True)
             return {"ok": True, "action": "delete", "count": 1, "items": [{"folder_id": folder_id}]}
@@ -1073,6 +1134,7 @@ def recount_unread_from_box(a: Acct, folder_id: str, box: dict) -> None:
 
 _SWEEP_FRESH_S = 60     # a folder refreshed this recently is only recounted
 _SWEEP_DRAIN_CALLS = 6  # «Ещё» pages per folder per sweep (Stalwart: ~2.5 s each)
+_SWEEP_BACKOFF_S = 600  # after Exchange throttled a sweep, leave it alone for a while
 _SWEEP_MIN_GAP_S = 240  # auto-sync ticks every 1–2 min; one Sync per folder that often invites Exchange throttling
 
 
@@ -1090,6 +1152,7 @@ def unread_sweep(a: Acct, filt, fields, *, force: bool = False) -> dict:
         return unread_snapshot(a)
 
     def run():
+        backoff = False
         try:
             backend = a.get()
             with backend.lock:
@@ -1100,23 +1163,31 @@ def unread_sweep(a: Acct, filt, fields, *, force: bool = False) -> dict:
                 try:
                     box = a.mail_boxes.get(fid)
                     if not (box and box.get("complete") and time.time() - box.get("ts", 0) < _SWEEP_FRESH_S):
-                        call(a, "mail", {"action": "list", "folder": fid, "limit": 40, "filter": filt, "fields": fields})
+                        r = call(a, "mail", {"action": "list", "folder": fid, "limit": 40, "filter": filt, "fields": fields})
+                        backoff = r.get("stale") or r.get("error") in ("throttled", "auth_failed")
                     for _ in range(_SWEEP_DRAIN_CALLS):
                         box = a.mail_boxes.get(fid) or {}
-                        if box.get("complete") or not box.get("next_cursor") or len(box.get("by_id") or {}) >= _MAIL_BOX_CAP:
+                        if backoff or box.get("complete") or not box.get("next_cursor") or len(box.get("by_id") or {}) >= _MAIL_BOX_CAP:
                             break
-                        call(a, "mail", {"action": "list", "folder": fid, "cursor": box["next_cursor"], "limit": 100})
+                        r = call(a, "mail", {"action": "list", "folder": fid, "cursor": box["next_cursor"], "limit": 100})
+                        backoff = r.get("error") in ("throttled", "auth_failed")
                     box = a.mail_boxes.get(fid)
                     if box is not None and box.get("by_id") is not None:
                         recount_unread_from_box(a, fid, box)
                 except Exception:  # noqa: BLE001 — one bad folder must not stop the rest
                     log.debug("[%s] unread sweep %s failed", a.id, fid, exc_info=True)
+                if backoff:
+                    log.info("[%s] unread sweep stopped at %s: server is throttling — back off %d s",
+                             a.id, fid, _SWEEP_BACKOFF_S)
+                    break
         except Exception as e:  # noqa: BLE001
             log.info("[%s] unread sweep failed: %s", a.id, e)
         finally:
             with a.unread_lock:
                 a.unread_sweeping = False
                 a.unread_ts = a.unread_sweep_ts = time.time()
+                if backoff:  # the next sweep only after the gap + back-off
+                    a.unread_sweep_ts += _SWEEP_BACKOFF_S
 
     threading.Thread(target=run, daemon=True).start()
     return unread_snapshot(a)
@@ -1463,6 +1534,19 @@ def _cal_load(a: Acct, start, end) -> bool:
     return True
 
 
+# AAS-24-02. Upstream stops a calendar listing after 8 pages. Exchange fills a page
+# with up to 25 events, Stalwart (Seller) with 1–2 — so a fresh Seller login showed
+# ~3 events and stopped. Page until the server is done, bounded by time instead;
+# whatever is left continues right away in the background (delta on the same key).
+_CAL_BUDGET_S = 90
+_CAL_MAX_PAGES = 400
+
+
+def _cal_more_soon(a: Acct) -> None:
+    """The listing was cut by the time budget: carry on from the same SyncKey."""
+    threading.Timer(1.0, cal_refresh_bg, args=(a,)).start()
+
+
 def _cal_full_sync(a: Acct, backend, start, end) -> None:
     """Prime SyncKey=0 and fill masters + expanded items (same window as before)."""
     from outlook_activesync_mcp.commands import calendar as cal_mod
@@ -1481,8 +1565,10 @@ def _cal_full_sync(a: Acct, backend, start, end) -> None:
         calendar_id, generation=None, window=cal_mod._WINDOW,
         options_children=opts, get_changes=True)
     _cal_apply_tree(tree, masters)
-    pages = 1
-    while more and pages < cal_mod._PAGE_CAP:
+    pages, t_start = 1, time.monotonic()
+    a.cal_step = "полная загрузка календаря"
+    while more and pages < _CAL_MAX_PAGES and time.monotonic() - t_start < _CAL_BUDGET_S:
+        a.cal_step = f"полная загрузка календаря, страница {pages + 1}"
         backend._pace()
         tree, more, gen = backend.client.sync_round(
             calendar_id, generation=gen, window=cal_mod._WINDOW)
@@ -1500,8 +1586,10 @@ def _cal_full_sync(a: Acct, backend, start, end) -> None:
                      truncated=truncated, filter=cal_mod._filter_type(days))
         _cal_overlay_prune(a.cal, t0)  # the server's view now includes earlier writes
     _cal_save(a)
-    log.info("[%s] calendar full: %d masters → %d events%s", a.id, len(masters), len(items),
-             " (truncated)" if truncated else "")
+    log.info("[%s] calendar full: %d masters → %d events in %d pages%s", a.id, len(masters), len(items),
+             pages, " (continuing)" if truncated else "")
+    if truncated:
+        _cal_more_soon(a)
 
 
 def _cal_delta_sync(a: Acct, backend, start, end) -> None:
@@ -1518,8 +1606,10 @@ def _cal_delta_sync(a: Acct, backend, start, end) -> None:
     masters = dict(c.get("masters") or {})
     gen = c["gen"]
     pages = changed = 0
-    while pages < cal_mod._PAGE_CAP:
+    t_start, more = time.monotonic(), False
+    while pages < _CAL_MAX_PAGES and time.monotonic() - t_start < _CAL_BUDGET_S:
         pages += 1
+        a.cal_step = f"обновление календаря, страница {pages}"
         backend._pace()
         prev_gen = gen
         tree, more, gen = backend.client.sync_round(
@@ -1538,9 +1628,12 @@ def _cal_delta_sync(a: Acct, backend, start, end) -> None:
     with a.cv:
         a.cal.update(items=items, masters=masters, gen=gen, cal_id=calendar_id,
                      ts=time.time(), loaded=True, error=None, range=(start, end),
-                     truncated=bool(c.get("truncated")), filter=cal_mod._filter_type(days))
+                     truncated=bool(more), filter=cal_mod._filter_type(days))
     _cal_save(a)
-    log.info("[%s] calendar delta: %d changes, %d masters → %d events", a.id, changed, len(masters), len(items))
+    log.info("[%s] calendar delta: %d changes, %d masters → %d events%s", a.id, changed, len(masters),
+             len(items), " (continuing)" if more else "")
+    if more:
+        _cal_more_soon(a)
 
 
 def _cal_refresh(a: Acct, claimed: bool = False, force: bool = False):
@@ -1587,12 +1680,18 @@ def _cal_refresh(a: Acct, claimed: bool = False, force: bool = False):
                     log.info("[%s] calendar delta Sync status %s — full sync",
                              a.id, getattr(e, "status", "?"))
                 except Exception as e:  # noqa: BLE001
+                    if _is_backoff(e):
+                        raise  # the cached calendar stays; a full sync would only add load
                     log.warning("[%s] calendar delta failed: %s — full sync", a.id, e)
             _cal_full_sync(a, backend, start, end)
     except Exception as e:  # noqa: BLE001
-        log.warning("[%s] calendar refresh failed: %s", a.id, e)
+        step = getattr(a, "cal_step", "") or "синхронизация календаря"
+        log.warning("[%s] calendar refresh failed at «%s»: %s", a.id, step, e)
+        msg = _friendly_error(a, "events", "list", e)
+        if a.name not in msg:  # say which account and where it stopped (AAS-24-02)
+            msg = f"Календарь «{a.name}»: {msg} (шаг: {step}). Нажмите «Синхронизировать», чтобы продолжить."
         with a.cv:
-            c["error"], c["error_ts"] = str(e), time.time()
+            c["error"], c["error_ts"] = msg, time.time()
     finally:
         with a.cv:
             c["loading"] = False
@@ -1809,9 +1908,12 @@ DEFAULT_PREFS = {
     "mail_sound": "notice14",
     # Mail period filter (EAS FilterType) shared by all accounts: 3=1 wk, 4=2 wk, 5=1 mo, 0=all.
     "mail_window": 5,
+    # Mail list order (AAS-24-10): date_desc (default) | date_asc | from | subject.
+    "mail_sort": "date_desc",
     # Working day for «Свободно у всех» suggestions (local hours).
     "work_start": 9, "work_end": 18,
 }
+MAIL_SORTS = ("date_desc", "date_asc", "from", "subject")
 _prefs_lock = threading.Lock()
 
 
@@ -1856,6 +1958,8 @@ def update_prefs(patch: dict) -> dict:
             if k == "auto_sync" and v not in (0, 1, 2, 5, 10):
                 continue
             if k == "mail_window" and v not in (0, 3, 4, 5):
+                continue
+            if k == "mail_sort" and v not in MAIL_SORTS:
                 continue
             # Appearance: system | light | dark | StylesBA palettes (dark + light).
             if k == "theme" and v not in (
@@ -2447,7 +2551,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/accounts":
                 return self._json({"ok": True, "accounts": [
                     {"id": x.id, "name": x.name, "email": x.email, "green": x.green,
-                     "unread": sum(x.unread.values())} for x in ACCTS.values()]})
+                     "unread": sum(x.unread.values()),
+                     # Named per account, so the UI can say WHICH one refused (AAS-24-01).
+                     "auth_error": _auth_message(x) if _auth_refused(x) else None}
+                    for x in ACCTS.values()]})
             if path == "/api/account-config":
                 if params.get("action") == "get":
                     return self._json({"ok": True, **get_account_config()})
@@ -2739,6 +2846,46 @@ def _patch_sync_status_135():
     EasClient.sync_round = sync_round_safe
 
 
+MOVE_STATUS_BASE = 1000
+_MOVE_FAILURE = {
+    1: "письмо уже перемещено или удалено в другом месте — список обновится",
+    2: "папка назначения не найдена — обновите список папок",
+    4: "письмо уже лежит в этой папке",
+    5: "сервер не смог переместить письмо, повторите через минуту",
+    7: "письмо сейчас заблокировано сервером, повторите через минуту",
+}
+
+
+def _patch_moveitems_status():
+    """AAS-24-03. In MoveItems, Status 3 means *success* (MS-ASCMD: 1 bad source,
+    2 bad destination, 3 success, 4 same folder, 5+ failures). Upstream read it with
+    Sync semantics (3 = stale SyncKey → «recovery resync») and re-sent the move; the
+    message was already in «Удалённые», so the retry failed and the user saw an error
+    for a delete that had worked — and «succeeded» on the second click."""
+    try:
+        from outlook_activesync_mcp.client import EasClient
+        from outlook_activesync_mcp.wbxml import find_all, text_of
+    except ImportError:
+        return
+    if getattr(EasClient._status_of, "_eas_move_ok", False):
+        return
+    orig = EasClient._status_of
+
+    def _status_of(self, cmd, tree):
+        if cmd == "MoveItems" and tree is not None:
+            codes = [text_of(n) for n in find_all(tree, "Move", "Status")]
+            bad = [c for c in codes if c and c != "3"]
+            if not bad:
+                return "1"  # every move succeeded → plain success for the client
+            # A MoveItems failure code must not be read as a generic one ("1" would
+            # mean success to the client) — shift it into its own range.
+            return str(MOVE_STATUS_BASE + int(bad[0]))
+        return orig(self, cmd, tree)
+
+    _status_of._eas_move_ok = True  # type: ignore[attr-defined]
+    EasClient._status_of = _status_of
+
+
 def _patch_foldersync_invalid_key():
     """FolderSync status 9 = invalid SyncKey (MS-ASCMD). Upstream treats it as
     «transient» and resends the *same* body — if that body had a non-zero SyncKey
@@ -2861,6 +3008,7 @@ def main():
     _patch_deep_foldersync()
     _patch_sync_status_135()
     _patch_foldersync_invalid_key()
+    _patch_moveitems_status()
     _patch_calendar_attendees()
     _patch_event_update_attendees()
     _write_runtime_token()

@@ -13,6 +13,8 @@ import Combine
     private var cancellables = Set<AnyCancellable>()
     private let notifications = NotificationScheduler()
     private let floatingReminders = FloatingReminderController(leadMinutes: ReminderLead.minutes)
+    /// Inbox unread of all accounts (from the web UI) — shown in the icon tooltip.
+    private var unreadCount = 0
 
     private var panel: NSPanel?
     private var hosting: NSHostingView<TrayPopoverView>?
@@ -57,7 +59,13 @@ import Combine
         labelTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshLabel() }
         }
-        for name in [Notification.Name.easShowCalendar, .easCreateEvent] {
+        NotificationCenter.default.addObserver(forName: .easUnreadChanged, object: nil, queue: .main) { [weak self] n in
+            MainActor.assumeIsolated {
+                self?.unreadCount = (n.object as? NSNumber)?.intValue ?? 0
+                self?.refreshLabel()
+            }
+        }
+        for name in [Notification.Name.easShowCalendar, .easCreateEvent, .easShowMain] {
             NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in self?.closePanel() }
             }
@@ -107,10 +115,14 @@ import Combine
             })
             .sorted(by: { $0.1 < $1.1 })
             .first?.0 {
-            statusItem.button?.toolTip = "\(next.subject)\nAAS mail — календарь"
+            statusItem.button?.toolTip = "\(next.subject)\nAAS mail — календарь" + unreadLine
         } else {
-            statusItem.button?.toolTip = "AAS mail — календарь"
+            statusItem.button?.toolTip = "AAS mail — календарь" + unreadLine
         }
+    }
+
+    private var unreadLine: String {
+        unreadCount > 0 ? "\nНепрочитанных во «Входящих»: \(unreadCount)" : ""
     }
 
     @objc private func togglePanel() {

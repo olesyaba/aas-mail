@@ -9,6 +9,10 @@ extension Notification.Name {
     static let easReminderLeadChanged = Notification.Name("easReminderLeadChanged")
     /// Tray «Создать»: open the main window's «Новое событие» form. userInfo["day"] = "YYYY-MM-DD".
     static let easCreateEvent = Notification.Name("easCreateEvent")
+    /// Tray «Почта»: bring the main window back (it may have been closed — AAS-24-06).
+    static let easShowMain = Notification.Name("easShowMain")
+    /// Inbox unread total changed (object: NSNumber) — Dock badge + tray tooltip (AAS-24-05).
+    static let easUnreadChanged = Notification.Name("easUnreadChanged")
 }
 
 /// Meeting reminder lead time chosen in Settings; 0 = no reminders.

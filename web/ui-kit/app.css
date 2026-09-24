@@ -806,3 +806,22 @@ input[type="checkbox"].aas-sw:focus-visible { outline: 2px solid var(--aas-accen
 .aas-quote__hdr { margin-bottom: 10px; line-height: 1.5; }
 .aas-quote__hdr b { color: var(--aas-text, inherit); font-weight: 600; }
 .aas-quote__body { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Account whose server refused the password (AAS-24-01) */
+.aas-tab--autherr { box-shadow: inset 0 -2px 0 var(--aas-danger); }
+.aas-tab--autherr::after { content: "!"; margin-left: 6px; font-weight: 700; color: var(--aas-danger); }
+
+/* AAS-24-08: delete button on the user's own folders, shown on hover/focus. */
+.aas-folder__del{border:0;background:none;color:var(--aas-muted);padding:0 4px;font-size:12px;cursor:pointer;visibility:hidden}
+.aas-folder:hover .aas-folder__del,.aas-folder__del:focus-visible{visibility:visible}
+.aas-folder__del:hover{color:var(--aas-danger, #c0392b)}
+
+/* Mail header row: the list bar and the reader toolbar share one height, so their
+   bottom lines meet (no step); the toolbar stays on one line and scrolls if narrow. */
+#listbar, #rtools { box-sizing: border-box; height: 50px; min-height: 50px; }
+#rtools { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+#rtools::-webkit-scrollbar { display: none; }
+#rtools .aas-btn { flex: none; white-space: nowrap; padding: 5px 12px; font-size: var(--aas-t-sm); }
+#rtools #mv { flex: none; width: auto; max-width: 180px; }
+/* Read / unread: the same dot icons as the selection bar. */
+#rtools .aas-btn .aas-readdot { display: inline-block; margin-right: 6px; width: 9px; height: 9px; vertical-align: 0; }

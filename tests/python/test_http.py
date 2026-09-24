@@ -283,7 +283,7 @@ class UiContractTest(unittest.TestCase):
 
     def test_folder_actions_handled_by_webapp(self):
         acts = {a for d, a, _ in ui_api_calls() if d == "folders"}
-        self.assertEqual(acts, {"list", "create"})
+        self.assertEqual(acts, {"list", "create", "delete"})  # all routed in webapp.api_call
 
     def test_dom_ids_used_by_script_exist(self):
         script = INDEX[INDEX.index("<script>"):]

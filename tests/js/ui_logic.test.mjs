@@ -293,3 +293,42 @@ test('reply form shows the original under an Outlook header block', () => {
     assert.ok(html.includes(s), s);
   assert.ok(!html.includes('Копия'), 'no empty Cc line');
 });
+
+test('Dock badge = Inbox unread of all accounts, sent on change (AAS-24-05)', () => {
+  const sent = [];
+  const {paintTabBadges, ctx} = load(['paintTabBadges']);
+  ctx.window = {webkit: {messageHandlers: {aasBadge: {postMessage: v => sent.push(v)}}}};
+  vm.runInContext(`accounts = [{id: 'main'}, {id: 'seller'}];
+    inboxIds.main = '14'; inboxIds.seller = 'i/1';
+    unreadByAcct = {main: {folders: {'14': 3, '20': 50}, total: 53}, seller: {folders: {'i/1': 2}, total: 2}};`, ctx);
+  paintTabBadges(); paintTabBadges();
+  vm.runInContext(`unreadByAcct.main.folders['14'] = 0; unreadByAcct.seller.folders['i/1'] = 0;`, ctx);
+  paintTabBadges();
+  assert.deepEqual(sent, [5, 0], 'other folders do not count; repeats are not re-sent; 0 clears');
+});
+
+test('mail list sort: newest first by default, threads by latest message (AAS-24-10)', () => {
+  const {sortGroups} = load(['sortGroups']);
+  const g = (key, received, name, subject) => ({key, items: [{received, from: {name}, subject}]});
+  const mk = () => [g('a', '2026-09-20T10:00', 'Борис', 'Отчёт'), g('b', '2026-09-24T09:00', 'Анна', 'Re: Бюджет'),
+    g('c', '2026-09-22T12:00', 'Анна', 'Встреча')];
+  const keys = list => list.map(x => x.key).join('');
+  assert.equal(keys(sortGroups(mk())), 'bca');
+  assert.equal(keys(sortGroups(mk(), 'date_asc')), 'acb');
+  assert.equal(keys(sortGroups(mk(), 'from')), 'bca', 'same sender → newest first');
+  assert.equal(keys(sortGroups(mk(), 'subject')), 'bca', 'Re: is ignored');
+});
+
+test('↓/↑ walk the mail list and stop at the ends (AAS-24-07)', () => {
+  const {listStep, ctx} = load(['listStep']);
+  const rows = ['b', 'c', 'a'].map(k => ({dataset: {key: 'i:' + k}}));
+  ctx.document.querySelectorAll = sel => sel === '#rows .aas-row' ? rows : [];
+  vm.runInContext(`prefs.threads = false; allItems = [
+    {item_id: 'a', received: '1'}, {item_id: 'b', received: '3'}, {item_id: 'c', received: '2'}];
+    openGroup = g => { curKey = g.key; };`, ctx);
+  assert.equal(listStep(1), 'i:b', 'nothing open → first row');
+  assert.equal(listStep(1), 'i:c');
+  assert.equal(listStep(1), 'i:a');
+  assert.equal(listStep(1), null, 'last row: stays');
+  assert.equal(listStep(-1), 'i:c');
+});

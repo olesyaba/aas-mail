@@ -371,24 +371,37 @@ struct TrayPopoverView: View {
                     Spacer(minLength: 0)
                 }
             }
-            HStack(spacing: 8) {
+            // Links keep one line each: with three of them «Календарь» used to wrap.
+            HStack(spacing: 6) {
                 accountLegend
-                Spacer(minLength: 4)
+                Spacer(minLength: 2)
                 if let t = store.lastRefreshed, store.lastError == nil {
                     Text(refreshedLabel(t))
                         .font(.system(size: 9))
                         .foregroundColor(.secondary.opacity(0.8))
+                        .lineLimit(1)
+                        .fixedSize()
                 }
+                Button("Почта") {
+                    NotificationCenter.default.post(name: .easShowMain, object: nil)
+                }
+                .font(.system(size: 11, weight: .medium))
+                .buttonStyle(.plain)
+                .foregroundColor(.accentColor)
+                .lineLimit(1).fixedSize()
+                .help("Открыть окно почты (если оно было закрыто)")
                 Button("Создать") { createInMainWindow() }
                     .font(.system(size: 11, weight: .medium))
                     .buttonStyle(.plain)
                     .foregroundColor(.accentColor)
+                    .lineLimit(1).fixedSize()
                 Button("Календарь") {
                     NotificationCenter.default.post(name: .easShowCalendar, object: nil)
                 }
                 .font(.system(size: 11, weight: .medium))
                 .buttonStyle(.plain)
                 .foregroundColor(.accentColor)
+                .lineLimit(1).fixedSize()
                 .help("Открыть полный календарь")
             }
         }

@@ -45,7 +45,10 @@ try {
         <label class="aas-toggle aas-toggle--inline" title="Группировать письма в диалоги"><input type="checkbox" class="aas-sw" id="thr"> Цепочки</label>
         <select id="window" title="За какой период показывать письма">
           <option value="3">1 нед.</option><option value="4">2 нед.</option>
-          <option value="5" selected>1 мес.</option><option value="0">Все</option></select></div>
+          <option value="5" selected>1 мес.</option><option value="0">Все</option></select>
+        <select id="sort" title="Порядок писем (цепочки — по последнему письму); применяется к загруженным письмам, «Ещё» догружает более старые">
+          <option value="date_desc" selected>Новые сверху</option><option value="date_asc">Старые сверху</option>
+          <option value="from">По отправителю</option><option value="subject">По теме</option></select></div>
       <div id="bulkbar" class="aas-bulkbar" hidden>
         <label class="aas-bulkbar__all" title="Выбрать все на экране"><input type="checkbox" id="selall"></label>
         <span id="selcount" class="aas-bulkbar__count"></span>
@@ -169,7 +172,7 @@ function fmtDate(s) {  // "YYYY-MM-DD HH:MM" local from the API
 }
 
 /* ---------- preferences (kept on the server) ---------- */
-let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 2, cal_view: 'week', links: [], favorite_folders: [], theme: 'system', mail_sound: 'notice14'};
+let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 2, cal_view: 'week', links: [], favorite_folders: [], theme: 'system', mail_sound: 'notice14', mail_sort: 'date_desc'};
 /** Default light/dark/system + StylesBA (dark where readable, plus light variants). */
 const THEME_IDS = ['light', 'dark',
   'navy-orange', 'navy-orange-light',
@@ -213,6 +216,29 @@ const closeModalSafe = () => { if (confirmDiscard()) closeModal(); };
 $('#modal').addEventListener('input', () => { $('#modal').dataset.dirty = '1'; });
 $('#ov').addEventListener('mousedown', e => { if (e.target.id === 'ov') closeModalSafe(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && modalOpen()) closeModalSafe(); });
+/** AAS-24-07: ↑/↓ (or k/j) walk the mail list and open the letter, like Outlook.
+ *  Ignored while typing, in a modal, or outside the mail view; focus stays put. */
+function listStep(dir) {
+  const rows = [...document.querySelectorAll('#rows .aas-row')];
+  if (!rows.length) return null;
+  const i = rows.findIndex(r => r.dataset.key === curKey);
+  const next = rows[i < 0 ? 0 : Math.min(rows.length - 1, Math.max(0, i + dir))];
+  if (!next || next.dataset.key === curKey) return null;
+  const g = groupsOnScreen().find(x => x.key === next.dataset.key);
+  if (!g) return null;
+  openGroup(g);
+  next.scrollIntoView?.({block: 'nearest'});
+  return g.key;
+}
+document.addEventListener('keydown', e => {
+  if (view !== 'mail' || modalOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target, tag = (t?.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select' || t?.isContentEditable) return;
+  const dir = {ArrowDown: 1, j: 1, ArrowUp: -1, k: -1}[e.key];
+  if (!dir) return;
+  e.preventDefault();
+  listStep(dir);
+});
 
 let modalOff = {x: 0, y: 0};
 function resetModalPos() {
@@ -267,20 +293,49 @@ function setBrand() {
   $('#brand').textContent = aboutMeta.name || 'AAS mail';
   document.title = aboutMeta.name + (view === 'cal' ? ' · календарь' : ' · почта') + (a?.green ? ' · ' + a.name : '');
 }
+/* AAS-24-01: which account refused the password. Tabs of that account get a red
+   mark + tooltip; each new refusal is announced once, by name (and login). */
+const authShown = {};
+function applyAuthState(list) {
+  (list || []).forEach(x => {
+    const acc = accounts.find(a => a.id === x.id); if (acc) acc.auth_error = x.auth_error || null;
+    if (x.auth_error && authShown[x.id] !== x.auth_error) toast(x.auth_error, true);
+    authShown[x.id] = x.auth_error || null;
+  });
+  document.querySelectorAll('.aas-tab').forEach(b => {
+    const err = accounts.find(a => a.id === (b.dataset.acct || 'main'))?.auth_error;
+    b.classList.toggle('aas-tab--autherr', !!err);
+    if (err) b.title = err; else b.removeAttribute('title');
+  });
+  paintTabBadges();  // mail tabs: counters tooltip unless a refusal must be shown
+}
+async function checkAuth() {
+  try { applyAuthState((await api('accounts', {})).accounts); } catch (_) { /* server down: the status pill says so */ }
+}
+/** Inbox unread of one account — the rule for tab badges and the Dock badge. */
+function inboxUnread(acct) {
+  const u = unreadByAcct[acct] || {}, inbox = inboxIds[acct];
+  return (inbox && u.folders && u.folders[inbox] != null) ? u.folders[inbox] : (u.total || 0);
+}
+let dockBadgeSent = null;
 function paintTabBadges() {
   document.querySelectorAll('.aas-tab[data-view=mail]').forEach(b => {
     const badge = b.querySelector('.aas-badge'); if (!badge) return;
     const acct = b.dataset.acct || 'main';
     const u = unreadByAcct[acct] || {};
     // Tab shows Inbox unread (Outlook-style), not the sum of every opened folder.
-    const inbox = inboxIds[acct];
-    const n = (inbox && u.folders && u.folders[inbox] != null)
-      ? u.folders[inbox]
-      : (u.total || 0);
+    const n = inboxUnread(acct);
     badge.hidden = !n;
     badge.textContent = n > 99 ? '99+' : String(n);
-    b.title = `Входящие: ${n} непрочитанных · всего в ящике: ${u.total || 0}`;
+    const auth = accounts.find(a => a.id === acct)?.auth_error;
+    b.title = auth || `Входящие: ${n} непрочитанных · всего в ящике: ${u.total || 0}`;
   });
+  // AAS-24-05: same rule on the Dock icon (sum of every account's Inbox).
+  const total = accounts.reduce((sum, a) => sum + inboxUnread(a.id), 0);
+  if (total !== dockBadgeSent) {
+    dockBadgeSent = total;
+    try { window.webkit?.messageHandlers?.aasBadge?.postMessage(total); } catch (_) {}
+  }
 }
 /** Background results from the server (e.g. invitation mails sent after a meeting
  *  was created) arrive with the unread counters; each is shown once. */
@@ -341,6 +396,28 @@ async function sweepUnread(acct = ACCT, force = false) {
 }
 function favKey(fid, acct = ACCT) { return `${acct}:${fid}`; }
 function isFav(fid) { return (prefs.favorite_folders || []).includes(favKey(fid)); }
+/** AAS-24-08: delete one of the user's folders. Exchange removes it together with its
+ *  letters and subfolders, so the dialog says exactly that and names what goes. */
+function confirmFolderDelete(fid) {
+  const f = folders.find(x => x.folder_id === fid);
+  if (!f || String(f.type) !== '12') return;
+  const subs = folders.filter(x => x.parent_id === fid).length;
+  openModal(`<h3>Удалить папку «${esc(f.name)}»?</h3>
+    <p>Папка будет удалена на сервере <b>вместе со всеми письмами</b>${subs ? ` и вложенными папками (${subs})` : ''}. Отменить это нельзя.
+    Нужные письма сначала перенесите в другую папку.</p>
+    <div class="acts2"><button class="aas-btn" id="fdcancel">Отмена</button><button class="aas-btn aas-btn--danger" id="fdok">Удалить папку и письма</button></div>`);
+  $('#fdcancel').onclick = closeModal;
+  $('#fdok').onclick = guard(async () => {
+    $('#fdok').disabled = true;
+    try { await api('folders', {action: 'delete', folder_id: fid}); }
+    finally { const b = $('#fdok'); if (b) b.disabled = false; }
+    closeModal(); toast('Папка «' + f.name + '» удалена');
+    if (isFav(fid)) await toggleFav(fid);
+    await refreshFolders();
+    if (curFolder === fid || !folders.some(x => x.folder_id === curFolder)) openFolder(inboxIds[ACCT] || folders[0]?.folder_id);
+    refreshUnread(ACCT, true).catch(() => {});
+  });
+}
 async function toggleFav(fid) {
   const k = favKey(fid); const set = new Set(prefs.favorite_folders || []);
   if (set.has(k)) set.delete(k); else set.add(k);
@@ -463,9 +540,16 @@ async function refreshInboxBadge(id) {
 }
 let autoBusy = false;
 async function autoSyncTick() {
-  if (autoBusy || syncing || document.hidden) return;
+  if (autoBusy || syncing) return;
   autoBusy = true;
   try {
+    if (document.hidden) {
+      // Window closed/minimised: keep Inbox counters, new-mail alerts and the Dock
+      // badge alive (AAS-24-05) — but skip the open folder and the calendar grid.
+      await Promise.allSettled(accounts.map(a => refreshInboxBadge(a.id)));
+      paintTabBadges();
+      return;
+    }
     const jobs = [];
     if (view === 'mail' && !searchQ && curFolder) jobs.push(loadListQuiet());
     if (view === 'cal' && !modalOpen()) jobs.push(loadCal(true));
@@ -473,6 +557,7 @@ async function autoSyncTick() {
     await Promise.allSettled(jobs);
     accounts.forEach(a => sweepUnread(a.id));
     paintTabBadges();
+    await checkAuth();
     lastSync = new Date(); setSyncText();
   } finally { autoBusy = false; }
 }
@@ -573,9 +658,9 @@ function showAcctError(e) {
   $('#dot').className = 'aas-status-dot aas-status-dot--err';
   const a = accounts.find(x => x.id === ACCT);
   $('#folders').innerHTML = '';
-  $('#rows').innerHTML = `<div class="aas-empty"><b>Не удалось подключиться${a?.green ? ' к «' + esc(a.name) + '»' : ''}</b><br><span style="font-size:13px">${esc(e.message)}</span><br><br>
+  $('#rows').innerHTML = `<div class="aas-empty"><b>Не удалось подключиться к «${esc(a?.name || 'Alfa-Bank')}»</b><br><span style="font-size:13px">${esc(e.message)}</span><br><br>
     <button class="aas-btn aas-btn--primary" id="retrybtn">Повторить вход</button><div class="hint">Если менялся пароль или включали VPN, нажмите «Повторить вход».</div></div>`;
-  $('#retrybtn').onclick = guard(async () => { $('#rows').innerHTML = '<div class="aas-empty">Подключение…</div>'; await api('retry', {}); loadFolders(); });
+  $('#retrybtn').onclick = guard(async () => { $('#rows').innerHTML = '<div class="aas-empty">Подключение…</div>'; await api('retry', {}); checkAuth(); loadFolders(); });
 }
 function renderFolders(items) {
   folderItems = items;
@@ -595,7 +680,9 @@ function renderFolders(items) {
     const n = counts[f.folder_id] || 0, more = partial.has(f.folder_id);
     const badge = n ? `<span class="aas-badge" title="${more ? 'Не меньше ' + n + ' непрочитанных — папка ещё догружается' : n + ' непрочитанных за период'}">${n > 99 ? '99+' : n}${more && n <= 99 ? '+' : ''}</span>` : '';
     const pin = `<button class="aas-folder__pin ${isFav(f.folder_id) ? 'on' : ''}" data-pin="${esc(f.folder_id)}" title="Избранное">${isFav(f.folder_id) ? '★' : '☆'}</button>`;
-    return `<div class="aas-folder ${f.folder_id === curFolder ? 'on' : ''}" data-id="${esc(f.folder_id)}" style="padding-left:${10 + d * 16}px" title="${esc(f.name)}"><span class="aas-folder__name">${esc(f.name)}</span>${badge}${pin}</div>`;
+    // AAS-24-08: only the user's own folders (EAS type 12) can be deleted.
+    const del = String(f.type) === '12' ? `<button class="aas-folder__del" data-del="${esc(f.folder_id)}" title="Удалить папку" aria-label="Удалить папку «${esc(f.name)}»">🗑</button>` : '';
+    return `<div class="aas-folder ${f.folder_id === curFolder ? 'on' : ''}" data-id="${esc(f.folder_id)}" style="padding-left:${10 + d * 16}px" title="${esc(f.name)}"><span class="aas-folder__name">${esc(f.name)}</span>${badge}${del}${pin}</div>`;
   };
   let html = '';
   const total = u.total || 0;
@@ -605,10 +692,11 @@ function renderFolders(items) {
   html += `<div class="aas-folder-tools"><button class="aas-btn" id="newfolder" title="Создать новую папку">＋ Папка</button></div>`;
   $('#folders').innerHTML = html;
   document.querySelectorAll('.aas-folder[data-id]').forEach(el => el.onclick = e => {
-    if (e.target.closest('[data-pin]')) return;
+    if (e.target.closest('[data-pin],[data-del]')) return;
     openFolder(el.dataset.id);
   });
   document.querySelectorAll('[data-pin]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleFav(b.dataset.pin); });
+  document.querySelectorAll('[data-del]').forEach(b => b.onclick = e => { e.stopPropagation(); confirmFolderDelete(b.dataset.del); });
   const nf = $('#newfolder');
   if (nf) nf.onclick = guard(async () => {
     // window.prompt() silently returns null in the app's WKWebView — a real form instead.
@@ -718,6 +806,19 @@ function groupItems(items) {
     const g = map.get(k); g.items.sort((a, b) => (b.received || '').localeCompare(a.received || '')); return g;
   });
 }
+/** AAS-24-10: list order. A thread sorts by its newest message (items[0]);
+ *  sender/subject fall back to newest-first so equal keys keep a stable order. */
+function sortGroups(groups, mode = 'date_desc') {
+  const at = g => g.items[0].received || '';
+  const newest = (a, b) => at(b).localeCompare(at(a));
+  const text = {
+    from: g => who(g.items[0].from).toLowerCase(),
+    subject: g => normSubj(g.items[0].thread_topic || g.items[0].subject),
+  }[mode];
+  if (mode === 'date_asc') return groups.sort((a, b) => at(a).localeCompare(at(b)));
+  if (text) return groups.sort((a, b) => text(a).localeCompare(text(b), 'ru') || newest(a, b));
+  return groups.sort(newest);
+}
 function renderList(hasMore) {
   const box = $('#rows'); box.innerHTML = '';
   const groups = groupsOnScreen();
@@ -726,8 +827,7 @@ function renderList(hasMore) {
   selectedKeys = new Set([...selectedKeys].filter(k => alive.has(k)));
   if (!allItems.length) box.innerHTML = '<div class="aas-empty">Писем нет</div>';
   const frag = document.createDocumentFragment();  // one reflow for the whole list
-  groups.sort((a, b) => (b.items[0].received || '').localeCompare(a.items[0].received || ''))
-    .forEach(g => frag.appendChild(rowEl(g)));
+  sortGroups(groups, prefs.mail_sort).forEach(g => frag.appendChild(rowEl(g)));
   if (hasMore) {
     const more = document.createElement('div'); more.className = 'more';
     more.innerHTML = '<button class="aas-btn">Ещё</button>'; more.firstChild.onclick = () => loadListGuarded(false); frag.appendChild(more);
@@ -778,8 +878,8 @@ function openGroup(g) {
     <div id="rtools" class="aas-reader-tools">
       <button class="aas-btn" data-a="reply">Ответить</button><button class="aas-btn" data-a="replyall">Ответить всем</button>
       <button class="aas-btn" data-a="fwd">Переслать</button><button class="aas-btn aas-btn--danger" data-a="del">Удалить</button>
-      <button class="aas-btn" data-a="unread" title="Отметить непрочитанным">✉ Непрочитано</button>
-      <button class="aas-btn" data-a="read" title="Отметить прочитанным">✓ Прочитано</button>
+      <button class="aas-btn" data-a="read" title="Отметить прочитанным"><span class="aas-readdot aas-readdot--read"></span>Прочитано</button>
+      <button class="aas-btn" data-a="unread" title="Отметить непрочитанным"><span class="aas-readdot"></span>Непрочитано</button>
       <button class="aas-btn aas-btn--ghost" data-a="all">Развернуть все</button>
       <select id="mv" style="width:auto"><option value="">Переместить в…</option>${folders.map(f => `<option value="${esc(f.folder_id)}">${esc(f.name)}</option>`).join('')}</select>
     </div>
@@ -835,7 +935,9 @@ async function loadCard(c) {
   if (!c.m.is_read) {
     c.m.is_read = true; c.el.classList.remove('unread');
     api('mail', {action: 'mark_read', item_ids: [c.m.item_id], read: true}).catch(() => {});
-    document.querySelector(`.aas-row[data-key="${CSS.escape(curKey || '')}"]`)?.classList.toggle('unread', curGroup.items.some(x => !x.is_read));
+    // Redraw the row so its read dot flips too (AAS-24-07), not only the bold style.
+    const row = document.querySelector(`.aas-row[data-key="${CSS.escape(curKey || '')}"]`);
+    if (row && curGroup) row.replaceWith(rowEl(curGroup));
     recountOpenFolder();
   }
 }
@@ -937,6 +1039,7 @@ function afterRemove(g) {
   renderList(!!nextCursor); $('#reader').innerHTML = '<div class="aas-empty">Выберите письмо</div>';
 }
 
+$('#sort').onchange = e => { savePrefs({mail_sort: e.target.value}); if (allItems.length) renderList(!!nextCursor); };
 $('#window').onchange = () => { savePrefs({mail_window: +$('#window').value}); loadListGuarded(true); };
 $('#thr').onchange = e => { savePrefs({threads: e.target.checked}); if (allItems.length) renderList(!!nextCursor); if (curGroup) { curKey = null; $('#reader').innerHTML = '<div class="aas-empty">Выберите письмо</div>'; } };
 $('#search').addEventListener('keydown', e => {
@@ -1472,9 +1575,15 @@ const loadCal = guard(async (quiet = false) => {
   if (j.cached_age > 180 && view === 'cal') setTimeout(() => { if (view === 'cal') loadCal(); }, 40000);
   // Join links are parsed once per load, not on every redraw of the grid.
   events = j.items.map(e => { const s = new Date(e.start_iso); let en = e.end ? localDate(e.end) : s; if (isNaN(en) || en < s) en = s; (e.categories || []).forEach(c => seenCat(c)); return {...e, s, e: en, _acct: acct, _join: joinURL(e.location, e.body), _cat: uniqCats(e.categories)[0] || ''}; });
-  $('#caltitle').textContent = title; drawCal();
+  // AAS-24-02: the server is still paging the calendar in (Seller sends 1–2 events
+  // per round) — say so and look again shortly instead of showing a stub day.
+  $('#caltitle').textContent = title + (j.truncated ? ' — календарь ещё загружается…' : ''); drawCal();
+  clearTimeout(calMoreT);
+  if (j.truncated && view === 'cal' && calMoreTries++ < 30) calMoreT = setTimeout(() => { if (view === 'cal') loadCal(true); }, 5000);
+  if (!j.truncated) calMoreTries = 0;
   $('#dot').className = 'aas-status-dot aas-status-dot--ok';
 });
+let calMoreT = null, calMoreTries = 0;
 
 /**
  * Column layout for one day's timed events (sorted by start, longer first).
@@ -1780,8 +1889,9 @@ $('#bulkunread')?.addEventListener('click', bulkMark(false));
   applyTheme(prefs.theme); syncNativePrefs();
   if (m.status === 'fulfilled') aboutMeta = m.value;
   if (acc.status === 'fulfilled') accounts = acc.value.accounts;
+  setTimeout(() => applyAuthState(accounts), 0);  // tabs exist after buildAccountTabs
   buildAccountTabs(); setBrand();
-  calMode = prefs.cal_view; $('#thr').checked = prefs.threads; $('#window').value = String(prefs.mail_window ?? 5); armAutoSync();
+  calMode = prefs.cal_view; $('#thr').checked = prefs.threads; $('#window').value = String(prefs.mail_window ?? 5); $('#sort').value = prefs.mail_sort || 'date_desc'; armAutoSync();
   if (aboutMeta.needs_setup) {
     toast('Первый запуск: укажите логин и пароль. Адреса серверов уже подставлены.');
     setTimeout(() => $('#setbtn').click(), 200);

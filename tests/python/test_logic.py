@@ -140,6 +140,11 @@ class SharedViewPrefsTest(unittest.TestCase):
         out = webapp.update_prefs({"work_start": 20, "work_end": 9})
         self.assertLess(out["work_start"], out["work_end"], "inverted day falls back to defaults")
 
+    def test_mail_sort(self):
+        self.assertEqual(webapp.load_prefs()["mail_sort"], "date_desc", "newest first by default")
+        self.assertEqual(webapp.update_prefs({"mail_sort": "from"})["mail_sort"], "from")
+        self.assertEqual(webapp.update_prefs({"mail_sort": "size"})["mail_sort"], "from", "unknown key ignored")
+
 
 class FreeSlotsTest(unittest.TestCase):
     def setUp(self):
@@ -551,7 +556,10 @@ class CalendarCacheTest(unittest.TestCase):
         a = make_acct()
         with mock.patch.object(cal_cmd, "handle", side_effect=RuntimeError("401")):
             r = webapp.cal_events(a, date.today().isoformat(), date.today().isoformat())
-        self.assertEqual((r["ok"], r["error"], r["message"]), (False, "calendar_unavailable", "401"))
+        self.assertEqual((r["ok"], r["error"]), (False, "calendar_unavailable"))
+        # AAS-24-02: which account, what went wrong, and how to carry on.
+        for part in ("«Alfa-Bank»", "401", "шаг:", "Синхронизировать"):
+            self.assertIn(part, r["message"])
 
     def test_concurrent_refreshes_collapse_into_one(self):
         calls = []
@@ -773,6 +781,100 @@ class WarmFoldersTest(unittest.TestCase):
         self.assertEqual(seen[:2], ["a", "b"])
 
 
+class CalendarPagingTest(unittest.TestCase):
+    """AAS-24-02: a server that sends 1 event per page must still load them all."""
+
+    def _run_full(self, pages_total):
+        a = make_acct("seller")
+        state = {"n": 0}
+
+        def sync_round(cid, generation=None, window=None, options_children=None, get_changes=True, **kw):
+            state["n"] += 1
+            i = state["n"]
+            add = el("AirSync", "Add", el("AirSync", "ServerId", text=f"s{i}"),
+                     el("AirSync", "ApplicationData", el("Calendar", "Subject", text=f"e{i}"),
+                        el("Calendar", "StartTime", text=f"202609{10 + i % 18:02d}T100000Z"),
+                        el("Calendar", "EndTime", text=f"202609{10 + i % 18:02d}T110000Z")))
+            return el("AirSync", "Sync", el("AirSync", "Collections", el("AirSync", "Collection",
+                      el("AirSync", "Commands", add)))), i < pages_total, 1
+
+        a.backend.client = mock.Mock(sync_round=sync_round)
+        from outlook_activesync_mcp.commands import calendar as cal_mod
+        with mock.patch.object(cal_mod, "_calendar_id", return_value="cal"), \
+             mock.patch.object(webapp, "_cal_save"), mock.patch.object(webapp, "_cal_more_soon") as more:
+            webapp._cal_full_sync(a, a.backend, date(2026, 9, 1), date(2026, 10, 30))
+        return a, state["n"], more
+
+    def test_one_event_per_page_is_paged_to_the_end(self):
+        a, pages, more = self._run_full(20)  # upstream stopped after 8 pages
+        self.assertEqual(pages, 20)
+        self.assertEqual(len(a.cal["masters"]), 20)
+        self.assertFalse(a.cal["truncated"])
+        more.assert_not_called()
+
+    def test_time_budget_continues_in_background(self):
+        with mock.patch.object(webapp, "_CAL_BUDGET_S", 0):
+            a, pages, more = self._run_full(20)
+        self.assertTrue(a.cal["truncated"])
+        more.assert_called_once()
+
+
+class MoveItemsStatusTest(unittest.TestCase):
+    """AAS-24-03: MoveItems Status 3 is success — no «recovery», no second move."""
+
+    def setUp(self):
+        webapp._patch_moveitems_status()
+        from outlook_activesync_mcp.client import EasClient
+        self.status_of = EasClient._status_of
+
+    def _tree(self, *codes):
+        return el("Move", "MoveItems", *[el("Move", "Response", el("Move", "SrcMsgId", text=str(i)),
+                                            el("Move", "Status", text=c)) for i, c in enumerate(codes)])
+
+    def test_all_moved_is_success(self):
+        self.assertEqual(self.status_of(None, "MoveItems", self._tree("3", "3")), "1")
+
+    def test_real_failure_still_reported(self):
+        # "1" (bad source) must NOT come back as "1" — that is success to the client.
+        self.assertEqual(self.status_of(None, "MoveItems", self._tree("3", "1")), "1001")
+        self.assertEqual(self.status_of(None, "MoveItems", self._tree("5")), "1005")
+
+    def test_failure_is_explained(self):
+        from outlook_activesync_mcp.errors import EasStatusError
+        with mock.patch.object(mail_cmd, "handle", side_effect=EasStatusError("MoveItems", 1001, "x")):
+            r = webapp.call(make_acct(), "mail", {"action": "delete", "item_ids": ["14:1"]})
+        self.assertIn("уже перемещено или удалено", r["message"])
+
+    def test_other_commands_untouched(self):
+        tree = el("FolderHierarchy", "FolderSync", el("FolderHierarchy", "Status", text="9"))
+        self.assertEqual(self.status_of(mock.Mock(), "FolderSync", tree), "9")
+
+
+class AuthNamedAccountTest(unittest.TestCase):
+    """AAS-24-01: a refused password names the account (and its login)."""
+
+    def test_message_names_account_and_login(self):
+        from outlook_activesync_mcp.errors import EasError
+        a = make_acct("seller")
+        a.cfg["username"] = "o.user@seller.test"
+        err = EasError("401"); err.code = "auth_failed"
+        with mock.patch.object(mail_cmd, "handle", side_effect=err):
+            r = webapp.call(a, "mail", {"action": "get", "item_id": "1:1"})
+        self.assertIn("«Alfa-Seller»", r["message"])
+        self.assertIn("логин o.user@seller.test", r["message"])
+
+    def test_accounts_list_flags_only_the_refused_one(self):
+        bank, seller = make_acct("main"), make_acct("seller")
+        bank.cfg["username"], seller.cfg["username"] = "moscow\\U_TEST", "s@x"
+        bank.backend.client = mock.Mock(store=mock.Mock(auth_failed=lambda: None))
+        seller.backend.client = mock.Mock(store=mock.Mock(auth_failed=lambda: {"at": "now"}))
+        self.assertFalse(webapp._auth_refused(bank))
+        self.assertTrue(webapp._auth_refused(seller))
+        self.assertIn("«Alfa-Seller»", webapp._auth_message(seller))
+        idle = make_acct("main"); idle.backend = None
+        self.assertFalse(webapp._auth_refused(idle), "an account never opened is not flagged")
+
+
 class SendOutageTest(unittest.TestCase):
     """Live: Seller's SendMail waited 60 s and answered status 120 for every
     message. After one such failure, fail fast with words a person understands."""
@@ -855,6 +957,113 @@ class AccountConfigTest(unittest.TestCase):
         self.assertEqual(list(accts), ["main", "seller"])
         self.assertTrue(accts["seller"].green)
         self.assertEqual(accts["main"].cfg["url"], webapp.DEFAULT_EAS_URLS["main"])
+
+
+class ThrottleAndAuthTest(unittest.TestCase):
+    """Live 24.09: Exchange throttled us (13:55, 17:14); every throttled folder
+    delta threw its cache away and went for a full dump — more load, more
+    throttling, calendar gaps. And Save in Settings answered «исправь
+    EXCHANGE_PASSWORD…» although the password was right."""
+
+    def test_save_clears_the_latch_retries_one_401_and_speaks_plainly(self):
+        from outlook_activesync_mcp.commands import settings as settings_cmd
+        from outlook_activesync_mcp.errors import AuthFailed
+        webapp.bridge.CONF_PATH.unlink(missing_ok=True)
+        cleared = []
+
+        class Store:
+            def clear_auth_failed(self):
+                cleared.append(1)
+
+        class Backend:
+            def __init__(self, cfg):
+                self.lock = threading.RLock()
+                self.client = type("C", (), {"store": Store()})()
+
+            def ensure_identity(self):
+                pass
+
+        answers = [AuthFailed("сервер отверг пароль; исправь EXCHANGE_PASSWORD"), {"ok": True}]
+
+        def status(client, action):
+            r = answers.pop(0)
+            if isinstance(r, Exception):
+                raise r
+            return r
+        p = {"target": "main", "url": "u", "username": "n", "email": "e@x", "password": "pw"}
+        with mock.patch.object(webapp.bridge, "EasBackend", Backend), \
+                mock.patch.object(settings_cmd, "handle", side_effect=status), \
+                mock.patch.object(webapp.time, "sleep"), mock.patch.object(webapp, "cal_refresh_bg"):
+            r = webapp.save_account_config(dict(p))
+            self.assertEqual((r["login_ok"], len(cleared)), (True, 2), "latch cleared, one retry after a 401")
+            answers[:] = [AuthFailed("x"), AuthFailed("x")]
+            r = webapp.save_account_config(dict(p))
+        self.assertFalse(r["login_ok"])
+        self.assertNotIn("EXCHANGE_PASSWORD", r["message"])
+        self.assertIn("не принял логин или пароль", r["message"])
+
+    def test_throttled_mail_delta_keeps_the_box(self):
+        from outlook_activesync_mcp.errors import Throttled
+        a = make_acct()
+        a.backend.client = object()
+        box = webapp._mail_box(a, "5")
+        box.update(gen=3, filter=5, fields=None, by_id={"5:1": {"item_id": "5:1", "received": "2026-09-24 10:00"}})
+        with mock.patch.object(mail_cmd, "resolve_collection", return_value=("5", "Inbox")), \
+                mock.patch.object(webapp, "_mail_apply_delta", side_effect=Throttled("t", 30)), \
+                mock.patch.object(webapp, "_mail_fetch_pages") as full:
+            r = webapp._mail_list_paged(a, a.backend, {"folder": "5", "filter": 5})
+        full.assert_not_called()
+        self.assertEqual((r["stale"], r["count"], box["gen"]), (True, 1, 3))
+
+    def test_password_problem_is_not_hidden_behind_cached_mail(self):
+        from outlook_activesync_mcp.errors import AuthFailed
+        a = make_acct()
+        a.backend.client = object()
+        box = webapp._mail_box(a, "5")
+        box.update(gen=3, filter=5, fields=None, by_id={"5:1": {"item_id": "5:1"}})
+        with mock.patch.object(mail_cmd, "resolve_collection", return_value=("5", "Inbox")), \
+                mock.patch.object(webapp, "_mail_apply_delta", side_effect=AuthFailed("x")), \
+                mock.patch.object(webapp, "_mail_fetch_pages") as full:
+            r = webapp.call(a, "mail", {"action": "list", "folder": "5", "filter": 5})
+        full.assert_not_called()
+        self.assertEqual((r["ok"], r["error"]), (False, "auth_failed"))
+        self.assertIn("не принял логин или пароль", r["message"])
+        self.assertEqual((box["gen"], len(box["by_id"])), (3, 1), "cache kept for when the password is fixed")
+
+    def test_throttled_calendar_delta_does_not_escalate_to_full_sync(self):
+        from outlook_activesync_mcp.errors import Throttled
+        from outlook_activesync_mcp.commands import calendar as cal_mod
+        a = make_acct()
+        a.backend.client = object()
+        today = date.today()
+        a.cal.update(loaded=True, gen=2, cal_id="1", masters={}, items=[{"subject": "kept"}],
+                     filter=cal_mod._filter_type(67), range=(today - timedelta(days=7), today + timedelta(days=60)))
+        with mock.patch.object(webapp, "_cal_delta_sync", side_effect=Throttled("t", 30)), \
+                mock.patch.object(webapp, "_cal_full_sync") as full:
+            webapp._cal_refresh(a)
+        full.assert_not_called()
+        self.assertEqual(a.cal["items"], [{"subject": "kept"}])
+        self.assertIn("ограничил число запросов", a.cal["error"])
+
+    def test_sweep_stops_at_the_first_throttle_and_backs_off(self):
+        a = make_acct()
+        tree = [{"id": str(i), "type": "12"} for i in range(10)]
+
+        class Client:
+            store = _Store({"folders": {"tree": tree}})
+
+            def foldersync(self, force=False):
+                return tree
+        a.backend.client = Client()
+        calls = []
+        with mock.patch.object(webapp, "call", side_effect=lambda *x: calls.append(1) or {"ok": False, "error": "throttled"}):
+            webapp.unread_sweep(a, 5, None)
+            for _ in range(100):
+                if not a.unread_sweeping:
+                    break
+                time.sleep(0.01)
+        self.assertEqual(len(calls), 1)
+        self.assertGreater(a.unread_sweep_ts, time.time() + webapp._SWEEP_BACKOFF_S - 5)
 
 
 if __name__ == "__main__":

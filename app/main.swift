@@ -73,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         cfg.userContentController.add(self, name: "aasPrefs")
         cfg.userContentController.add(self, name: "aasNewMail")
         cfg.userContentController.add(self, name: "aasPlaySound")
+        cfg.userContentController.add(self, name: "aasBadge")
         web = WKWebView(frame: .zero, configuration: cfg)
         web.navigationDelegate = self
         web.uiDelegate = self
@@ -81,6 +82,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                           styleMask: [.titled, .closable, .miniaturizable, .resizable],
                           backing: .buffered, defer: false)
         window.title = "AAS mail"
+        // AAS-24-06: closing the window only hides it. The default (released on
+        // close) destroyed it, so neither the Dock nor the tray could bring it back
+        // — only Quit + relaunch. Hidden, it also keeps the open tab and folder.
+        window.isReleasedWhenClosed = false
         window.contentView = web
         window.setFrameAutosaveName("EASMailMain")
         if !window.setFrameUsingName("EASMailMain") { window.center() }
@@ -90,6 +95,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         NotificationCenter.default.addObserver(
             forName: .easShowCalendar, object: nil, queue: .main
         ) { [weak self] _ in self?.showCalendarFromTray() }
+        NotificationCenter.default.addObserver(
+            forName: .easShowMain, object: nil, queue: .main
+        ) { [weak self] _ in self?.showMainWindow() }
         NotificationCenter.default.addObserver(
             forName: .easCreateEvent, object: nil, queue: .main
         ) { [weak self] note in
@@ -106,12 +114,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 t.invalidate()
                 self.web.load(URLRequest(url: self.url))
                 self.tray = MainActor.assumeIsolated { TrayStatusController() }
+                self.startHiddenSyncNudge()
             }
             else if Date().timeIntervalSince(self.startedAt) > 90 {
                 t.invalidate()
                 self.showMessage("Сервер не запустился. Лог: ~/.config/eas-bridge/webapp.log")
             }
         }
+    }
+
+    /// With the window closed WebKit may hold back the page's timers; nudge its light
+    /// Inbox pass so counters, new-mail alerts and the Dock badge stay current.
+    func startHiddenSyncNudge() {
+        Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.window.isVisible || self.window.isMiniaturized else { return }
+                self.web.evaluateJavaScript("typeof autoSyncTick==='function' && autoSyncTick()")
+            }
+        }
+    }
+
+    /// Bring the (possibly closed) main window to the front, state intact.
+    @objc func showMainWindow() {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Dock icon click after the window was closed → show it again (AAS-24-06).
+    func applicationShouldHandleReopen(_ s: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag { showMainWindow() }
+        return true
     }
 
     /// Tray footer "Календарь" — raise the mail window and switch to the cal tab.
@@ -264,6 +296,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
            let sound = MailSound(rawValue: s) {
             sound.playPreview()
         }
+        if message.name == "aasBadge", let n = (message.body as? NSNumber)?.intValue {
+            // AAS-24-05: Inbox unread of all accounts on the Dock icon; none when 0.
+            NSApp.dockTile.badgeLabel = n > 0 ? (n > 999 ? "999+" : "\(n)") : nil
+            NotificationCenter.default.post(name: .easUnreadChanged, object: NSNumber(value: n))
+        }
         if message.name == "aasNewMail", let p = message.body as? [String: Any] {
             let count = (p["count"] as? NSNumber)?.intValue ?? 1
             NewMailNotifier.notify(
@@ -289,7 +326,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                        ("Вырезать", #selector(NSText.cut(_:)), "x"), ("Копировать", #selector(NSText.copy(_:)), "c"),
                        ("Вставить", #selector(NSText.paste(_:)), "v"), ("Выделить всё", #selector(NSText.selectAll(_:)), "a")])
         add("Вид", [("Обновить", #selector(reload), "r")])
-        add("Окно", [("Свернуть", #selector(NSWindow.miniaturize(_:)), "m"), ("Закрыть", #selector(NSWindow.performClose(_:)), "w")])
+        add("Окно", [("Окно почты", #selector(showMainWindow), "0"), ("-", nil, ""),
+                     ("Свернуть", #selector(NSWindow.miniaturize(_:)), "m"), ("Закрыть", #selector(NSWindow.performClose(_:)), "w")])
         NSApp.mainMenu = main
     }
 }
