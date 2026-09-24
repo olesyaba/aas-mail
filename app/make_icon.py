@@ -70,42 +70,60 @@ def _render_tray_mark(size: int, *, stroke_scale: float = 1.0) -> Image.Image:
     return sq.resize((size, size), Image.LANCZOS)
 
 
+def _hex_rgba(h: str):
+    h = h.lstrip("#")
+    return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), 255)
+
+
+def _diag_gradient(size: int, stops, *, blend_lo: float = 0.15, blend_hi: float = 0.85) -> Image.Image:
+    """Diagonal gradient (bottom-left → top-right) with a thick blend band."""
+    N = 96
+    small = Image.new("RGBA", (N, N))
+    px = small.load()
+    n = len(stops) - 1
+    for y in range(N):
+        for x in range(N):
+            # 0 at bottom-left, 1 at top-right
+            t = (x + (N - 1 - y)) / (2 * (N - 1))
+            if t <= blend_lo:
+                u = 0.0
+            elif t >= blend_hi:
+                u = 1.0
+            else:
+                u = (t - blend_lo) / (blend_hi - blend_lo)
+            seg = min(n - 1, int(u * n))
+            local = (u * n) - seg
+            px[x, y] = _lerp(stops[seg], stops[seg + 1], local)
+    return small.resize((size, size), Image.LANCZOS)
+
+
 def _render_app_mark(size: int) -> Image.Image:
-    """Dock mark: one clear A, left red / right green, lightning tips on the bases."""
+    """Dock mark: large soft A, muted red→green gradient, no tips."""
     S = 1200
-    mark = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(mark)
-    aw = 92
-    tip_w = 48
+    mask_img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(mask_img)
+    aw = 128
+    white = "#FFFFFF"
 
-    # Classic upright A, centred.
-    apex = (600, 220)
-    left = (260, 900)
-    right = (940, 900)
-
-    # Left half (red): left leg + left half of crossbar
+    apex = (600, 120)
+    left = (120, 1080)
+    right = (1080, 1080)
     bar_l = _lerp_pt(apex, left, 0.58)
     bar_r = _lerp_pt(apex, right, 0.58)
-    bar_m = _lerp_pt(bar_l, bar_r, 0.5)
-    _stroke(draw, [left, apex], RED, aw)
-    _stroke(draw, [bar_l, bar_m], RED, max(2, int(aw * 0.92)))
 
-    # Right half (green): right leg + right half of crossbar
-    _stroke(draw, [apex, right], GREEN, aw)
-    _stroke(draw, [bar_m, bar_r], GREEN, max(2, int(aw * 0.92)))
+    _stroke(draw, [left, apex, right], white, aw)
+    _stroke(draw, [bar_l, bar_r], white, max(2, int(aw * 0.95)))
 
-    # Lightning tips from each base (outward, not competing with the letter)
-    _stroke(draw, [
-        left,
-        (200, 960), (150, 1020), (90, 980), (40, 1060),
-    ], RED, tip_w)
-    _stroke(draw, [
-        right,
-        (1000, 960), (1050, 1020), (1110, 980), (1160, 1060),
-    ], GREEN, tip_w)
+    # Low-contrast brand tones (closer to tile, still readable)
+    soft_red = (168, 78, 82, 255)
+    soft_mid = (110, 100, 88, 255)
+    soft_green = (58, 128, 98, 255)
+    grad = _diag_gradient(S, [soft_red, soft_mid, soft_green], blend_lo=0.10, blend_hi=0.80)
+    mark = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    mark.paste(grad, (0, 0), mask_img.split()[3])
 
     bbox = mark.getbbox()
-    margin = aw
+    margin = int(aw * 0.25)
     bbox = (max(0, bbox[0] - margin), max(0, bbox[1] - margin),
             min(S, bbox[2] + margin), min(S, bbox[3] + margin))
     cropped = mark.crop(bbox)
@@ -169,7 +187,7 @@ def _app_icon_1024() -> Image.Image:
     gloss.putalpha(Image.composite(gloss.split()[3], Image.new("L", (S, S), 0), mask))
     img.alpha_composite(gloss)
 
-    mark = _render_app_mark(640)
+    mark = _render_app_mark(820)
     ox = (S - mark.size[0]) // 2
     oy = (S - mark.size[1]) // 2 + 6
     img.paste(mark, (ox, oy), mark)
@@ -194,7 +212,7 @@ def main():
     for name, size in (("TrayIcon.png", 18), ("TrayIcon@2x.png", 36)):
         _render_tray_mark(size, stroke_scale=1.2).save(os.path.join(HERE, name))
 
-    print("AppIcon.icns (split A + lightning) + TrayIcon.png built")
+    print("AppIcon.icns (large soft A) + TrayIcon.png built")
 
 
 if __name__ == "__main__":

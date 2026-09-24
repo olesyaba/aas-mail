@@ -284,3 +284,12 @@ test('event card: long description has no inner scroller, participants collapse'
   const html = readFileSync(new URL('../../web/index.html', import.meta.url), 'utf8');
   assert.doesNotMatch(html, /max-height:180px/);
 });
+
+test('reply form shows the original under an Outlook header block', () => {
+  const {quotedOriginal} = load(['quotedOriginal']);
+  const html = quotedOriginal({from: [{name: 'Егор', address: 'e@b.ru'}], to: [{address: 'me@b.ru'}], cc: [],
+    subject: 'Backend гильдия', date: 'Thu, 24 Sep 2026 09:30:00 +0300', text: 'исходный <текст>'});
+  for (const s of ['<b>От:</b> Егор &lt;e@b.ru&gt;', '<b>Отправлено:</b>', '<b>Кому:</b> me@b.ru', '<b>Тема:</b> Backend гильдия', 'исходный &lt;текст&gt;'])
+    assert.ok(html.includes(s), s);
+  assert.ok(!html.includes('Копия'), 'no empty Cc line');
+});

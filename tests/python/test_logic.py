@@ -998,6 +998,58 @@ class CalendarOddSeriesTest(unittest.TestCase):
         self.assertEqual([e["subject"] for e in items], ["ok"])
 
 
+class Eas16ExceptionsTest(unittest.TestCase):
+    """Live: «Отменено: Backend гильдия» came in, yet the occurrence stayed a
+    normal meeting. Exchange on EAS 16.x names exceptions by AirSyncBase:InstanceId
+    (no Calendar:ExceptionStartTime), so every exception was dropped: cancelled,
+    moved and deleted occurrences all looked like the plain series."""
+
+    def test_cancelled_moved_and_deleted_occurrences(self):
+        C = "Calendar"
+        day = datetime.combine(date.today(), datetime.min.time())
+        t = lambda d, h, m=0: (day + timedelta(days=d)).strftime("%Y%m%dT") + f"{h:02d}{m:02d}00Z"
+        iid = lambda d: (day + timedelta(days=d)).strftime("%Y-%m-%dT") + "09:00:00.000Z"
+        ex = lambda d, *kids: el(C, "Exception", el("AirSyncBase", "InstanceId", text=iid(d)), *kids)
+        appdata = el("AirSync", "ApplicationData",
+                     el(C, "Subject", text="Backend гильдия"), el(C, "StartTime", text=t(0, 9)),
+                     el(C, "EndTime", text=t(0, 10)), el(C, "MeetingStatus", text="3"),
+                     el(C, "Recurrence", el(C, "Type", text="0"), el(C, "Interval", text="1")),
+                     el(C, "Exceptions",
+                        ex(0, el(C, "Subject", text="Отменено: Backend гильдия"), el(C, "MeetingStatus", text="7"),
+                           el(C, "BusyStatus", text="0"), el(C, "StartTime", text=t(0, 9)), el(C, "EndTime", text=t(0, 10))),
+                        ex(1, el(C, "StartTime", text=t(1, 14, 30)), el(C, "EndTime", text=t(1, 15, 30))),
+                        ex(2, el(C, "Deleted", text="1"))))
+        masters: dict = {}
+        webapp._cal_apply_tree(el("AirSync", "Sync", el("AirSync", "Add", el("AirSync", "ServerId", text="1:9"), appdata)),
+                               masters)
+        items, _ = webapp._cal_expand(masters, "1", day.date(), day.date() + timedelta(days=4), webapp.CAL_FIELDS)
+        by_day = {}
+        for e in items:
+            by_day.setdefault(e["start_iso"][:10], []).append(e)
+        d = lambda n: (day.date() + timedelta(days=n)).isoformat()
+        today = by_day[d(0)][0]
+        self.assertEqual((today["meeting_status"], today["busy_status"], today["subject"]),
+                         ("cancelled", "free", "Отменено: Backend гильдия"))
+        moved = by_day[d(1)]
+        self.assertEqual([(e["start_iso"][11:16], e["subject"]) for e in moved], [("14:30", "Backend гильдия")],
+                         "moved, and only once (not also at 09:00)")
+        self.assertNotIn(d(2), by_day, "deleted occurrence is gone")
+        self.assertEqual(by_day[d(3)][0]["meeting_status"], "meeting")
+        from outlook_activesync_mcp.models import instance_of
+        self.assertEqual(instance_of(today["item_id"]), d(0).replace("-", "") + "T090000Z",
+                         "RSVP/cancel address the occurrence by its original start")
+
+    def test_old_disk_cache_is_not_trusted(self):
+        a = make_acct()
+        import pickle
+        with open(webapp._cal_cache_path(a), "wb") as f:
+            pickle.dump({"v": 1, "owner": webapp._cal_cache_owner(a), "masters": {}, "gen": 1, "cal_id": "1"}, f)
+        try:
+            self.assertFalse(webapp._cal_load(a, date.today(), date.today() + timedelta(days=1)))
+        finally:
+            webapp._cal_forget(a)
+
+
 class CalendarDiskCacheTest(unittest.TestCase):
     """Launch continues the calendar from disk with a delta, not a 30 s prime."""
 
@@ -1091,3 +1143,48 @@ class UnreadSweepTest(unittest.TestCase):
         webapp.recount_unread_from_items(a, "sent", [{"is_read": False}] * 3)
         snap = webapp.unread_snapshot(a)
         self.assertEqual((snap["total"], snap["partial"]), (1, ["inbox"]))
+
+
+class OutlookReplyHeaderTest(unittest.TestCase):
+    """Replies arrived as our text glued to the original with no «От / Отправлено /
+    Кому / Тема» block (Exchange's SmartReply doesn't add one) — unlike Outlook."""
+
+    def _orig(self):
+        m = EmailMessage()
+        m["From"] = "Лебедев Егор <elebedev@bank.test>"
+        m["To"] = "Me <me@bank.test>, Анна <anna@bank.test>"
+        m["Cc"] = "team@bank.test"
+        m["Subject"] = "Backend гильдия"
+        m["Date"] = "Thu, 24 Sep 2026 09:30:00 +0300"
+        m.set_content("исходный текст")
+        return bytes(m)
+
+    def _send(self, action, **extra):
+        a = make_acct(backend=FakeBackend({"14:1": self._orig()}))
+        seen = {}
+
+        def handle(client, act, **kw):
+            seen.update(kw, action=act)
+            return {"ok": True, "items": [{}]}
+        with mock.patch.object(mail_cmd, "handle", side_effect=handle):
+            webapp.call(a, "mail", {"action": action, "item_id": "14:1", "body": "Спасибо!\n\n-- \nОлеся", **extra})
+        return seen
+
+    def test_reply_and_forward_carry_the_outlook_block(self):
+        for action in ("reply", "forward"):
+            body = self._send(action, **({"to": ["x@bank.test"]} if action == "forward" else {}))["body"]
+            self.assertTrue(body.startswith("Спасибо!\n\n-- \nОлеся\n\n" + "_" * 32), action)
+            for line in ("От: Лебедев Егор <elebedev@bank.test>",
+                         "Кому: Me <me@bank.test>; Анна <anna@bank.test>",
+                         "Копия: team@bank.test", "Тема: Backend гильдия"):
+                self.assertIn(line, body, action)
+            when = datetime(2026, 9, 24, 6, 30, tzinfo=__import__("datetime").timezone.utc).astimezone()
+            self.assertIn(f"Отправлено: {webapp._RU_WEEKDAYS[when.weekday()]}, {when.day} сентября 2026 г. "
+                          f"{when.hour}:{when.minute:02d}", body)
+
+    def test_missing_original_still_sends(self):
+        a = make_acct(backend=FakeBackend({}))
+        seen = {}
+        with mock.patch.object(mail_cmd, "handle", side_effect=lambda c, act, **kw: seen.update(kw) or {"ok": True}):
+            webapp.call(a, "mail", {"action": "reply", "item_id": "14:404", "body": "ok"})
+        self.assertEqual(seen["body"], "ok")

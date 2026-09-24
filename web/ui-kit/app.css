@@ -800,3 +800,9 @@ input[type="checkbox"].aas-sw:focus-visible { outline: 2px solid var(--aas-accen
   position: sticky; bottom: -18px; margin: 12px -18px -18px; padding: 12px 18px 18px;
   background: var(--aas-panel); border-top: 1px solid var(--aas-line);
 }
+
+/* Reply/forward: the original under your text, Outlook-style (read-only). */
+.aas-quote { border-top: 1px solid var(--aas-line); padding-top: 10px; color: var(--aas-muted); font-size: 13px; }
+.aas-quote__hdr { margin-bottom: 10px; line-height: 1.5; }
+.aas-quote__hdr b { color: var(--aas-text, inherit); font-weight: 600; }
+.aas-quote__body { white-space: pre-wrap; overflow-wrap: anywhere; }

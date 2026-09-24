@@ -41,7 +41,7 @@ MAX_BODY = 40 * 1024 * 1024
 # Product identity (About page + UI chrome).
 APP_META = {
     "name": "AAS mail",
-    "version": "1.2.9",
+    "version": "1.2.10",
     "description": "Локальный клиент почты и календаря Alfa / Alfa-Seller поверх Exchange ActiveSync.",
     "contact_mm": "@olesya_ba",
     "thanks_intro": "Спасибо за тест-рейды и светлые идеи:",
@@ -605,6 +605,9 @@ def call(a: Acct, domain: str, params: dict) -> dict:
     if domain == "mail" and action in ("send", "reply", "forward") and time.time() < a.send_down_until:
         return {"ok": False, "action": action, "count": 0, "items": [], "error": "send_down",
                 "message": str(_send_down_error(a))}
+    if domain == "mail" and action in ("reply", "forward") and params.get("item_id") and not params.get("no_quote_header"):
+        params["body"] = (params.get("body") or "").rstrip() + _outlook_quote_header(a, params["item_id"])
+    params.pop("no_quote_header", None)
     backend = a.get()
     with backend.lock:
         try:
@@ -1348,8 +1351,9 @@ def _meeting_status(raw: str | None) -> str | None:
 
 
 def _cal_parse(appdata) -> dict:
-    """parse_event plus what upstream drops: correct MeetingStatus, and
-    per-occurrence status/busy for cancelled or changed occurrences of a series."""
+    """parse_event plus what upstream drops: correct MeetingStatus, the occurrence
+    key of each exception (EAS 16.x), and per-occurrence status/busy for
+    cancelled or changed occurrences of a series."""
     from outlook_activesync_mcp.model import mapping
     from outlook_activesync_mcp.wbxml import find, find_all, text_of
     ev = mapping.parse_event(appdata)
@@ -1360,6 +1364,12 @@ def _cal_parse(appdata) -> dict:
     box = find(appdata, "Calendar", "Exceptions")
     if box is not None and ev.get("exceptions"):
         for ex, node in zip(ev["exceptions"], find_all(box, "Calendar", "Exception")):
+            # EAS 16.x drops Calendar:ExceptionStartTime and names the occurrence
+            # by AirSyncBase:InstanceId. Upstream reads only the former, so every
+            # exception had no key and was ignored: cancelled occurrences showed
+            # as normal, moved ones stayed put, deleted ones came back.
+            if not ex.get("exception_start"):
+                ex["exception_start"] = text_of(find(node, "AirSyncBase", "InstanceId")) or ""
             st = _meeting_status(text_of(find(node, "Calendar", "MeetingStatus")))
             if st:
                 ex["meeting_status"] = st
@@ -1395,7 +1405,7 @@ def _cal_apply_tree(tree, masters: dict) -> tuple[int, int]:
 # known calendar at once and catches up with a delta (~0.5 s) instead of a
 # SyncKey=0 prime (~30 s). The generation is checked against the client's state
 # file on the first round: a mismatch is CursorExpired → full sync.
-CAL_CACHE_VERSION = 1
+CAL_CACHE_VERSION = 2  # 2: exceptions keyed by InstanceId (EAS 16.x); v1 files lack the keys
 
 
 def _cal_cache_path(a: Acct):
@@ -1993,6 +2003,57 @@ def eas_attachment_bytes(a: Acct, ref: str) -> bytes | None:
     if node is None:
         return None
     return node.data if node.data is not None else base64.b64decode((node.text or "").encode("ascii"), validate=False)
+
+
+_RU_WEEKDAYS = ("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье")
+_RU_MONTHS = ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа",
+              "сентября", "октября", "ноября", "декабря")
+
+
+def _outlook_addrs(value) -> str:
+    """«Имя <addr>; Имя2 <addr2>» — how Outlook lists people in the header block."""
+    from email.utils import getaddresses
+    out = []
+    for name, addr in getaddresses([str(value or "")]):
+        if name and addr:
+            out.append(f"{name} <{addr}>")
+        elif addr or name:
+            out.append(addr or name)
+    return "; ".join(out)
+
+
+def _outlook_quote_header(a: Acct, item_id: str) -> str:
+    """The block Outlook puts between your text and the quoted original:
+
+        ________________________________
+        От: Имя <addr>
+        Отправлено: четверг, 24 сентября 2026 г. 9:30
+        Кому: …
+        Копия: …
+        Тема: …
+
+    Exchange's SmartReply/SmartForward append the original right after our
+    text but without it, so the recipient could not see who wrote what, when."""
+    from email.utils import parsedate_to_datetime
+    try:
+        msg = parse_raw(get_mime(a, item_id))
+    except Exception as e:  # noqa: BLE001 — the reply still goes, just without the block
+        log.info("[%s] reply header block skipped: %s", a.id, e)
+        return ""
+    when = ""
+    try:
+        d = parsedate_to_datetime(str(msg["Date"])).astimezone()
+        when = f"{_RU_WEEKDAYS[d.weekday()]}, {d.day} {_RU_MONTHS[d.month - 1]} {d.year} г. {d.hour}:{d.minute:02d}"
+    except (TypeError, ValueError, IndexError):
+        pass
+    lines = ["", "", "_" * 32, f"От: {_outlook_addrs(msg['From'])}"]
+    if when:
+        lines.append(f"Отправлено: {when}")
+    lines.append(f"Кому: {_outlook_addrs(msg['To'])}")
+    if msg["Cc"]:
+        lines.append(f"Копия: {_outlook_addrs(msg['Cc'])}")
+    lines += [f"Тема: {str(msg['Subject'] or '')}", ""]
+    return "\n".join(lines)
 
 
 def parse_raw(raw: bytes):

@@ -1208,6 +1208,26 @@ function bindPeopleInput(inp) {
   });
 }
 
+/** Outlook-style tail of a reply/forward, as the recipient will see it under your
+ *  text: separator, От / Отправлено / Кому / Копия / Тема, then the original.
+ *  The server adds the same block when sending (read-only preview here). */
+const RU_WD = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+function outlookWhen(raw) {
+  const d = new Date(raw);
+  if (isNaN(d)) return raw || '';
+  return `${RU_WD[d.getDay()]}, ${d.toLocaleDateString('ru-RU', {day: 'numeric', month: 'long', year: 'numeric'})} ${d.getHours()}:${pad(d.getMinutes())}`;
+}
+function quotedOriginal(j) {
+  const people = list => (list || []).map(whoFull).join('; ');
+  const text = j.text || (j.html ? new DOMParser().parseFromString(j.html, 'text/html').body.textContent : '');
+  return `<div class="f aas-quote"><div class="aas-quote__hdr">
+      <div><b>От:</b> ${esc(people(j.from))}</div>
+      ${j.date ? `<div><b>Отправлено:</b> ${esc(outlookWhen(j.date))}</div>` : ''}
+      <div><b>Кому:</b> ${esc(people(j.to))}</div>
+      ${(j.cc || []).length ? `<div><b>Копия:</b> ${esc(people(j.cc))}</div>` : ''}
+      <div><b>Тема:</b> ${esc(j.subject || '')}</div></div>
+    <div class="aas-quote__body">${esc(text.trim())}</div></div>`;
+}
 function composeForm(ctx) {
   files = [];
   const mode = ctx?.mode || 'new';
@@ -1221,6 +1241,7 @@ function composeForm(ctx) {
     ${mode === 'fwd' ? `<div class="f"><label>Тема</label><div>Fwd: ${esc(ctx.j.subject)}</div></div>` : '<div class="f"><label>Тема</label><input type="text" id="csub"></div>'}`}
     <div class="f"><label>Текст</label><textarea id="cbody" rows="10"></textarea></div>
     ${mode === 'reply' ? '' : '<div class="f"><input type="file" id="cfile" multiple> <div id="cfiles"></div></div>'}
+    ${mode !== 'new' && ctx?.j ? quotedOriginal(ctx.j) : ''}
     <div class="acts2"><button class="aas-btn" id="ccancel">Отмена</button><button class="aas-btn aas-btn--primary" id="csend">Отправить</button></div>`);
   $('#cbody').value = sigBlock(mode);
   for (const id of ['cto', 'ccc']) { const el = $('#' + id); if (el) bindPeopleInput(el); }
