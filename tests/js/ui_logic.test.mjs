@@ -332,3 +332,28 @@ test('↓/↑ walk the mail list and stop at the ends (AAS-24-07)', () => {
   assert.equal(listStep(1), null, 'last row: stays');
   assert.equal(listStep(-1), 'i:c');
 });
+
+test('attachments: open / save-as per file and «save all» only inside the app', () => {
+  const {attachmentsHtml, ctx} = load(['attachmentsHtml']);
+  const m = {item_id: 'x'}, atts = [{ref: 'r1', name: 'a.pdf', size: 10}, {ref: 'r2', name: 'b.xlsx', size: 20}];
+  ctx.window = {};
+  const plainHtml = attachmentsHtml(m, atts);
+  assert.match(plainHtml, /download/);
+  assert.doesNotMatch(plainHtml, /data-att-as|data-att-all/, 'a plain browser only gets the download link');
+  ctx.window = {webkit: {messageHandlers: {aasSave: {postMessage() {}}}}};
+  const app = attachmentsHtml(m, atts);
+  assert.equal((app.match(/data-att-as=/g) || []).length, 2);
+  assert.equal((app.match(/data-att-open=/g) || []).length, 2);
+  assert.match(app, /Сохранить все \(2\)/);
+  assert.doesNotMatch(attachmentsHtml(m, atts.slice(0, 1)), /data-att-all/, 'one file: no «save all»');
+});
+
+test('updates: «auto» schedules a check, «manual» schedules nothing', () => {
+  const timers = [];
+  const {armUpdates, ctx} = load(['armUpdates']);
+  ctx.setTimeout = (fn, ms) => { timers.push(ms); return timers.length; };
+  vm.runInContext(`prefs.update_mode = 'manual'`, ctx); armUpdates();
+  assert.deepEqual(timers, [], 'manual: no background checks');
+  vm.runInContext(`prefs.update_mode = 'auto'`, ctx); armUpdates();
+  assert.deepEqual(timers, [15000]);
+});

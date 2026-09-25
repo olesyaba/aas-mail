@@ -41,7 +41,7 @@ MAX_BODY = 40 * 1024 * 1024
 # Product identity (About page + UI chrome).
 APP_META = {
     "name": "AAS mail",
-    "version": "1.2.12",
+    "version": "1.2.13",
     "description": "Локальный клиент почты и календаря Alfa / Alfa-Seller поверх Exchange ActiveSync.",
     "contact_mm": "@olesya_ba",
     "thanks_intro": "Спасибо за тест-рейды и светлые идеи:",
@@ -2000,6 +2000,8 @@ DEFAULT_PREFS = {
     "mail_window": 5,
     # Mail list order (AAS-24-10): date_desc (default) | date_asc | from | subject.
     "mail_sort": "date_desc",
+    # Self-update: "auto" (check every 6 h and install) or "manual" (only on request).
+    "update_mode": "auto",
     # Working day for «Свободно у всех» suggestions (local hours).
     "work_start": 9, "work_end": 18,
 }
@@ -2050,6 +2052,8 @@ def update_prefs(patch: dict) -> dict:
             if k == "mail_window" and v not in (0, 3, 4, 5):
                 continue
             if k == "mail_sort" and v not in MAIL_SORTS:
+                continue
+            if k == "update_mode" and v not in ("auto", "manual"):
                 continue
             # Appearance: system | light | dark | StylesBA palettes (dark + light).
             if k == "theme" and v not in (
@@ -2147,6 +2151,21 @@ def _attachment_parts(msg, html_doc=None):
             continue  # shown inside the HTML
         parts.append(p)
     return parts
+
+
+def _inline_images(msg, html_doc=None):
+    """Pictures shown inside the HTML (cid:) — not attachments, but still saveable."""
+    refs = {c.lower() for c in re.findall(r"cid:([^\"'\s>)]+)", html_doc or "", re.I)}
+    out = []
+    for p in _leaves(msg):
+        cid = (p.get("Content-ID") or "").strip("<> ").lower()
+        if cid and cid in refs and p.get_content_maintype() == "image":
+            out.append(p)
+    return out
+
+
+def _img_name(p, i):
+    return p.get_filename() or f"картинка-{i + 1}{mimetypes.guess_extension(p.get_content_type()) or ''}"
 
 
 def _att_name(p, i):
@@ -2509,6 +2528,8 @@ def render_message(a: Acct, item_id: str, has_att: bool = False) -> dict:
             atts = eas_attachments(a, item_id)
         except Exception:  # noqa: BLE001 — the message itself still opens
             log.warning("attachment list from server failed", exc_info=True)
+    images = [{"img": i, "name": _img_name(p, i), "type": p.get_content_type(), "size": len(_part_bytes(p))}
+              for i, p in enumerate(_inline_images(msg, html_doc))]
     if html_doc and "cid:" in html_doc:
         for p in msg.walk():
             cid = (p.get("Content-ID") or "").strip("<> ")
@@ -2517,7 +2538,7 @@ def render_message(a: Acct, item_id: str, has_att: bool = False) -> dict:
                 html_doc = html_doc.replace(f"cid:{cid}", f"data:{p.get_content_type()};base64,{data}")
     return {"subject": str(msg.get("Subject", "")), "date": str(msg.get("Date", "")),
             "from": _addr_list(msg, "From"), "to": _addr_list(msg, "To"), "cc": _addr_list(msg, "Cc"),
-            "html": html_doc, "text": text, "attachments": atts, "invite": invite,
+            "html": html_doc, "text": text, "attachments": atts, "images": images, "invite": invite,
             "message_id": str(msg.get("Message-ID", ""))}
 
 
@@ -2528,6 +2549,15 @@ def attachment_bytes(a: Acct, item_id: str, idx: int):
         return None
     p = parts[idx]
     return _att_name(p, idx), p.get_content_type(), _part_bytes(p)
+
+
+def inline_image_bytes(a: Acct, item_id: str, idx: int):
+    msg = parse_raw(get_mime(a, item_id))
+    imgs = _inline_images(msg, _body_html(msg))
+    if not 0 <= idx < len(imgs):
+        return None
+    p = imgs[idx]
+    return _img_name(p, idx), p.get_content_type(), _part_bytes(p)
 
 
 # -- HTTP -------------------------------------------------------------------
@@ -2601,6 +2631,8 @@ class Handler(BaseHTTPRequestHandler):
                     data = eas_attachment_bytes(a, q["ref"][0])
                     name = q.get("n", ["attachment"])[0]
                     got = (name, mimetypes.guess_type(name)[0] or "application/octet-stream", data) if data is not None else None
+                elif "ii" in q:
+                    got = inline_image_bytes(a, q["id"][0], int(q["ii"][0]))
                 else:
                     got = attachment_bytes(a, q["id"][0], int(q["i"][0]))
             except Exception:  # noqa: BLE001

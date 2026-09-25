@@ -830,3 +830,13 @@ input[type="checkbox"].aas-sw:focus-visible { outline: 2px solid var(--aas-accen
 .aas-upd__notes{max-height:220px;overflow:auto;white-space:pre-wrap;font-size:var(--aas-t-xs);color:var(--aas-muted);
   background:var(--aas-panel-2);border:1px solid var(--aas-line);border-radius:var(--aas-r-sm);padding:8px 10px;margin:8px 0}
 #updbtn{white-space:nowrap}
+
+/* Attachment chip + open / save-as buttons, one group per file. */
+.aas-atts{align-items:center}
+.aas-att-item{display:inline-flex;align-items:stretch;border-radius:var(--aas-r-sm)}
+.aas-att-item .aas-att{border-top-right-radius:0;border-bottom-right-radius:0}
+.aas-att-item .aas-att:only-child{border-radius:var(--aas-r-sm)}
+.aas-att-act{border:1px solid var(--aas-line);border-left:0;background:var(--aas-panel-2);color:var(--aas-text);
+  padding:0 8px;font-size:var(--aas-t-sm);cursor:pointer}
+.aas-att-act:last-child{border-top-right-radius:var(--aas-r-sm);border-bottom-right-radius:var(--aas-r-sm)}
+.aas-att-act:hover{background:var(--aas-accent-bg);color:var(--aas-accent-text)}

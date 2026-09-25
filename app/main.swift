@@ -74,6 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         cfg.userContentController.add(self, name: "aasNewMail")
         cfg.userContentController.add(self, name: "aasPlaySound")
         cfg.userContentController.add(self, name: "aasBadge")
+        cfg.userContentController.add(self, name: "aasSave")
         web = WKWebView(frame: .zero, configuration: cfg)
         web.navigationDelegate = self
         web.uiDelegate = self
@@ -260,6 +261,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
     func downloadDidFinish(_ d: WKDownload) { if let u = lastDownload { NSWorkspace.shared.activateFileViewerSelecting([u]) } }
 
+    // Attachments: "open" (temp copy → default app), "as" (save panel), "all" (pick a folder).
+    // Files come from the local server with the page token already in the URL.
+    func saveAttachments(mode: String, files: [(URL, String)]) {
+        guard !files.isEmpty else { return }
+        switch mode {
+        case "open":
+            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("AAS mail attachments", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            fetchAttachments(files, into: dir) { saved in
+                if let f = saved.first { NSWorkspace.shared.open(f) }
+            }
+        case "as":
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = files[0].1
+            panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            panel.beginSheetModal(for: window) { [weak self] r in
+                guard r == .OK, let dest = panel.url else { return }
+                self?.fetchAttachments([(files[0].0, dest.lastPathComponent)], into: dest.deletingLastPathComponent(),
+                                       overwrite: true) { saved in
+                    if !saved.isEmpty { self?.reportSaved(saved) }
+                }
+            }
+        default:
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+            panel.prompt = "Сохранить сюда"
+            panel.message = "Куда сохранить вложения (\(files.count))"
+            panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            panel.beginSheetModal(for: window) { [weak self] r in
+                guard r == .OK, let dir = panel.url else { return }
+                self?.fetchAttachments(files, into: dir) { saved in self?.reportSaved(saved, of: files.count) }
+            }
+        }
+    }
+
+    private func reportSaved(_ saved: [URL], of total: Int = 1) {
+        let ok = saved.count == total
+        let text = total == 1 ? (ok ? "Сохранено: \(saved[0].lastPathComponent)" : "Не удалось сохранить вложение")
+            : "Сохранено \(saved.count) из \(total)"
+        let js = "window.aasSaved && aasSaved(\(ok), \(String(data: try! JSONEncoder().encode(text), encoding: .utf8)!))"
+        web.evaluateJavaScript(js)
+        if !saved.isEmpty { NSWorkspace.shared.activateFileViewerSelecting(saved) }
+    }
+
+    /// Download each file and write it into `dir`; names get " (2)" instead of overwriting
+    /// unless the user already confirmed a replace in the save panel.
+    private func fetchAttachments(_ files: [(URL, String)], into dir: URL, overwrite: Bool = false,
+                                  done: @escaping ([URL]) -> Void) {
+        Task { @MainActor in
+            var saved: [URL] = []
+            for (src, name) in files {
+                guard let (data, resp) = try? await URLSession.shared.data(from: src),
+                      (resp as? HTTPURLResponse)?.statusCode == 200 else { continue }
+                var dest = dir.appendingPathComponent(name), i = 2
+                while !overwrite && FileManager.default.fileExists(atPath: dest.path) {
+                    let base = (name as NSString).deletingPathExtension, ext = (name as NSString).pathExtension
+                    dest = dir.appendingPathComponent(ext.isEmpty ? "\(base) (\(i))" : "\(base) (\(i)).\(ext)"); i += 1
+                }
+                if (try? data.write(to: dest, options: .atomic)) != nil { saved.append(dest) }
+            }
+            if saved.isEmpty {
+                self.web.evaluateJavaScript("window.aasSaved && aasSaved(false, 'Не удалось получить вложение с сервера')",
+                                            completionHandler: nil)
+                return
+            }
+            done(saved)
+        }
+    }
+
     // File pickers (attachments) and JS confirm/alert.
     func webView(_ w: WKWebView, runOpenPanelWith p: WKOpenPanelParameters, initiatedByFrame f: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
         let panel = NSOpenPanel(); panel.allowsMultipleSelection = p.allowsMultipleSelection
@@ -295,6 +365,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         if message.name == "aasPlaySound", let s = message.body as? String,
            let sound = MailSound(rawValue: s) {
             sound.playPreview()
+        }
+        if message.name == "aasSave", let p = message.body as? [String: Any],
+           let mode = p["mode"] as? String, let files = p["files"] as? [[String: String]] {
+            saveAttachments(mode: mode, files: files.compactMap { f in
+                guard let u = f["url"], let abs = URL(string: u, relativeTo: url)?.absoluteURL else { return nil }
+                return (abs, (f["name"] ?? "attachment").replacingOccurrences(of: "/", with: "_"))
+            })
         }
         if message.name == "aasBadge", let n = (message.body as? NSNumber)?.intValue {
             // AAS-24-05: Inbox unread of all accounts on the Dock icon; none when 0.

@@ -140,6 +140,11 @@ class SharedViewPrefsTest(unittest.TestCase):
         out = webapp.update_prefs({"work_start": 20, "work_end": 9})
         self.assertLess(out["work_start"], out["work_end"], "inverted day falls back to defaults")
 
+    def test_update_mode(self):
+        self.assertEqual(webapp.load_prefs()["update_mode"], "auto")
+        self.assertEqual(webapp.update_prefs({"update_mode": "manual"})["update_mode"], "manual")
+        self.assertEqual(webapp.update_prefs({"update_mode": "never"})["update_mode"], "manual", "unknown mode ignored")
+
     def test_mail_sort(self):
         self.assertEqual(webapp.load_prefs()["mail_sort"], "date_desc", "newest first by default")
         self.assertEqual(webapp.update_prefs({"mail_sort": "from"})["mail_sort"], "from")
@@ -1439,3 +1444,18 @@ class SelfUpdateTest(unittest.TestCase):
         a, b = self._gh(code=1, stderr="HTTP 404: Not Found")
         with a, b:
             self.assertFalse(webapp.update_install()["ok"])
+
+
+class InlineImagesTest(unittest.TestCase):
+    RAW = (b"MIME-Version: 1.0\r\nSubject: s\r\nContent-Type: multipart/related; boundary=B\r\n\r\n"
+           b"--B\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>hi<img src=\"cid:pic1@x\"></p>\r\n"
+           b"--B\r\nContent-Type: image/png\r\nContent-ID: <pic1@x>\r\nContent-Transfer-Encoding: base64\r\n\r\niVBORw0KGgo=\r\n"
+           b"--B\r\nContent-Type: image/jpeg\r\nContent-ID: <unused@x>\r\nContent-Transfer-Encoding: base64\r\n\r\n/9j/4A==\r\n"
+           b"--B--\r\n")
+
+    def test_only_pictures_shown_in_html_are_listed(self):
+        msg = webapp.parse_raw(self.RAW)
+        imgs = webapp._inline_images(msg, webapp._body_html(msg))
+        self.assertEqual([p.get_content_type() for p in imgs], ["image/png"])
+        self.assertEqual(webapp._img_name(imgs[0], 0), "картинка-1.png")
+        self.assertEqual(webapp._part_bytes(imgs[0])[:4], b"\x89PNG")
