@@ -370,3 +370,50 @@ test('updates: «auto» schedules a check, «manual» schedules nothing', () => 
   vm.runInContext(`prefs.update_mode = 'auto'`, ctx); armUpdates();
   assert.deepEqual(timers, [15000]);
 });
+
+test('fmtWhen: today → time, вчера, weekday, «24 сент.», full date for other years', () => {
+  const {fmtWhen} = load(['fmtWhen']);
+  const now = new Date(2026, 8, 25, 14, 0);  // Fri 25 Sep 2026
+  assert.equal(fmtWhen('2026-09-25 11:11', false, now), '11:11');
+  assert.equal(fmtWhen('2026-09-24 10:07', false, now), 'вчера');
+  assert.equal(fmtWhen('2026-09-24 10:07', true, now), 'вчера, 10:07');
+  assert.equal(fmtWhen('2026-09-21 09:00', false, now), 'пн');
+  assert.equal(fmtWhen('2026-09-15 16:47', true, now), '15 сент., 16:47');
+  assert.equal(fmtWhen('2025-12-31 23:00', false, now), '31.12.2025');
+  assert.equal(fmtWhen('', false, now), '');
+});
+
+test('cleanPreview drops mailto, cid stubs, separator lines and quoted headers', () => {
+  const {cleanPreview} = load(['cleanPreview']);
+  assert.equal(cleanPreview('@Вера<mailto:v@corp.ru> посмотри'), '@Вера посмотри');
+  assert.equal(cleanPreview('Добрый день [cid:image002.png@01DD] From: Иван Sent: вчера'), 'Добрый день');
+  assert.equal(cleanPreview('Да, надо убирать ----------------------------- ещё'), 'Да, надо убирать ещё');
+  assert.equal(cleanPreview('Тема: встреча завтра'), 'Тема: встреча завтра', 'a leading label is text, not a quote');
+  assert.equal(cleanPreview(null), '');
+});
+
+test('event description: forwarded «Original Appointment» header folds away', () => {
+  const {evBodyHtml} = load(['evBodyHtml']);
+  const body = 'Коллеги, актуально\n\n-----Original Appointment-----\nFrom: Иван\nSent: вчера\nSubject: Синк\n\nСсылка https://ktalk.ru/x';
+  const html = evBodyHtml(body);
+  assert.match(html, /^<div class="aas-evbody">Коллеги, актуально<\/div><details class="aas-evorig">/);
+  assert.match(html, /<summary>Исходное приглашение<\/summary><div class="aas-evbody">From: Иван/);
+  assert.match(html, /<\/details><div class="aas-evbody">Ссылка <a href="https:\/\/ktalk.ru\/x"/);
+  assert.equal(evBodyHtml('просто текст'), '<div class="aas-evbody">просто текст</div>');
+});
+
+test('layoutLanes numbers conflict groups so a crowded slot folds into «+N» per group', () => {
+  const {layoutLanes} = load(['layoutLanes']);
+  const t = h => new Date(2026, 8, 25, h);
+  const evs = [{s: t(9), e: t(10)}, {s: t(9), e: t(10)}, {s: t(12), e: t(13)}];
+  layoutLanes(evs);
+  assert.equal(evs[0]._g, evs[1]._g);
+  assert.notEqual(evs[0]._g, evs[2]._g);
+});
+
+test('evTitle drops the FW:/RE: of a forwarded invitation', () => {
+  const {evTitle} = load(['evTitle']);
+  assert.equal(evTitle({subject: 'FW: Синк продукта'}), 'Синк продукта');
+  assert.equal(evTitle({subject: 'RE: Fwd: Daily'}), 'Daily');
+  assert.equal(evTitle({}), '(без темы)');
+});

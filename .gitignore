@@ -30,3 +30,8 @@ dist/
 *.pyc
 .remember/
 dist/*.zip
+
+# Local agent tooling (skills installed per machine)
+.agents/
+.claude/
+skills-lock.json

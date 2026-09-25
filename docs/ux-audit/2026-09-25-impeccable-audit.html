@@ -1,0 +1,482 @@
+<title>AAS mail impeccable-аудит</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f3f4f6; --paper:#ffffff; --paper-2:#f8f9fa; --line:#e2e5e9; --line-2:#cdd2d8;
+  --text:#1c1f24; --muted:#636c76; --faint:#8b939c;
+  --bank:#501820; --bank-bg:#f4e9eb; --bank-mid:#8a4a55;
+  --seller:#003830; --seller-bg:#e3efeb; --lime:#30e203;
+  --p0:#b3261e; --p0-bg:#fbe9e7; --p1:#8a5a00; --p1-bg:#fbf1dc; --p2:#2f5f8a; --p2-bg:#e6eff7;
+  --ok:#1d6b3f; --ok-bg:#e5f3ea;
+  --shadow:0 1px 2px rgba(40,20,24,.06),0 8px 24px -12px rgba(40,20,24,.14);
+  --font:"Golos Text",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;
+  --bg:#141316; --paper:#1d1b20; --paper-2:#232127; --line:#302d34; --line-2:#3e3a43;
+  --text:#ecebee; --muted:#a19ca8; --faint:#77727d;
+  --bank:#d48d97; --bank-bg:#3a2328; --bank-mid:#b8727d;
+  --seller:#6fc3a8; --seller-bg:#1d3530;
+  --p0:#ff8a80; --p0-bg:#3d1f1d; --p1:#f2c14e; --p1-bg:#352b16; --p2:#8fbde6; --p2-bg:#1c2b39;
+  --ok:#7fd3a0; --ok-bg:#1b3325;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -12px rgba(0,0,0,.5);
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#141316; --paper:#1d1b20; --paper-2:#232127; --line:#302d34; --line-2:#3e3a43;
+  --text:#ecebee; --muted:#a19ca8; --faint:#77727d;
+  --bank:#d48d97; --bank-bg:#3a2328; --bank-mid:#b8727d;
+  --seller:#6fc3a8; --seller-bg:#1d3530;
+  --p0:#ff8a80; --p0-bg:#3d1f1d; --p1:#f2c14e; --p1-bg:#352b16; --p2:#8fbde6; --p2-bg:#1c2b39;
+  --ok:#7fd3a0; --ok-bg:#1b3325;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -12px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:15px;line-height:1.55;padding:0 16px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding-block:40px 80px}
+h1,h2,h3{text-wrap:balance;margin:0;letter-spacing:-.015em}
+h1{font-size:clamp(28px,4vw,40px);font-weight:700;line-height:1.1}
+h2{font-size:24px;font-weight:700;line-height:1.2}
+h3{font-size:17px;font-weight:600;line-height:1.3}
+p{margin:0;max-width:68ch}
+.muted{color:var(--muted)}
+code,.mono{font-family:var(--mono);font-size:.86em}
+code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+a{color:var(--bank)}
+
+/* header */
+.top{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end;padding-bottom:28px;border-bottom:1px solid var(--line)}
+.top p{margin-top:12px;color:var(--muted)}
+.meta{font-size:13px;color:var(--muted);text-align:right;line-height:1.7}
+.read{margin-top:28px;display:grid;grid-template-columns:1.4fr 1fr;gap:16px}
+.box{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:20px 22px}
+.box h3{margin-bottom:8px}
+.dials{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.dial{flex:1;min-width:120px;background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.dial b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.dial span{font-size:12px;color:var(--muted)}
+.keep{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:6px;font-size:14px}
+.keep li{display:flex;gap:8px}
+.keep li::before{content:"";flex:none;width:6px;height:6px;border-radius:2px;background:var(--ok);margin-top:9px}
+
+/* scoreboard */
+.score{margin-top:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.sc{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px 20px;display:flex;align-items:baseline;gap:12px}
+.sc b{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+.sc span{color:var(--muted);font-size:14px}
+.sc.p0 b{color:var(--p0)} .sc.p1 b{color:var(--p1)} .sc.p2 b{color:var(--p2)}
+
+/* toc */
+nav.toc{margin-top:32px;display:flex;flex-wrap:wrap;gap:8px}
+nav.toc a{text-decoration:none;color:var(--text);background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:14px}
+nav.toc a:hover{border-color:var(--bank);color:var(--bank)}
+nav.toc a:focus-visible{outline:2px solid var(--bank);outline-offset:2px}
+
+/* sections */
+section.s{margin-top:64px}
+section.s>header{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+.finding{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:24px;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:24px;margin-top:16px}
+.finding .txt{display:flex;flex-direction:column;gap:12px}
+.finding ul{margin:0;padding-left:18px;display:grid;gap:5px;font-size:14px}
+.finding .fix{background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:14px}
+.finding .fix b{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;font-weight:600}
+.tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.sev{font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;letter-spacing:.02em}
+.sev.p0{background:var(--p0-bg);color:var(--p0)} .sev.p1{background:var(--p1-bg);color:var(--p1)} .sev.p2{background:var(--p2-bg);color:var(--p2)}
+.where{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.viz{display:flex;flex-direction:column;gap:12px;min-width:0}
+.cap{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.cap i{font-style:normal;font-weight:600;border-radius:5px;padding:1px 7px;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+.cap i.b{background:var(--p0-bg);color:var(--p0)} .cap i.a{background:var(--ok-bg);color:var(--ok)}
+.scroll{overflow-x:auto;border-radius:12px}
+
+/* ---------- mock app kit (always light, like the default bank theme) ---------- */
+.m{--mb:#f5f6f8;--mp:#fff;--ml:#e3e6ea;--mt:#1f2328;--mm:#66707a;--mbk:#501820;--mbkbg:#f3e8ea;--msl:#003830;--msbg:#e4efec;
+  color-scheme:light;font-family:var(--font);background:var(--mp);color:var(--mt);border:1px solid var(--line-2);border-radius:12px;overflow:hidden;font-size:13px;line-height:1.35;min-width:420px}
+.m *{box-sizing:border-box}
+.m .bar{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--ml);background:var(--mp);white-space:nowrap}
+.m .btn{border:1px solid var(--ml);background:var(--mp);border-radius:999px;padding:4px 11px;font-size:12px;font-weight:500;color:var(--mt);display:inline-flex;align-items:center;gap:6px}
+.m .btn.pri{background:var(--mbk);border-color:var(--mbk);color:#fff}
+.m .btn.dng{color:#c4314b;border-color:#e8b9c1}
+.m .btn.ic{padding:4px 7px}
+.m .sel{border:1px solid var(--ml);border-radius:8px;padding:3px 22px 3px 8px;font-size:12px;position:relative}
+.m .sel::after{content:"";position:absolute;right:8px;top:9px;border:4px solid transparent;border-top-color:var(--mm)}
+.m .sw{width:26px;height:15px;border-radius:9px;background:var(--mbk);position:relative;display:inline-block;vertical-align:-3px}
+.m .sw::after{content:"";position:absolute;right:2px;top:2px;width:11px;height:11px;border-radius:50%;background:#fff}
+.m .cb{width:13px;height:13px;border:1.5px solid #9aa1a9;border-radius:3px;flex:none;display:inline-block}
+.m .cb.on{background:var(--mbk);border-color:var(--mbk);position:relative}
+.m .cb.on::after{content:"";position:absolute;left:3px;top:0;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.m .rd{width:10px;height:10px;border-radius:50%;border:1.5px solid #9aa1a9;flex:none;display:inline-block}
+.m .ud{width:8px;height:8px;border-radius:50%;background:var(--mbk);flex:none;display:inline-block}
+.m .clip{opacity:.6}
+.m .fade{color:var(--mm)}
+.m .row{display:grid;gap:3px;padding:9px 12px;border-bottom:1px solid var(--ml)}
+.m .row .l1{display:flex;gap:8px;align-items:center}
+.m .row .from{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m .row .t{font-variant-numeric:tabular-nums;color:var(--mm);font-size:12px;white-space:nowrap}
+.m .row .sub,.m .row .pv{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m .row .pv{color:var(--mm);font-size:12px}
+.m .ghost{outline:2px dashed #c4314b;outline-offset:-2px}
+.m .edge{position:relative}
+.m .edge::after{content:"";position:absolute;right:0;top:0;bottom:0;width:48px;background:linear-gradient(90deg,rgba(255,255,255,0),#fff)}
+.m .hint{font-size:11px;color:#c4314b;font-weight:600}
+.m .av{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;font-size:11px;font-weight:600;flex:none}
+.m kbd{font-family:var(--mono);font-size:10.5px;border:1px solid var(--ml);border-bottom-width:2px;border-radius:5px;padding:1px 5px;background:var(--mb);color:var(--mm)}
+.m .seg{display:inline-flex;border:1px solid var(--ml);border-radius:9px;padding:2px;gap:2px;background:var(--mb)}
+.m .seg span{padding:3px 10px;border-radius:7px;font-size:12px;font-weight:500;color:var(--mm)}
+.m .seg span.on{background:var(--mp);color:var(--mt);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.m .pill{border-radius:999px;padding:4px 11px;font-size:12px;font-weight:500;display:inline-flex;gap:6px;align-items:center}
+.m .badge{background:var(--mbk);color:#fff;border-radius:999px;font-size:10.5px;font-weight:600;padding:0 6px;line-height:16px;font-variant-numeric:tabular-nums}
+
+/* calendar mock */
+.cal{display:grid;grid-template-columns:40px repeat(3,1fr);font-size:11px}
+.cal .h{padding:6px 8px;border-bottom:1px solid var(--ml);font-weight:600;font-size:12px}
+.cal .h.today span{background:var(--mbk);color:#fff;border-radius:6px;padding:0 6px}
+.cal .tm{color:var(--mm);text-align:right;padding-right:6px;font-variant-numeric:tabular-nums}
+.cal .col{position:relative;border-left:1px solid var(--ml)}
+.cal .ev{position:absolute;left:3px;right:3px;border-radius:5px;padding:3px 6px;overflow:hidden;line-height:1.25}
+.cal .ev b{font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal .gl{position:absolute;left:0;right:0;border-top:1px solid var(--ml)}
+.cal .now{position:absolute;left:0;right:0;border-top:2px solid #c4314b}
+.cal .now::before{content:"";position:absolute;left:-4px;top:-5px;width:8px;height:8px;border-radius:50%;background:#c4314b}
+.cal .off{position:absolute;left:0;right:0;background:repeating-linear-gradient(135deg,transparent 0 6px,rgba(0,0,0,.035) 6px 7px)}
+
+/* variant cards */
+.variants{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.var{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.var .pc{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px}
+.var .pc div{background:var(--paper-2);border-radius:8px;padding:8px 10px}
+.var .pc b{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.rec{font-size:11px;font-weight:600;color:var(--ok);background:var(--ok-bg);border-radius:6px;padding:2px 8px;letter-spacing:.02em}
+
+/* roadmap */
+.road{margin-top:16px;display:grid;gap:0;background:var(--paper);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.road .st{display:grid;grid-template-columns:56px 1fr auto;gap:16px;padding:16px 20px;border-bottom:1px solid var(--line);align-items:start}
+.road .st:last-child{border-bottom:0}
+.road .n{font-size:22px;font-weight:700;color:var(--bank);font-variant-numeric:tabular-nums}
+.road .eff{font-size:12px;color:var(--muted);white-space:nowrap;text-align:right}
+.road h3{font-size:15px}
+.road p{font-size:14px;color:var(--muted);margin-top:3px}
+.tokens{margin-top:16px;overflow-x:auto;background:var(--paper);border:1px solid var(--line);border-radius:14px}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+tr:last-child td{border-bottom:0}
+.swatch{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:6px;border:1px solid rgba(0,0,0,.12)}
+footer{margin-top:56px;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px}
+
+@media (max-width:860px){
+  .top,.read,.finding,.variants{grid-template-columns:1fr}
+  .meta{text-align:left}
+  .score{grid-template-columns:1fr}
+  .road .st{grid-template-columns:40px 1fr}
+  .road .eff{grid-column:2;text-align:left}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<style>
+.hs{margin-top:16px;overflow-x:auto;background:var(--paper);border:1px solid var(--line);border-radius:14px}
+.bar5{display:inline-flex;gap:3px;vertical-align:middle}
+.bar5 i{width:14px;height:8px;border-radius:2px;background:var(--line)}
+.bar5 i.f{background:var(--bank)}
+.total{display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin-top:28px}
+.total .big{font-size:56px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;color:var(--bank)}
+.total .big small{font-size:24px;color:var(--muted);font-weight:600}
+.band{font-size:13px;font-weight:600;background:var(--p1-bg);color:var(--p1);border-radius:6px;padding:3px 10px}
+.verdict{margin-top:16px;display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:start}
+.stamp{font-weight:700;font-size:13px;letter-spacing:.04em;border:2px solid var(--ok);color:var(--ok);border-radius:8px;padding:6px 12px;white-space:nowrap}
+.cmd{font-family:var(--mono);font-size:12.5px;background:var(--bank-bg);color:var(--bank);border-radius:6px;padding:2px 8px;white-space:nowrap}
+.fp{font-size:13px;color:var(--muted)}
+.fp s{color:var(--faint)}
+.sev.p3{background:var(--paper-2);color:var(--muted);border:1px solid var(--line)}
+.conflict{margin-top:16px;border:1px solid var(--line-2);border-radius:14px;padding:18px 20px;background:var(--paper-2);display:grid;gap:8px}
+pre.code{margin:0;font-family:var(--mono);font-size:12px;line-height:1.55;background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow-x:auto;white-space:pre}
+pre.code .d{color:var(--p0)} pre.code .a{color:var(--ok)}
+@media (max-width:860px){.verdict{grid-template-columns:1fr}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>AAS mail: технический аудит impeccable</h1>
+      <p>Команда <code>/impeccable audit</code> по веб-интерфейсу (<code>web/index.html</code>, <code>web/ui-kit/*.css</code>), регистр «product». Проверено тремя способами: детектор impeccable по исходникам, замеры в запущенном приложении (контраст в 4 темах, Tab-навигация, модалки, узкое окно), ручной разбор кода. Дополняет <a href="https://claude.ai/artifact/YDPmPd7KTXNrc6VpQtdy5K">UX-аудит по taste-skill</a>: там про визуальный язык, здесь про доступность, адаптивность и качество реализации.</p>
+    </div>
+    <div class="meta">Версия 1.2.14 + незакоммиченные правки<br>25 сентября 2026<br>Темы: light, dark, royal-velvet, navy-orange</div>
+  </header>
+
+  <div class="total">
+    <div class="big">13<small>/20</small></div>
+    <div><span class="band">Acceptable: нужна заметная работа</span><p class="muted" style="margin-top:6px;font-size:14px">Сильная тема и токены, чистый визуал без AI-штампов. Проседают доступность с клавиатуры и поведение при сужении окна.</p></div>
+  </div>
+
+  <div class="hs">
+    <table>
+      <thead><tr><th>Измерение</th><th>Балл</th><th>Ключевая находка</th></tr></thead>
+      <tbody>
+        <tr><td>Доступность</td><td><span class="bar5"><i class="f"></i><i class="f"></i><i></i><i></i></span> 2</td><td>Строки писем и папки: <code>div</code> без роли и tabindex. Tab их не видит, модалка не держит фокус.</td></tr>
+        <tr><td>Производительность</td><td><span class="bar5"><i class="f"></i><i class="f"></i><i class="f"></i><i></i></span> 3</td><td>199 строк без виртуализации (2 058 узлов). Шрифт грузится с Google Fonts, в офлайне и без VPN уходит в fallback.</td></tr>
+        <tr><td>Адаптивность</td><td><span class="bar5"><i class="f"></i><i class="f"></i><i></i><i></i></span> 2</td><td>При 720 px (или масштабе 200%) страница шире окна: 860 px. Панель действий письма прячет кнопки за краем.</td></tr>
+        <tr><td>Темы и токены</td><td><span class="bar5"><i class="f"></i><i class="f"></i><i class="f"></i><i></i></span> 3</td><td>8 тем на токенах, всего 25 hex-литералов вне tokens.css. Минусы: <code>--aas-ink:#000</code>, z-index без шкалы.</td></tr>
+        <tr><td>Анти-паттерны</td><td><span class="bar5"><i class="f"></i><i class="f"></i><i class="f"></i><i></i></span> 3</td><td>5 боковых цветных полос (side-tab), 14 длинных тире в тексте интерфейса. Остальное чисто.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="verdict box" style="margin-top:16px">
+    <span class="stamp">НЕ ПОХОЖЕ НА AI</span>
+    <div>
+      <h3>Вердикт по анти-паттернам</h3>
+      <p class="muted" style="font-size:14px">Интерфейс выглядит как собранный руками рабочий инструмент: свой бренд, Golos Text, без градиентов, стекла и карточек-метрик. Реальных штампов два: цветные полосы слева у выбранной строки, карточек аккаунтов и отменённых встреч, и длинные тире в подсказках. Цветастый календарь штампом не считаю: цвета приходят из категорий Outlook, это данные пользователя.</p>
+      <p class="fp" style="margin-top:8px">Ложные срабатывания детектора, проверены вручную: <s>broken-image</s> (регулярка в JS, строка 1144), <s>single-font</s> (для product-интерфейса одно семейство нормально), <s>numbered-section-markers</s> (это время встреч 03, 09, 10).</p>
+    </div>
+  </div>
+
+  <div class="score">
+    <div class="sc p0"><b>2</b><span>P0: блокирует задачу</span></div>
+    <div class="sc p1"><b>5</b><span>P1: серьёзно мешает или нарушает WCAG AA</span></div>
+    <div class="sc p2"><b>5</b><span>P2 и P3: мелочи и полировка</span></div>
+  </div>
+
+  <nav class="toc" aria-label="Разделы">
+    <a href="#p0">P0</a><a href="#p1">P1</a><a href="#p2">P2 и P3</a><a href="#conflict">Расхождение с taste</a><a href="#systemic">Системные проблемы</a><a href="#good">Что хорошо</a><a href="#actions">Команды</a>
+  </nav>
+
+  <!-- P0 -->
+  <section class="s" id="p0">
+    <header><h2>P0: блокирует задачу</h2></header>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p0">P0</span><span class="where">index.html, рендер #rows и #folders</span></div>
+        <h3>Список писем и папки недоступны с клавиатуры и скринридера</h3>
+        <p class="muted">Строка письма и папка отрисованы как <code>div</code> с обработчиком клика, без <code>role</code>, <code>tabindex</code> и <code>aria-selected</code>. Замер: 14 нажатий Tab подряд проходят только по звёздочкам папок, ни одна папка и ни одно письмо фокус не получают. Горячие клавиши j/k и стрелки есть, но скринридер не озвучит, какое письмо выбрано и прочитано ли оно.</p>
+        <div class="fix"><b>Рекомендация</b>Список: <code>role="listbox"</code> с roving tabindex, строки <code>role="option"</code>, <code>aria-selected</code>, в <code>aria-label</code> отправитель, тема, время и «не прочитано». Папки: <code>button</code> внутри <code>nav</code>, текущая с <code>aria-current="page"</code>. Звёздочки убрать из порядка Tab (<code>tabindex="-1"</code>, закрепление через контекстное меню или клавишу).</div>
+        <div class="tags"><span class="muted" style="font-size:12px">WCAG 2.1.1, 4.1.2</span><span class="cmd">/impeccable harden</span></div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="b">сейчас</i>порядок Tab</div>
+<pre class="code"><span class="d">Tab 1  ☆ Входящие (звезда)</span>
+<span class="d">Tab 2  ☆ Черновики (звезда)</span>
+<span class="d">…      ещё 23 звезды</span>
+<span class="d">Письма и папки: недостижимы</span></pre>
+        <div class="cap"><i class="a">предложение</i>разметка строки</div>
+<pre class="code">&lt;div id="rows" role="listbox"
+     aria-label="Входящие, 7 непрочитанных"&gt;
+  &lt;div role="option" tabindex="0"
+       aria-selected="true"
+       aria-label="Не прочитано. Орлов Павел.
+         Выход сотрудника. Вчера"&gt;…&lt;/div&gt;
+  &lt;div role="option" tabindex="-1" …&gt;
+<span class="a">Tab → поиск → папки → список → письмо</span></pre>
+      </div>
+    </article>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p0">P0</span><span class="where">#ov #modal</span></div>
+        <h3>Модалки не удерживают фокус</h3>
+        <p class="muted">Compose, настройки и карточка встречи открываются в <code>div#modal</code> без <code>role="dialog"</code> и <code>aria-modal</code>. Замер: после открытия «Нового письма» фокус встаёт в «Кому», но через 12 нажатий Tab уходит на кнопку «Создать» под затемнением. Пользователь с клавиатуры печатает не туда. Escape закрывает модалку, это работает.</p>
+        <div class="fix"><b>Рекомендация</b>Перевести на нативный <code>&lt;dialog&gt;</code> с <code>showModal()</code>: браузер сам даёт фокус-ловушку, <code>inert</code> для фона, Escape и возврат фокуса на кнопку-источник. Перетаскивание окна за заголовок сохраняется. Заголовок модалки связать через <code>aria-labelledby</code>.</div>
+        <div class="tags"><span class="muted" style="font-size:12px">WCAG 2.4.3, 4.1.2</span><span class="cmd">/impeccable harden</span></div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="a">предложение</i></div>
+<pre class="code"><span class="d">- &lt;div id="ov"&gt;&lt;div id="modal" class="aas-modal"&gt;</span>
+<span class="a">+ &lt;dialog id="modal" class="aas-modal"
++         aria-labelledby="modal-title"&gt;</span>
+
+<span class="d">- $('#ov').classList.add('on')</span>
+<span class="a">+ $('#modal').showModal()   // ловушка фокуса,
++                           // фон inert, Esc</span>
+
+<span class="a">+ #modal::backdrop { background: var(--aas-scrim) }</span></pre>
+      </div>
+    </article>
+  </section>
+
+  <!-- P1 -->
+  <section class="s" id="p1">
+    <header><h2>P1: серьёзно мешает</h2></header>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p1">P1</span><span class="where">main, #list, #rtools</span></div>
+        <h3>При сужении окна и масштабе 200% страница вылезает за край</h3>
+        <p class="muted">При ширине 720 px документ 860 px, появляется горизонтальная прокрутка всего окна. У колонок жёсткая ширина (сайдбар 220, список 380), и они не сворачиваются. Панель действий письма прокручивается вбок со скрытым скроллбаром. На 900 px поиск обрезается до «Поиск по по».</p>
+        <div class="fix"><b>Рекомендация</b>Точки перестройки под окно приложения: меньше 1100 px сайдбар сворачивается в иконки или выезжающую панель; меньше 820 px список и письмо показываются по очереди с кнопкой «Назад». Кнопки действий письма переносятся в меню «•••» через container query.</div>
+        <div class="tags"><span class="muted" style="font-size:12px">WCAG 1.4.10 Reflow</span><span class="cmd">/impeccable adapt</span></div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="a">предложение</i>три состояния окна</div>
+        <div class="scroll"><div class="m" style="padding:14px;display:grid;gap:10px;background:var(--mb)">
+          <div style="display:grid;grid-template-columns:22% 30% 1fr;gap:4px;height:46px"><div style="background:#e9ebee;border-radius:5px"></div><div style="background:#fff;border:1px solid var(--ml);border-radius:5px"></div><div style="background:#fff;border:1px solid var(--ml);border-radius:5px"></div></div>
+          <div class="fade" style="font-size:11px;margin-top:-6px">от 1100 px: три колонки</div>
+          <div style="display:grid;grid-template-columns:36px 36% 1fr;gap:4px;height:46px;max-width:78%"><div style="background:#e9ebee;border-radius:5px"></div><div style="background:#fff;border:1px solid var(--ml);border-radius:5px"></div><div style="background:#fff;border:1px solid var(--ml);border-radius:5px"></div></div>
+          <div class="fade" style="font-size:11px;margin-top:-6px">820-1100 px: папки в иконки</div>
+          <div style="display:grid;grid-template-columns:1fr;gap:4px;height:46px;max-width:48%"><div style="background:#fff;border:1px solid var(--ml);border-radius:5px;padding:6px 8px;font-size:11px">‹ Назад &nbsp;·&nbsp; письмо</div></div>
+          <div class="fade" style="font-size:11px;margin-top:-6px">до 820 px и масштаб 200%: одна колонка</div>
+        </div></div>
+      </div>
+    </article>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p1">P1</span><span class="where">#search, #mv, #toast</span></div>
+        <h3>Поля без подписей и тосты без озвучки</h3>
+        <ul>
+          <li><code>#search</code> и выбор папки <code>#mv</code> подписаны только плейсхолдером или ничем.</li>
+          <li><code>#toast</code> без <code>aria-live</code>: «Письмо отправлено» и ошибки не озвучиваются.</li>
+          <li>Индикатор «Нет связи» передаёт статус только цветом и видимостью, без <code>role="status"</code>.</li>
+          <li>Второй <code>h2</code> на странице пустой.</li>
+        </ul>
+        <div class="fix"><b>Рекомендация</b><code>aria-label</code> для поиска и перемещения; <code>role="status" aria-live="polite"</code> для тоста и статуса связи; ошибки отправки в <code>role="alert"</code>. Пустой заголовок не рендерить.</div>
+        <div class="tags"><span class="muted" style="font-size:12px">WCAG 1.3.1, 3.3.2, 4.1.3</span><span class="cmd">/impeccable harden</span></div>
+      </div>
+      <div class="viz">
+<pre class="code"><span class="a">&lt;input id="search" type="search"
+  aria-label="Поиск по почте"
+  placeholder="Поиск по почте"&gt;
+
+&lt;div id="toast" class="aas-toast"
+  role="status" aria-live="polite"&gt;
+
+&lt;button id="dot" class="aas-status-dot"
+  role="status"&gt;Нет связи&lt;/button&gt;</span></pre>
+      </div>
+    </article>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p1">P1</span><span class="where">250 элементов</span></div>
+        <h3>Мелкие цели клика</h3>
+        <p class="muted">250 интерактивных элементов меньше 24×24 px: чекбоксы строк (13 px), звёзды папок, кружки прочитанности, кнопки в карточках цепочки. Для мыши на трекпаде это промахи, особенно у кружка «прочитано» рядом с чекбоксом.</p>
+        <div class="fix"><b>Рекомендация</b>Оставить визуальный размер, но расширить зону клика до 28-32 px через padding или <code>::before</code> с отрицательным inset. Чекбокс и кружок разнести минимум на 8 px.</div>
+        <div class="tags"><span class="muted" style="font-size:12px">WCAG 2.5.8 Target Size</span><span class="cmd">/impeccable adapt</span></div>
+      </div>
+      <div class="viz">
+<pre class="code"><span class="a">.aas-row__ico, .aas-folder__pin, .aas-row input {
+  position: relative;
+}
+.aas-row__ico::before, .aas-folder__pin::before {
+  content: ""; position: absolute;
+  inset: -8px;            /* зона 28 px */
+}</span></pre>
+      </div>
+    </article>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p1">P1</span><span class="where">app.css:792, components.css:347, 353, 693; app.css:470</span></div>
+        <h3>Боковые цветные полосы (side-tab)</h3>
+        <p class="muted">Абсолютный запрет impeccable. Найдено 5 мест: выбранная строка письма (4 px акцентом), карточки аккаунтов в настройках (3 px цветом банка и селлера), отменённые встречи и строки с <code>rgb(0 0 0/25%)</code>. Полоса дублирует то, что уже сказано фоном выделения.</p>
+        <div class="fix"><b>Рекомендация</b>Выбранная строка: тонированный фон <code>--aas-accent-bg</code> + полноценная 1 px рамка акцентом со скруглением. Карточки аккаунтов: цвет в заголовке и маленький знак аккаунта. Отменённые встречи: штриховка уже есть, полоса лишняя.</div>
+        <div class="tags"><span class="cmd">/impeccable quieter</span></div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="b">сейчас</i><i class="a">предложение</i></div>
+        <div class="scroll"><div class="m" style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px;background:var(--mb)">
+          <div style="background:#f3e8ea;border-left:4px solid #501820;padding:8px 10px"><b>Карпов Денис</b><div class="fade" style="font-size:12px">Реструктуризация по КН</div></div>
+          <div style="background:#f3e8ea;box-shadow:inset 0 0 0 1px #50182055;border-radius:8px;padding:8px 10px"><b>Карпов Денис</b><div class="fade" style="font-size:12px">Реструктуризация по КН</div></div>
+        </div></div>
+      </div>
+    </article>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p1">P1</span><span class="where">контраст, 4 темы</span></div>
+        <h3>Контраст в порядке, но на грани в navy-orange</h3>
+        <p class="muted">Вторичный текст (превью, meta цепочки) в navy-orange: 4.58:1 при 13 px, запас 0.08 до порога AA. Любая прозрачность или hover-фон уводит ниже. В остальных темах 5.0-6.8:1. Шесть мест с текстом 10-11 px (бейджи, подписи сайдбара) усиливают риск.</p>
+        <div class="fix"><b>Рекомендация</b>Поднять <code>--aas-muted</code> в navy-orange на один шаг светлее (цель 5.5:1). Минимальный размер текста 12 px, 10 px оставить только для цифр в бейджах.</div>
+        <div class="tags"><span class="muted" style="font-size:12px">WCAG 1.4.3</span><span class="cmd">/impeccable typeset</span></div>
+      </div>
+      <div class="viz">
+        <div class="hs" style="margin:0"><table style="min-width:0">
+          <thead><tr><th>Тема</th><th>Превью 13 px</th><th>Вкладка</th><th>Primary</th></tr></thead>
+          <tbody>
+            <tr><td>light</td><td>5.04</td><td>4.66</td><td>14.07</td></tr>
+            <tr><td>dark</td><td>6.09</td><td>6.82</td><td>8.11</td></tr>
+            <tr><td>royal-velvet</td><td>6.60</td><td>6.93</td><td>6.84</td></tr>
+            <tr><td>navy-orange</td><td style="color:var(--p1);font-weight:600">4.58</td><td>5.43</td><td>6.58</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- P2 -->
+  <section class="s" id="p2">
+    <header><h2>P2 и P3: мелочи и полировка</h2></header>
+    <div class="tokens">
+      <table>
+        <thead><tr><th>Находка</th><th>Где</th><th>Что сделать</th><th>Команда</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>Golos Text грузится с fonts.googleapis.com. В корпоративной сети без интернета или на старте без VPN интерфейс открывается системным шрифтом и прыгает.</td><td><code>index.html:8-10</code></td><td>Положить woff2 (4 начертания, кириллица) в <code>web/ui-kit/fonts</code>, <code>@font-face</code> с <code>font-display: swap</code></td><td><span class="cmd">/impeccable optimize</span></td><td><span class="sev p2">P2</span></td></tr>
+          <tr><td>199 строк рендерятся целиком через innerHTML, 2 058 узлов. При «Все» за год будет в 10 раз больше.</td><td><code>#rows</code></td><td>Виртуализация окна или <code>content-visibility: auto</code> + <code>contain-intrinsic-size</code> на строке</td><td><span class="cmd">/impeccable optimize</span></td><td><span class="sev p2">P2</span></td></tr>
+          <tr><td>Тело письма в тёмной теме: белый прямоугольник, у iframe жёстко <code>background:#fff</code></td><td><code>index.html:1143</code></td><td>Для plain-text писем брать цвета темы; для HTML оставить белый, но со скруглением и отступом, как лист</td><td><span class="cmd">/impeccable polish</span></td><td><span class="sev p2">P2</span></td></tr>
+          <tr><td>z-index без шкалы: 3, 4, 5, 50, 80, 99</td><td><code>ui-kit/*.css</code></td><td>Токены <code>--z-sticky / --z-dropdown / --z-modal / --z-toast</code></td><td><span class="cmd">/impeccable polish</span></td><td><span class="sev p2">P2</span></td></tr>
+          <tr><td>14 длинных тире в подписях и подсказках</td><td><code>index.html</code></td><td>Переписать короче: точка или двоеточие</td><td><span class="cmd">/impeccable clarify</span></td><td><span class="sev p3">P3</span></td></tr>
+          <tr><td><code>--aas-ink: #000000</code>, 12 inline <code>style=""</code> в шаблонах</td><td><code>tokens.css</code>, <code>index.html</code></td><td>Ink из холодной шкалы (#16181c); inline-стили в классы</td><td><span class="cmd">/impeccable polish</span></td><td><span class="sev p3">P3</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- conflict -->
+  <section class="s" id="conflict">
+    <header><h2>Где impeccable и taste расходятся</h2></header>
+    <div class="conflict">
+      <h3>Цветная полоса у событий календаря</h3>
+      <p class="muted" style="font-size:14px">В UX-аудите по taste я предложила для календаря «светлая заливка + полоса 3 px слева». impeccable это прямо запрещает как side-tab. Выбираю вариант, совместимый с обоими: светлая заливка цвета категории + 1 px рамка того же тона + цветная точка 8 px перед названием. Статус формой (пунктир, штриховка) остаётся как было предложено.</p>
+      <div class="scroll"><div class="m" style="padding:12px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;background:var(--mb);min-width:420px">
+        <div style="background:#f3e8ea;box-shadow:inset 0 0 0 1px #50182033;border-radius:6px;padding:6px 8px"><b style="display:flex;gap:6px;align-items:center"><span style="width:8px;height:8px;border-radius:50%;background:#501820"></span>Синк продукта</b><span class="fade" style="font-size:11px">10:05</span></div>
+        <div style="background:#f6f1e1;box-shadow:inset 0 0 0 1px #a8872a44;border-radius:6px;padding:6px 8px"><b style="display:flex;gap:6px;align-items:center"><span style="width:8px;height:8px;border-radius:50%;background:#a8872a"></span>Daily ELK</b><span class="fade" style="font-size:11px">10:30</span></div>
+        <div style="background:#fff;border:1.5px dashed #501820;border-radius:6px;padding:5px 7px;color:#501820"><b>Интеграция</b><span style="font-size:11px">ждёт ответа</span></div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- systemic -->
+  <section class="s" id="systemic">
+    <header><h2>Системные проблемы</h2></header>
+    <div class="read" style="margin-top:0">
+      <div class="box"><h3>Интерактив на div'ах</h3><p class="muted" style="font-size:14px">Строки, папки, карточки писем в цепочке, события календаря собираются строками innerHTML (36 мест) из <code>div</code> с onclick. Отсюда сразу три P0/P1: нет фокуса, нет ролей, мелкие зоны клика. Лечится один раз на уровне шаблонов, а не точечно.</p></div>
+      <div class="box"><h3>Раскладка без точек перестройки</h3><p class="muted" style="font-size:14px">Ширины колонок и панели инструментов заданы в пикселях, а сужение решается <code>overflow: hidden</code> и скрытым скроллом. Нужна одна стратегия: container queries для панелей и 2 точки для каркаса.</p></div>
+    </div>
+  </section>
+
+  <!-- good -->
+  <section class="s" id="good">
+    <header><h2>Что сделано хорошо</h2></header>
+    <div class="box">
+      <ul class="keep" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+        <li>Токенная система: 8 тем, акцент по аккаунту, dark-варианты</li>
+        <li>Контраст основного текста 13-17:1 во всех темах</li>
+        <li>Тело письма в sandbox-iframe без скриптов, CSP <code>default-src 'none'</code>, картинки по запросу</li>
+        <li>Весь HTML из данных проходит через <code>esc()</code></li>
+        <li>Горячие клавиши j/k, стрелки, Delete, Escape для модалок</li>
+        <li><code>prefers-reduced-motion</code> обнуляет длительности</li>
+        <li>Все 275 кнопок имеют доступное имя (текст, aria-label или title)</li>
+        <li>Переходы только по transform, background и box-shadow, 180 мс</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- actions -->
+  <section class="s" id="actions">
+    <header><h2>Рекомендуемые команды</h2><span class="muted">по порядку выполнения</span></header>
+    <div class="road">
+      <div class="st"><span class="n">1</span><div><h3><span class="cmd">/impeccable harden</span> P0</h3><p>Роли и фокус для списка и папок, <code>&lt;dialog&gt;</code> для модалок, aria-live для тоста и статуса, подписи полей.</p></div><span class="eff">~1 день</span></div>
+      <div class="st"><span class="n">2</span><div><h3><span class="cmd">/impeccable adapt</span> P1</h3><p>Точки перестройки 1100 и 820 px, меню «•••» в панели письма, зоны клика 28 px.</p></div><span class="eff">~1 день</span></div>
+      <div class="st"><span class="n">3</span><div><h3><span class="cmd">/impeccable quieter</span> P1</h3><p>Убрать 5 боковых полос: выбранная строка, аккаунты, отменённые встречи.</p></div><span class="eff">~2 часа</span></div>
+      <div class="st"><span class="n">4</span><div><h3><span class="cmd">/impeccable typeset</span> P1</h3><p>Muted в navy-orange до 5.5:1, минимум 12 px для текста.</p></div><span class="eff">~1 час</span></div>
+      <div class="st"><span class="n">5</span><div><h3><span class="cmd">/impeccable optimize</span> P2</h3><p>Локальные шрифты, content-visibility для длинного списка.</p></div><span class="eff">~3 часа</span></div>
+      <div class="st"><span class="n">6</span><div><h3><span class="cmd">/impeccable clarify</span> и <span class="cmd">/impeccable polish</span></h3><p>Тексты без длинных тире, шкала z-index, ink без чистого чёрного, тело письма в тёмной теме. Финальный проход.</p></div><span class="eff">~0.5 дня</span></div>
+    </div>
+    <p class="muted" style="margin-top:16px;font-size:14px">Команды можно запускать по одной или все подряд. После правок повторный <code>/impeccable audit</code> покажет новый балл. Для точной оценки стоит один раз выполнить <code>/impeccable init</code>: он создаст PRODUCT.md, и следующие проверки будут учитывать контекст продукта.</p>
+  </section>
+
+  <footer>Замеры сделаны в запущенном приложении на 127.0.0.1:8780 при 1440×900 и 720×450. Скриншоты с реальной почтой в отчёт не включены, в макетах вымышленные данные. Во время аудита параллельно правились <code>web/index.html</code> и <code>app.css</code>; номера строк указаны по состоянию на 14:50.</footer>
+</div>

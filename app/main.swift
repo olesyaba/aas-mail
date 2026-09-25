@@ -98,7 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         ) { [weak self] _ in self?.showCalendarFromTray() }
         NotificationCenter.default.addObserver(
             forName: .easShowMain, object: nil, queue: .main
-        ) { [weak self] _ in self?.showMainWindow() }
+        ) { [weak self] _ in self?.showMailFromTray() }
         NotificationCenter.default.addObserver(
             forName: .easCreateEvent, object: nil, queue: .main
         ) { [weak self] note in
@@ -145,6 +145,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func applicationShouldHandleReopen(_ s: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag { showMainWindow() }
         return true
+    }
+
+    /// Tray footer «Почта» — raise the window and switch back to the mail tab
+    /// (it may have been left on the calendar); the current account stays.
+    func showMailFromTray() {
+        showMainWindow()
+        web.evaluateJavaScript(
+            "if (typeof showView==='function' && view!=='mail') { showView('mail', ACCT); if (location.hash==='#cal') history.replaceState(null, '', location.pathname + location.search); }"
+        ) { _, _ in }
     }
 
     /// Tray footer "Календарь" — raise the mail window and switch to the cal tab.

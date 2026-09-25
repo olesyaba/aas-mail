@@ -42,13 +42,13 @@ Motion `180ms` `cubic-bezier(0.16, 1, 0.3, 1)`. `prefers-reduced-motion` → `--
 
 | Функция клиента | Компоненты |
 |-----------------|------------|
-| Dual accounts | `.aas-tab--bank/seller`, `.aas-topnav--*`, dual-bar, acct cards |
+| Dual accounts | `.aas-accts` (переключатель ящика) + `.aas-sect` (Почта / Календарь), `.aas-topnav--*`, acct cards |
 | Папки + избранное + unread | `.aas-folders`, `.aas-folder`, `.aas-badge`, pin |
-| Список / read icons | `.aas-row`, `.aas-row__ico`, unread |
-| Письмо / вложения | `.aas-mc`, `.aas-att`, reader-tools |
+| Список / read icons | `.aas-row`, `.aas-row__ico`, unread; чекбокс и кольцо «прочитано» только на hover / при выборе; `#bulkbar` заменяет `#listbar`, пока что-то выбрано |
+| Письмо / вложения | `.aas-mc` (закрытое письмо = строка, открытое = карточка, середина цепочки свёрнута в «ещё N»), `.aas-att`, reader-tools (подписи уходят в иконки через container query) |
 | Compose / move | forms, `.aas-btn`, modal |
-| Календарь day/week | `.aas-seg`, `.aas-ev--*`, `.aas-chip`, `.aas-nowline` |
-| RSVP + attendees | `.aas-rsvp`, `.aas-attendee`, `.aas-avail` |
+| Календарь day/week | `.aas-seg`, `.aas-ev--*` (светлая заливка `--evc` + рамка 1 px + точка; пунктир = нет ответа, штриховка = отменена), `.aas-ev-more` («+N» после 3 колонок), `.aas-offhours`, `.aas-chip`, `.aas-nowline` |
+| RSVP + attendees | `.aas-rsvpseg` (ответ первым, сегментом), `.aas-attendee`, `.aas-avail` |
 | Трей | `.aas-tray`, now-strip, rsvp |
 | Настройки / About | `.aas-settings-tabs`, `.aas-about`, acct blocks |
 | Sync / connection | `.aas-sync`, `.aas-status-dot` |
@@ -59,3 +59,7 @@ Motion `180ms` `cubic-bezier(0.16, 1, 0.3, 1)`. `prefers-reduced-motion` → `--
 - Лайм на длинных абзацах
 - Cards-everywhere без интерактива
 - Inter / system-only без Golos
+- Цветная полоса сбоку (`border-left` 3–4 px) как акцент: выделение = тонированный фон и рамка 1 px
+- Эмодзи и текстовые глифы вместо иконок: одна SVG-обводка 1.8 px (`icon()` в index.html)
+- Кнопки, уезжающие за край со скрытым скроллбаром: подписи сворачиваются в иконки
+- Чистый `#000`: `--aas-ink` = `#111418`

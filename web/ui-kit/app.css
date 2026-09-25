@@ -198,8 +198,11 @@ body.green #folders {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 110px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
+
+#listbar select { flex: none; }
 
 #rows {
   flex: 1;
@@ -694,6 +697,11 @@ a.aas-btn--primary { color: var(--aas-on-accent); text-decoration: none; }
 .aas-row__ico:hover .aas-readdot { transform: scale(1.2); }
 .aas-bulkbar .aas-btn .aas-readdot { margin-right: 6px; width: 9px; height: 9px; }
 .aas-bulkbar { gap: 6px; }
+.aas-bulkbar { flex-wrap: wrap; row-gap: 4px; }
+.aas-bulkbar__mv { width: auto; max-width: 150px; font-size: inherit; padding: 2px 6px; }
+/* Mail rows dragged onto a folder: the target lights up. */
+.aas-dragging-mail .aas-folder[data-id] { transition: box-shadow var(--aas-dur) var(--aas-ease); }
+.aas-folder.drop { background: var(--aas-accent-bg); box-shadow: inset 0 0 0 2px var(--aas-accent); }
 
 .aas-slots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 
@@ -913,3 +921,334 @@ input[type="checkbox"].aas-sw:focus-visible { outline: 2px solid var(--aas-accen
   padding:0 8px;font-size:var(--aas-t-sm);cursor:pointer}
 .aas-att-act:last-child{border-top-right-radius:var(--aas-r-sm);border-bottom-right-radius:var(--aas-r-sm)}
 .aas-att-act:hover{background:var(--aas-accent-bg);color:var(--aas-accent-text)}
+
+/* ═══ UI refresh (taste audit 2026-09-25) ═══════════════════════════════════
+   Account + section switches, contextual selection bar, quieter rows, reader
+   toolbar that folds to icons, compact conversations, tinted calendar events
+   (no side stripes), RSVP-first event card, attach button, folded server URL. */
+
+/* Header: which mailbox (its colour paints the window) · which section */
+.aas-accts {
+  background: var(--aas-panel-2);
+  border: 1px solid var(--aas-line);
+  border-radius: 10px;
+  padding: 2px;
+  gap: 2px;
+  flex-wrap: nowrap;
+}
+.aas-accts .aas-tab { padding: 4px 10px; border-radius: 8px; }
+.aas-accts .aas-badge { font-variant-numeric: tabular-nums; }
+.aas-sect button { padding: 5px 14px; font-weight: 500; }
+#search { min-width: 120px; }
+
+/* List header ⇄ selection bar (same 50 px slot) */
+#listbar.aas-listbar--hidden { display: none; }
+.aas-listbar__all { padding: 0 2px 0 0; }
+.aas-listbar__head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--aas-text);
+  font-weight: 600;
+}
+.aas-listbar__unread {
+  flex: none;
+  color: var(--aas-accent-text);
+  font-size: var(--aas-t-xs);
+  font-variant-numeric: tabular-nums;
+}
+#bulkbar.aas-bulkbar {
+  min-height: 50px;
+  box-sizing: border-box;
+  padding: 6px 12px;
+  background: var(--aas-accent-bg);
+  font-size: var(--aas-t-sm);
+}
+#selcount { color: var(--aas-accent-text); font-weight: 600; }
+
+/* Mail rows: checkbox and «read» ring appear on hover / while selecting */
+.aas-row { border-left: 0; }
+.aas-row.on { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aas-accent-text) 30%, transparent); }
+.aas-row:active { background: var(--aas-accent-bg); }
+.aas-row__chk { opacity: 0; transition: opacity var(--aas-dur) var(--aas-ease); }
+.aas-row:hover .aas-row__chk,
+.aas-row.sel .aas-row__chk,
+#rows.selecting .aas-row__chk,
+.aas-row__chk:focus-within { opacity: 1; }
+.aas-row:not(.unread) .aas-row__ico .aas-readdot { opacity: 0; }
+.aas-row:not(.unread):hover .aas-row__ico .aas-readdot,
+.aas-row__ico:focus-visible .aas-readdot { opacity: 1; }
+.aas-row:not(.unread) .aas-row__from { font-weight: 400; }
+.aas-row.unread .aas-row__subj { font-weight: 600; }
+.aas-row__date { font-variant-numeric: tabular-nums; }
+.aas-row__clip { flex: none; display: inline-flex; color: var(--aas-muted); }
+
+/* Reader toolbar: labels fold into icons as the reading pane narrows */
+#reader { container: reader / inline-size; }
+#rtools.aas-reader-tools { flex-wrap: nowrap; overflow: visible; gap: 6px; padding: 8px 12px; }
+#rtools .aas-btn { padding: 5px 10px; }
+#rtools .aas-ic { flex: none; }
+.aas-mvwrap { position: relative; cursor: pointer; }
+.aas-mvwrap select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  opacity: 0;
+  cursor: pointer;
+  padding: 0;
+}
+@container reader (max-width: 940px) {
+  #rtools .lbl { display: none; }
+  #rtools .aas-btn:not(.aas-rt-reply) { padding: 5px 8px; }
+  #rtools .aas-btn .aas-readdot { margin-right: 0; }
+}
+
+/* Conversation: closed letters are one-line rows; the open one is a card */
+#cards .aas-mc {
+  margin: 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--aas-line);
+  border-radius: 0;
+  background: transparent;
+}
+#cards .aas-mc__head { background: transparent; padding: 9px 6px; border-radius: 6px; align-items: center; }
+#cards .aas-mc__head:hover { background: var(--aas-panel-2); }
+#cards .aas-mc.open {
+  margin: 10px 16px;
+  border: 1px solid var(--aas-line);
+  border-radius: var(--aas-r-md);
+  background: var(--aas-panel);
+}
+#cards .aas-mc.open .aas-mc__head { padding: 10px 14px; border-radius: 0; }
+#cards .aas-mc.unread .aas-mc__who { font-weight: 700; color: var(--aas-unread); }
+#cards .aas-mc__who { font-weight: 500; }
+.aas-mc--folded { display: none; }
+.aas-mc__when { font-variant-numeric: tabular-nums; }
+.aas-mc__clip { flex: none; display: inline-flex; color: var(--aas-muted); }
+.aas-mc-more {
+  display: block;
+  margin: 8px auto;
+  padding: 3px 14px;
+  border: 1px solid var(--aas-line);
+  border-radius: var(--aas-r-pill);
+  background: var(--aas-panel-2);
+  color: var(--aas-muted);
+  font: inherit;
+  font-size: var(--aas-t-xs);
+  cursor: pointer;
+}
+.aas-mc-more:hover { color: var(--aas-accent-text); border-color: var(--aas-accent-text); }
+
+/* Nothing open in the reader: summary, next meeting, keys */
+.aas-rempty {
+  margin: auto;
+  width: min(360px, 100%);
+  padding: 32px 24px;
+  display: grid;
+  gap: 14px;
+  box-sizing: border-box;
+}
+.aas-rempty__head { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.aas-rempty__sub { margin-top: -10px; color: var(--aas-muted); }
+.aas-rempty__meet {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--aas-line);
+  border-radius: var(--aas-r-md);
+  background: var(--aas-panel-2);
+}
+.aas-rempty__meet[hidden] { display: none; }
+.aas-rempty__meet-txt { flex: 1; min-width: 0; display: grid; }
+.aas-rempty__meet-txt small { color: var(--aas-muted); font-size: var(--aas-t-xs); }
+.aas-rempty__meet-txt b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aas-rempty__keys { display: flex; flex-wrap: wrap; gap: 8px 16px; color: var(--aas-muted); font-size: var(--aas-t-xs); }
+kbd {
+  display: inline-block;
+  min-width: 18px;
+  margin-right: 3px;
+  padding: 0 5px;
+  border: 1px solid var(--aas-line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--aas-panel-2);
+  color: var(--aas-text);
+  font-family: var(--aas-font-mono);
+  font-size: 11px;
+  line-height: 17px;
+  text-align: center;
+}
+
+/* Folders: favourite star only where it means something */
+.aas-folder__pin:not(.on) { visibility: hidden; }
+.aas-folder:hover .aas-folder__pin { visibility: visible; }
+.aas-folder-sec { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 600; }
+.aas-folder .aas-badge { font-variant-numeric: tabular-nums; }
+.aas-folder__del .aas-ic { vertical-align: -2px; }
+
+/* Calendar: light tint + 1 px border in the category / account colour, a dot for
+   the colour itself; the answer is in the shape (dashed = not answered yet). */
+.aas-ev {
+  --evc: var(--aas-busy);
+  background: color-mix(in srgb, var(--evc) 16%, var(--aas-panel));
+  color: var(--aas-text);
+  border: 1px solid color-mix(in srgb, var(--evc) 42%, transparent);
+  border-radius: 5px;
+  padding: 2px 6px 2px 17px;
+  box-sizing: border-box;
+  line-height: 1.3;
+  transition: border-color var(--aas-dur) var(--aas-ease);
+}
+.aas-ev::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--evc);
+}
+.aas-ev:hover { border-color: var(--evc); }
+.aas-ev b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aas-ev small { color: var(--aas-muted); opacity: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aas-ev--short small { display: none; }
+.aas-ev--cat { border-left-color: color-mix(in srgb, var(--evc) 42%, transparent); }
+.aas-ev--tentative,
+.aas-ev--pending { background: var(--aas-panel); border-style: dashed; border-color: var(--evc); }
+.aas-ev--free { background: transparent; }
+.aas-ev--oof { --evc: var(--aas-oof); }
+.aas-ev--cancelled {
+  opacity: 0.6;
+  background-color: var(--aas-panel);
+  background-image: repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in srgb, var(--evc) 14%, transparent) 5px 10px);
+}
+.aas-chip {
+  --evc: var(--aas-accent);
+  background: color-mix(in srgb, var(--evc) 16%, var(--aas-panel));
+  color: var(--aas-text);
+  border: 1px solid color-mix(in srgb, var(--evc) 42%, transparent);
+}
+.aas-ev-more {
+  position: absolute;
+  z-index: 2;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--aas-line-strong, var(--aas-line));
+  border-radius: 5px;
+  background: var(--aas-panel);
+  color: var(--aas-text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.aas-ev-more:hover { border-color: var(--aas-accent-text); color: var(--aas-accent-text); }
+.aas-offhours {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: color-mix(in srgb, var(--aas-text) 3.5%, transparent);
+  pointer-events: none;
+}
+.hours div { font-variant-numeric: tabular-nums; }
+.aas-evlist { display: grid; gap: 4px; }
+.aas-evlist__row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--evc) 40%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--evc) 12%, var(--aas-panel));
+  color: var(--aas-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.aas-evlist__t { flex: none; color: var(--aas-muted); font-size: var(--aas-t-sm); font-variant-numeric: tabular-nums; }
+
+/* Event card and invitation: answer first, as one segmented control */
+.aas-evwhen { display: flex; align-items: center; gap: 6px; font-weight: 500; }
+.aas-evtop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.aas-evtop #evjoin { margin-left: auto; }
+.aas-rsvpseg {
+  display: inline-flex;
+  border: 1px solid var(--aas-line);
+  border-radius: var(--aas-r-pill);
+  overflow: hidden;
+  background: var(--aas-panel);
+}
+.aas-rsvpseg .aas-btn { border: 0; border-radius: 0; border-right: 1px solid var(--aas-line); }
+.aas-rsvpseg .aas-btn:last-child { border-right: 0; }
+.aas-rsvpseg .aas-btn.on,
+.aas-invite__acts .aas-rsvpseg .aas-btn.on {
+  background: var(--aas-accent-bg);
+  color: var(--aas-accent-text);
+  font-weight: 600;
+  opacity: 1;
+}
+.aas-rsvpseg .aas-btn[data-r="decline"].on,
+.aas-rsvpseg .aas-btn[data-rsvp="decline"].on {
+  background: color-mix(in srgb, var(--aas-danger) 12%, var(--aas-panel));
+  color: var(--aas-danger);
+}
+.aas-rsvpseg .aas-btn:disabled { opacity: 1; }
+.aas-rsvpseg .aas-btn:disabled:not(.on) { color: var(--aas-muted); }
+.aas-evfacts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0 0 10px; }
+.aas-evfacts dt { color: var(--aas-muted); font-size: 12px; padding-top: 2px; }
+.aas-evfacts dd { margin: 0; overflow-wrap: anywhere; }
+.aas-evorig > summary { cursor: pointer; color: var(--aas-accent-text); font-size: var(--aas-t-sm); margin: 6px 0; }
+.aas-evorig .aas-evbody { color: var(--aas-muted); font-size: var(--aas-t-sm); }
+.aas-invite { border: 1px solid color-mix(in srgb, var(--aas-accent) 30%, var(--aas-line)); }
+.aas-invite--cancel { border-color: color-mix(in srgb, var(--aas-danger) 40%, var(--aas-line)); }
+.aas-invite__row { display: flex; align-items: center; gap: 6px; }
+
+/* Compose: Cc on request, a real attach button, drop files anywhere */
+.aas-flabel { display: flex; justify-content: space-between; align-items: baseline; }
+.aas-linkbtn { border: 0; background: none; padding: 0; color: var(--aas-accent-text); font: inherit; font-size: 12px; cursor: pointer; }
+.aas-attrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.aas-attrow #cfiles { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; }
+.aas-attrow #cfiles:empty { display: none; }
+.f label.aas-attbtn { display: inline-flex; margin: 0; color: var(--aas-text); font-size: var(--aas-t-sm); cursor: pointer; }
+#cfiles .aas-attendee button { border: 0; background: none; padding: 0 0 0 4px; color: var(--aas-muted); cursor: pointer; display: inline-flex; }
+#modal.aas-dropping { outline: 2px dashed var(--aas-accent-text); outline-offset: -8px; }
+
+/* Settings: status next to the account, server address folded */
+.aas-acct-title { display: flex; align-items: center; gap: 8px; }
+.aas-pill--ok { background: color-mix(in srgb, var(--aas-ok) 14%, transparent); color: var(--aas-ok); }
+.aas-adv > summary { cursor: pointer; color: var(--aas-muted); font-size: 12px; margin: 2px 0 8px; }
+.aas-card--acct-bank,
+.aas-card--acct-seller { border-left-width: 1px; border-radius: var(--aas-r-md); }
+
+/* Icons, focus */
+.aas-ic { flex: none; }
+.aas-btn--icon { padding: 5px 8px; }
+.aas-btn:focus-visible,
+.aas-tab:focus-visible,
+.aas-seg button:focus-visible,
+.aas-row__ico:focus-visible,
+.aas-mc__head:focus-visible,
+.aas-mc-more:focus-visible,
+.aas-ev-more:focus-visible,
+.aas-linkbtn:focus-visible {
+  outline: 2px solid var(--aas-accent-text);
+  outline-offset: 2px;
+}
+.aas-ev.wide { padding-left: 20px; }
+.aas-ev.wide::before { top: 10px; left: 8px; }
+/* Very narrow reading pane: «Развернуть все» goes (the «ещё N писем» link stays). */
+@container reader (max-width: 440px) {
+  #rtools.aas-reader-tools { gap: 4px; padding: 8px 10px; }
+  #rtools .aas-btn:not(.aas-rt-reply) { padding: 5px 6px; }
+  #rtools [data-a="all"] { display: none; }
+}
+/* Selection bar: one row of icon buttons in the 380 px list column. */
+#bulkbar.aas-bulkbar { flex-wrap: nowrap; gap: 4px; }
+#bulkbar .aas-btn--icon { width: 32px; height: 30px; padding: 0; }
+#bulkbar .aas-btn .aas-readdot { margin: 0; }
+#bulkbar .aas-mvwrap .aas-bulkbar__mv { position: absolute; inset: 0; width: 100%; max-width: none; opacity: 0; padding: 0; }

@@ -1,0 +1,609 @@
+<title>AAS mail UX-аудит</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f3f4f6; --paper:#ffffff; --paper-2:#f8f9fa; --line:#e2e5e9; --line-2:#cdd2d8;
+  --text:#1c1f24; --muted:#636c76; --faint:#8b939c;
+  --bank:#501820; --bank-bg:#f4e9eb; --bank-mid:#8a4a55;
+  --seller:#003830; --seller-bg:#e3efeb; --lime:#30e203;
+  --p0:#b3261e; --p0-bg:#fbe9e7; --p1:#8a5a00; --p1-bg:#fbf1dc; --p2:#2f5f8a; --p2-bg:#e6eff7;
+  --ok:#1d6b3f; --ok-bg:#e5f3ea;
+  --shadow:0 1px 2px rgba(40,20,24,.06),0 8px 24px -12px rgba(40,20,24,.14);
+  --font:"Golos Text",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;
+  --bg:#141316; --paper:#1d1b20; --paper-2:#232127; --line:#302d34; --line-2:#3e3a43;
+  --text:#ecebee; --muted:#a19ca8; --faint:#77727d;
+  --bank:#d48d97; --bank-bg:#3a2328; --bank-mid:#b8727d;
+  --seller:#6fc3a8; --seller-bg:#1d3530;
+  --p0:#ff8a80; --p0-bg:#3d1f1d; --p1:#f2c14e; --p1-bg:#352b16; --p2:#8fbde6; --p2-bg:#1c2b39;
+  --ok:#7fd3a0; --ok-bg:#1b3325;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -12px rgba(0,0,0,.5);
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#141316; --paper:#1d1b20; --paper-2:#232127; --line:#302d34; --line-2:#3e3a43;
+  --text:#ecebee; --muted:#a19ca8; --faint:#77727d;
+  --bank:#d48d97; --bank-bg:#3a2328; --bank-mid:#b8727d;
+  --seller:#6fc3a8; --seller-bg:#1d3530;
+  --p0:#ff8a80; --p0-bg:#3d1f1d; --p1:#f2c14e; --p1-bg:#352b16; --p2:#8fbde6; --p2-bg:#1c2b39;
+  --ok:#7fd3a0; --ok-bg:#1b3325;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -12px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:15px;line-height:1.55;padding:0 16px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding-block:40px 80px}
+h1,h2,h3{text-wrap:balance;margin:0;letter-spacing:-.015em}
+h1{font-size:clamp(28px,4vw,40px);font-weight:700;line-height:1.1}
+h2{font-size:24px;font-weight:700;line-height:1.2}
+h3{font-size:17px;font-weight:600;line-height:1.3}
+p{margin:0;max-width:68ch}
+.muted{color:var(--muted)}
+code,.mono{font-family:var(--mono);font-size:.86em}
+code{background:var(--paper-2);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+a{color:var(--bank)}
+
+/* header */
+.top{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end;padding-bottom:28px;border-bottom:1px solid var(--line)}
+.top p{margin-top:12px;color:var(--muted)}
+.meta{font-size:13px;color:var(--muted);text-align:right;line-height:1.7}
+.read{margin-top:28px;display:grid;grid-template-columns:1.4fr 1fr;gap:16px}
+.box{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:20px 22px}
+.box h3{margin-bottom:8px}
+.dials{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.dial{flex:1;min-width:120px;background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.dial b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.dial span{font-size:12px;color:var(--muted)}
+.keep{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:6px;font-size:14px}
+.keep li{display:flex;gap:8px}
+.keep li::before{content:"";flex:none;width:6px;height:6px;border-radius:2px;background:var(--ok);margin-top:9px}
+
+/* scoreboard */
+.score{margin-top:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.sc{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px 20px;display:flex;align-items:baseline;gap:12px}
+.sc b{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+.sc span{color:var(--muted);font-size:14px}
+.sc.p0 b{color:var(--p0)} .sc.p1 b{color:var(--p1)} .sc.p2 b{color:var(--p2)}
+
+/* toc */
+nav.toc{margin-top:32px;display:flex;flex-wrap:wrap;gap:8px}
+nav.toc a{text-decoration:none;color:var(--text);background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:14px}
+nav.toc a:hover{border-color:var(--bank);color:var(--bank)}
+nav.toc a:focus-visible{outline:2px solid var(--bank);outline-offset:2px}
+
+/* sections */
+section.s{margin-top:64px}
+section.s>header{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+.finding{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:24px;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:24px;margin-top:16px}
+.finding .txt{display:flex;flex-direction:column;gap:12px}
+.finding ul{margin:0;padding-left:18px;display:grid;gap:5px;font-size:14px}
+.finding .fix{background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:14px}
+.finding .fix b{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;font-weight:600}
+.tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.sev{font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;letter-spacing:.02em}
+.sev.p0{background:var(--p0-bg);color:var(--p0)} .sev.p1{background:var(--p1-bg);color:var(--p1)} .sev.p2{background:var(--p2-bg);color:var(--p2)}
+.where{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.viz{display:flex;flex-direction:column;gap:12px;min-width:0}
+.cap{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.cap i{font-style:normal;font-weight:600;border-radius:5px;padding:1px 7px;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+.cap i.b{background:var(--p0-bg);color:var(--p0)} .cap i.a{background:var(--ok-bg);color:var(--ok)}
+.scroll{overflow-x:auto;border-radius:12px}
+
+/* ---------- mock app kit (always light, like the default bank theme) ---------- */
+.m{--mb:#f5f6f8;--mp:#fff;--ml:#e3e6ea;--mt:#1f2328;--mm:#66707a;--mbk:#501820;--mbkbg:#f3e8ea;--msl:#003830;--msbg:#e4efec;
+  color-scheme:light;font-family:var(--font);background:var(--mp);color:var(--mt);border:1px solid var(--line-2);border-radius:12px;overflow:hidden;font-size:13px;line-height:1.35;min-width:420px}
+.m *{box-sizing:border-box}
+.m .bar{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--ml);background:var(--mp);white-space:nowrap}
+.m .btn{border:1px solid var(--ml);background:var(--mp);border-radius:999px;padding:4px 11px;font-size:12px;font-weight:500;color:var(--mt);display:inline-flex;align-items:center;gap:6px}
+.m .btn.pri{background:var(--mbk);border-color:var(--mbk);color:#fff}
+.m .btn.dng{color:#c4314b;border-color:#e8b9c1}
+.m .btn.ic{padding:4px 7px}
+.m .sel{border:1px solid var(--ml);border-radius:8px;padding:3px 22px 3px 8px;font-size:12px;position:relative}
+.m .sel::after{content:"";position:absolute;right:8px;top:9px;border:4px solid transparent;border-top-color:var(--mm)}
+.m .sw{width:26px;height:15px;border-radius:9px;background:var(--mbk);position:relative;display:inline-block;vertical-align:-3px}
+.m .sw::after{content:"";position:absolute;right:2px;top:2px;width:11px;height:11px;border-radius:50%;background:#fff}
+.m .cb{width:13px;height:13px;border:1.5px solid #9aa1a9;border-radius:3px;flex:none;display:inline-block}
+.m .cb.on{background:var(--mbk);border-color:var(--mbk);position:relative}
+.m .cb.on::after{content:"";position:absolute;left:3px;top:0;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.m .rd{width:10px;height:10px;border-radius:50%;border:1.5px solid #9aa1a9;flex:none;display:inline-block}
+.m .ud{width:8px;height:8px;border-radius:50%;background:var(--mbk);flex:none;display:inline-block}
+.m .clip{opacity:.6}
+.m .fade{color:var(--mm)}
+.m .row{display:grid;gap:3px;padding:9px 12px;border-bottom:1px solid var(--ml)}
+.m .row .l1{display:flex;gap:8px;align-items:center}
+.m .row .from{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m .row .t{font-variant-numeric:tabular-nums;color:var(--mm);font-size:12px;white-space:nowrap}
+.m .row .sub,.m .row .pv{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m .row .pv{color:var(--mm);font-size:12px}
+.m .ghost{outline:2px dashed #c4314b;outline-offset:-2px}
+.m .edge{position:relative}
+.m .edge::after{content:"";position:absolute;right:0;top:0;bottom:0;width:48px;background:linear-gradient(90deg,rgba(255,255,255,0),#fff)}
+.m .hint{font-size:11px;color:#c4314b;font-weight:600}
+.m .av{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;font-size:11px;font-weight:600;flex:none}
+.m kbd{font-family:var(--mono);font-size:10.5px;border:1px solid var(--ml);border-bottom-width:2px;border-radius:5px;padding:1px 5px;background:var(--mb);color:var(--mm)}
+.m .seg{display:inline-flex;border:1px solid var(--ml);border-radius:9px;padding:2px;gap:2px;background:var(--mb)}
+.m .seg span{padding:3px 10px;border-radius:7px;font-size:12px;font-weight:500;color:var(--mm)}
+.m .seg span.on{background:var(--mp);color:var(--mt);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.m .pill{border-radius:999px;padding:4px 11px;font-size:12px;font-weight:500;display:inline-flex;gap:6px;align-items:center}
+.m .badge{background:var(--mbk);color:#fff;border-radius:999px;font-size:10.5px;font-weight:600;padding:0 6px;line-height:16px;font-variant-numeric:tabular-nums}
+
+/* calendar mock */
+.cal{display:grid;grid-template-columns:40px repeat(3,1fr);font-size:11px}
+.cal .h{padding:6px 8px;border-bottom:1px solid var(--ml);font-weight:600;font-size:12px}
+.cal .h.today span{background:var(--mbk);color:#fff;border-radius:6px;padding:0 6px}
+.cal .tm{color:var(--mm);text-align:right;padding-right:6px;font-variant-numeric:tabular-nums}
+.cal .col{position:relative;border-left:1px solid var(--ml)}
+.cal .ev{position:absolute;left:3px;right:3px;border-radius:5px;padding:3px 6px;overflow:hidden;line-height:1.25}
+.cal .ev b{font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal .gl{position:absolute;left:0;right:0;border-top:1px solid var(--ml)}
+.cal .now{position:absolute;left:0;right:0;border-top:2px solid #c4314b}
+.cal .now::before{content:"";position:absolute;left:-4px;top:-5px;width:8px;height:8px;border-radius:50%;background:#c4314b}
+.cal .off{position:absolute;left:0;right:0;background:repeating-linear-gradient(135deg,transparent 0 6px,rgba(0,0,0,.035) 6px 7px)}
+
+/* variant cards */
+.variants{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.var{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.var .pc{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px}
+.var .pc div{background:var(--paper-2);border-radius:8px;padding:8px 10px}
+.var .pc b{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.rec{font-size:11px;font-weight:600;color:var(--ok);background:var(--ok-bg);border-radius:6px;padding:2px 8px;letter-spacing:.02em}
+
+/* roadmap */
+.road{margin-top:16px;display:grid;gap:0;background:var(--paper);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.road .st{display:grid;grid-template-columns:56px 1fr auto;gap:16px;padding:16px 20px;border-bottom:1px solid var(--line);align-items:start}
+.road .st:last-child{border-bottom:0}
+.road .n{font-size:22px;font-weight:700;color:var(--bank);font-variant-numeric:tabular-nums}
+.road .eff{font-size:12px;color:var(--muted);white-space:nowrap;text-align:right}
+.road h3{font-size:15px}
+.road p{font-size:14px;color:var(--muted);margin-top:3px}
+.tokens{margin-top:16px;overflow-x:auto;background:var(--paper);border:1px solid var(--line);border-radius:14px}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+tr:last-child td{border-bottom:0}
+.swatch{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:6px;border:1px solid rgba(0,0,0,.12)}
+footer{margin-top:56px;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px}
+
+@media (max-width:860px){
+  .top,.read,.finding,.variants{grid-template-columns:1fr}
+  .meta{text-align:left}
+  .score{grid-template-columns:1fr}
+  .road .st{grid-template-columns:40px 1fr}
+  .road .eff{grid-column:2;text-align:left}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>AAS mail: UX-аудит и варианты улучшений</h1>
+      <p>Разбор по методике taste-skill (redesign-existing-projects + design-taste-frontend, протокол «Redesign · Preserve»). Проверены 8 экранов живого приложения: список, цепочка, выделение, compose, настройки, календарь, карточка встречи, узкое окно. Макеты ниже нарисованы на вымышленных данных. Технический разбор (доступность, адаптивность, темы) в <a href="https://claude.ai/artifact/XU7JUQAdfg7D2HRpnKzJ2K">аудите impeccable</a>.</p>
+    </div>
+    <div class="meta">Версия 1.2.14<br>25 сентября 2026<br>Экраны: 1440×900, 1100×760, 900×700</div>
+  </header>
+
+  <div class="read">
+    <div class="box">
+      <h3>Как читаю продукт</h3>
+      <p class="muted" style="font-size:14px">Рабочий почтовый клиент для двух корпоративных аккаунтов. Пользователь сканирует, а не читает: главное здесь плотность, скорость и ясное состояние. Бренд не меняем: Vinho банка, Verde Селлера, Golos Text. Улучшаем точечно, без переписывания.</p>
+      <div class="dials">
+        <div class="dial"><b>3</b><span>Вариативность: предсказуемая сетка</span></div>
+        <div class="dial"><b>3</b><span>Анимация: 180 мс, только отклик</span></div>
+        <div class="dial"><b>7</b><span>Плотность: рабочий инструмент</span></div>
+      </div>
+    </div>
+    <div class="box">
+      <h3>Что уже хорошо, сохраняем</h3>
+      <ul class="keep">
+        <li>Своя дизайн-система: токены, DESIGN.md, темы аккаунтов</li>
+        <li>Golos Text и шкала 12-22 вместо Inter</li>
+        <li>Трёхпанельная раскладка, привычная по Mail и Outlook</li>
+        <li>Тёмная и светлая темы, reduced-motion</li>
+        <li>Линия «сейчас» в календаре, статус «Отменено» штриховкой</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="score">
+    <div class="sc p0"><b>4</b><span>P0: мешает работать или прячет функции</span></div>
+    <div class="sc p1"><b>6</b><span>P1: шум, лишние клики, путаница</span></div>
+    <div class="sc p2"><b>3</b><span>P2: полировка, и ещё 7 пунктов в таблице токенов</span></div>
+  </div>
+
+  <nav class="toc" aria-label="Разделы">
+    <a href="#list">Список писем</a><a href="#thread">Цепочка</a><a href="#nav">Навигация</a><a href="#cal">Календарь</a><a href="#modals">Compose, настройки, встреча</a><a href="#polish">Полировка</a><a href="#plan">План внедрения</a>
+  </nav>
+
+  <!-- ============ LIST ============ -->
+  <section class="s" id="list">
+    <header><h2>Список писем</h2><span class="muted">4 находки</span></header>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p0">P0</span><span class="where">#listtitle, app.css:197</span></div>
+        <h3>Название папки сжато до одной буквы «Е»</h3>
+        <p class="muted">В шапке списка вместо «Входящие» видна «Е». У заголовка <code>max-width:110px</code>, а переключатель цепочек и два select'а съедают остальное место. Пользователь не видит, в какой папке находится, особенно после поиска или перехода из избранного.</p>
+        <div class="fix"><b>Исправление</b>Вынести название папки и счётчик в отдельную строку над фильтрами. Фильтры собрать в одну кнопку «Вид» с поповером: цепочки, период, сортировка.</div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="b">сейчас</i>шапка списка, 380 px</div>
+        <div class="scroll"><div class="m">
+          <div class="bar"><span class="ghost" style="padding:0 2px;font-weight:600">Е</span><span>Цепочки</span><span class="sw"></span><span class="sel">Все</span><span class="sel">Новые сверху</span></div>
+          <div class="bar" style="gap:6px"><span class="cb"></span><span class="btn"><span class="rd"></span>Прочитано</span><span class="btn"><span class="ud"></span>Непрочитано</span><span class="fade">Снять</span></div>
+        </div></div>
+        <div class="cap"><i class="a">предложение</i>заголовок + одна кнопка вида</div>
+        <div class="scroll"><div class="m">
+          <div class="bar" style="padding:12px 12px 4px;border:0"><b style="font-size:16px">Входящие</b><span class="fade">7 непрочитанных</span><span style="flex:1"></span><span class="btn ic" title="Вид">Вид: цепочки, 1 мес.</span></div>
+          <div class="bar" style="padding:4px 12px 10px"><span class="seg"><span class="on">Все</span><span>Непрочитанные</span><span>С вложениями</span></span></div>
+        </div></div>
+      </div>
+    </article>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p1">P1</span><span class="where">#bulkbar</span></div>
+        <h3>Панель массовых действий видна всегда</h3>
+        <p class="muted">«Прочитано / Непрочитано / Снять» висят над списком даже когда ничего не выбрано. Это второй ряд управления, который отнимает 40 px высоты и выглядит как активные кнопки без объекта действия.</p>
+        <div class="fix"><b>Исправление</b>Показывать панель только при выборе, поверх шапки списка (как в Gmail). Добавить «Переместить» и «Удалить», чтобы массовое действие было полным.</div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="a">предложение</i>шапка превращается в панель выбора</div>
+        <div class="scroll"><div class="m">
+          <div class="bar" style="background:var(--mbkbg);padding:10px 12px"><span class="cb on"></span><b>Выбрано: 3</b><span style="flex:1"></span><span class="btn">Прочитано</span><span class="btn">Переместить</span><span class="btn dng">Удалить</span><span class="fade" style="font-size:16px;padding-left:4px">×</span></div>
+          <div class="row" style="background:#fbf6f7"><div class="l1"><span class="cb on"></span><span class="from">Лебедева Ирина</span><span class="t">11:11</span></div><div class="sub" style="padding-left:21px">Перенос стенда на новый кластер</div></div>
+          <div class="row" style="background:#fbf6f7"><div class="l1"><span class="cb on"></span><span class="from">Карпов Денис</span><span class="t">10:07</span></div><div class="sub" style="padding-left:21px">Реструктуризация: варианты по КН</div></div>
+        </div></div>
+      </div>
+    </article>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p1">P1</span><span class="where">.aas-row</span></div>
+        <h3>Строка письма: три одинаковых маркера, непрочитанное не читается</h3>
+        <ul>
+          <li>Чекбокс, кружок прочитанности и скрепка стоят в каждой строке и визуально равны.</li>
+          <li>Отправитель жирный и у прочитанных, и у новых. Разницу даёт только полый кружок в 10 px.</li>
+          <li>Даты в двух форматах: «11:11» и «24.09 15:33». Цифры пропорциональные, колонка времени пляшет.</li>
+          <li>Превью показывает служебный мусор: <code>&lt;mailto:…&gt;</code>, строки из дефисов.</li>
+        </ul>
+        <div class="fix"><b>Исправление</b>Непрочитанное: жирная тема и отправитель + точка акцента слева. Прочитанное: обычный вес. Чекбокс появляется на hover и в режиме выбора, на его месте аватар с инициалами. Даты: «11:11», «вчера», «пн», «24 сент.» и <code>tabular-nums</code>. Чистить превью от mailto, cid и разделителей.</div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="b">сейчас</i></div>
+        <div class="scroll"><div class="m">
+          <div class="row"><div class="l1"><span class="cb"></span><span class="rd"></span><span class="from">Орлов Павел Андреевич, …</span><span class="t">24.09 15:33</span></div><div class="sub">Выход сотрудника (переход на друг…</div><div class="pv">Да, уже поздно, надо убирать ---------------------------</div></div>
+          <div class="row"><div class="l1"><span class="cb"></span><span class="rd"></span><span class="from">Галиева Дина Рустамовна</span><span class="clip">📎</span><span class="t">23.09 14:19</span></div><div class="sub">передача данных через api</div><div class="pv">@Мухина Вера&lt;mailto:VMukhina@corp…&gt;</div></div>
+        </div></div>
+        <div class="cap"><i class="a">предложение</i>непрочитанное сверху, прочитанное снизу</div>
+        <div class="scroll"><div class="m">
+          <div class="row" style="grid-template-columns:auto 1fr;column-gap:10px;position:relative">
+            <span style="position:absolute;left:4px;top:18px" class="ud"></span>
+            <span class="av" style="background:#f3e8ea;color:#501820;grid-row:span 3">ОП</span>
+            <div class="l1"><span class="from">Орлов Павел</span><span class="t">вчера</span></div>
+            <div class="sub" style="font-weight:600">Выход сотрудника: переход в другую команду</div>
+            <div class="pv">Да, уже поздно, надо убирать доступ до пятницы</div>
+          </div>
+          <div class="row" style="grid-template-columns:auto 1fr;column-gap:10px">
+            <span class="av" style="background:#e4efec;color:#003830;grid-row:span 3">ГД</span>
+            <div class="l1"><span class="from" style="font-weight:500">Галиева Дина</span><span style="font-size:11px" class="fade">1 файл</span><span class="t">23 сент.</span></div>
+            <div class="sub">Передача данных через api</div>
+            <div class="pv">Вера, посмотри, пожалуйста, схему обмена</div>
+          </div>
+        </div></div>
+      </div>
+    </article>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p2">P2</span><span class="where">#reader .aas-empty</span></div>
+        <h3>Пустая правая панель: «Выберите письмо»</h3>
+        <p class="muted">Две трети экрана пустые при каждом запуске. По правилам skill пустое состояние должно подсказывать следующий шаг.</p>
+        <div class="fix"><b>Исправление</b>Короткая сводка: сколько непрочитанных, ближайшая встреча с кнопкой «Подключиться», три горячие клавиши. Без иллюстраций, в стиле панели.</div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="a">предложение</i></div>
+        <div class="scroll"><div class="m" style="background:var(--mb)">
+          <div style="padding:28px 28px 30px;display:grid;gap:14px;max-width:380px">
+            <div><div style="font-size:18px;font-weight:600">7 непрочитанных</div><div class="fade">2 с вложениями, 1 от руководителя</div></div>
+            <div style="background:#fff;border:1px solid var(--ml);border-radius:10px;padding:12px;display:flex;gap:10px;align-items:center">
+              <div style="flex:1"><div class="fade" style="font-size:11px">через 18 мин, 15:00</div><b>Синк продукта</b></div><span class="btn pri">Подключиться</span>
+            </div>
+            <div style="display:flex;gap:14px;flex-wrap:wrap" class="fade"><span><kbd>C</kbd> новое</span><span><kbd>/</kbd> поиск</span><span><kbd>J</kbd><kbd>K</kbd> листать</span></div>
+          </div>
+        </div></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ THREAD ============ -->
+  <section class="s" id="thread">
+    <header><h2>Цепочка и панель действий</h2><span class="muted">2 находки</span></header>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p0">P0</span><span class="where">#rtools, app.css:895</span></div>
+        <h3>Действия уезжают за правый край без подсказки</h3>
+        <p class="muted">Панель <code>#rtools</code> прокручивается по горизонтали, а полоса прокрутки скрыта. На 1440 px «Переместить» уже за краем. На 900 px пропадают «Переслать» и «Удалить». Функции есть, но найти их нельзя.</p>
+        <div class="fix"><b>Исправление</b>Слева основные: Ответить, Ответить всем, Переслать. Справа иконки: В папку, Прочитано, Удалить. Остальное в меню «•••». При узкой панели кнопки сворачиваются в иконки, а не уходят за край.</div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="b">сейчас</i>ширина чтения 300 px</div>
+        <div class="scroll"><div class="m" style="max-width:340px;min-width:300px">
+          <div class="bar edge" style="overflow:hidden"><span class="btn">Ответить</span><span class="btn">Ответить всем</span><span class="btn">Переслать</span><span class="btn dng">Удалить</span></div>
+          <div style="padding:6px 10px" class="hint">«Переслать», «Удалить», «В папку» скрыты</div>
+        </div></div>
+        <div class="cap"><i class="a">предложение</i>та же ширина</div>
+        <div class="scroll"><div class="m" style="max-width:340px;min-width:300px">
+          <div class="bar"><span class="btn pri">Ответить</span><span class="btn ic" title="Ответить всем">↩↩</span><span class="btn ic" title="Переслать">↪</span><span style="flex:1"></span><span class="btn ic" title="В папку">▤</span><span class="btn ic" title="Удалить">⌫</span><span class="btn ic" title="Ещё">•••</span></div>
+        </div></div>
+      </div>
+    </article>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p1">P1</span><span class="where">#conv #cards</span></div>
+        <h3>13 писем цепочки выглядят как 13 одинаковых карточек</h3>
+        <ul>
+          <li>У каждого письма рамка, скругление и полная дата <code>2026-09-15 16:47</code>.</li>
+          <li>В превью попадают технические строки: <code>[cid:image002.png@01DD…]</code>, «From:», «Sent from Workspace».</li>
+          <li>Последнее, самое важное письмо внизу, до него надо листать.</li>
+        </ul>
+        <div class="fix"><b>Исправление</b>Свёрнутые письма без рамок, строкой через разделитель. Подряд идущие старые схлопываются в «ещё 9 писем». Последнее развёрнуто. Даты относительные. Превью берётся из тела после удаления цитат и cid.</div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="a">предложение</i></div>
+        <div class="scroll"><div class="m">
+          <div style="padding:14px 16px 6px"><div style="font-size:16px;font-weight:600">Реструктуризация: варианты по КН</div><div class="fade" style="font-size:12px">13 писем, 5 участников</div></div>
+          <div class="row" style="border-top:1px solid var(--ml)"><div class="l1"><span class="from" style="font-weight:500">Шевчук Артём</span><span class="t">15 сент.</span></div><div class="pv">Добрый день. Направляю вопрос клиента по рефинансированию</div></div>
+          <div style="text-align:center;padding:6px;border-bottom:1px solid var(--ml)"><span class="pill" style="background:var(--mb);color:var(--mm)">ещё 10 писем</span></div>
+          <div class="row"><div class="l1"><span class="from" style="font-weight:500">Мухина Вера</span><span class="t">вчера</span></div><div class="pv">По КН сомневаюсь, что получится рефинансировать</div></div>
+          <div style="padding:12px 16px;display:grid;gap:8px;background:#fcfcfd">
+            <div style="display:flex;gap:10px;align-items:center"><span class="av" style="background:#f3e8ea;color:#501820">КД</span><div style="flex:1"><b>Карпов Денис</b><div class="fade" style="font-size:12px">мне, Шевчуку А.</div></div><span class="t fade">10:07</span></div>
+            <div>Добрый день. По КН есть вариант реструктуризации с отсрочкой на 6 месяцев. Прикладываю расчёт.</div>
+            <div><span class="pill" style="border:1px solid var(--ml)">расчёт_КН.xlsx, 48 КБ</span></div>
+          </div>
+        </div></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ NAV ============ -->
+  <section class="s" id="nav">
+    <header><h2>Навигация: аккаунты и разделы</h2><span class="muted">P1, два варианта</span></header>
+    <p class="muted">Сейчас в шапке 4 вкладки: «Alfa почта», «Alfa календарь», «Seller · Почта», «Seller · Календарь». Это таблица 2×2, развёрнутая в строку. Подписи разные по форме (с точкой и без), разделы не выровнены. На 1100 px кнопка «Синхронизировать» сжимается в кружок без подписи, на 900 px поиск обрезается до «Поиск по по».</p>
+
+    <div class="variants">
+      <div class="var">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3>A. Аккаунт + раздел</h3><span class="rec">рекомендую</span></div>
+        <div class="scroll"><div class="m">
+          <div class="bar" style="padding:10px 12px;gap:10px">
+            <span class="seg"><span class="on" style="color:#501820">● Банк <span class="badge">7</span></span><span style="color:#003830">● Селлер <span class="badge" style="background:#003830">2</span></span></span>
+            <span class="seg"><span class="on">Почта</span><span>Календарь</span></span>
+            <span style="flex:1"></span><span class="btn ic">⌕</span><span class="btn pri">Создать</span>
+          </div>
+        </div></div>
+        <p class="muted" style="font-size:14px">Два независимых переключателя. <kbd style="font-family:var(--mono);font-size:12px">⌘1</kbd> <kbd style="font-family:var(--mono);font-size:12px">⌘2</kbd> для аккаунта, <kbd style="font-family:var(--mono);font-size:12px">⌘⇧C</kbd> для календаря. Цвет аккаунта остаётся на месте и красит акцент всего окна.</p>
+        <div class="pc"><div><b>Плюсы</b>Минимум изменений в коде, ясная модель</div><div><b>Минусы</b>Нельзя видеть оба аккаунта сразу</div></div>
+      </div>
+      <div class="var">
+        <h3>B. Аккаунты в сайдбаре</h3>
+        <div class="scroll"><div class="m" style="display:grid;grid-template-columns:150px 1fr">
+          <div style="border-right:1px solid var(--ml);padding:10px 8px;background:var(--mb);display:grid;gap:3px;font-size:12px">
+            <b style="color:#501820;padding:2px 6px">Банк</b>
+            <span style="background:#f3e8ea;border-radius:6px;padding:3px 6px;display:flex">Входящие<span style="flex:1"></span><span class="badge">7</span></span>
+            <span style="padding:3px 6px">Отправленные</span>
+            <b style="color:#003830;padding:8px 6px 2px">Селлер</b>
+            <span style="padding:3px 6px;display:flex">Входящие<span style="flex:1"></span><span class="badge" style="background:#003830">2</span></span>
+            <span style="padding:3px 6px">Календарь</span>
+          </div>
+          <div style="padding:12px" class="fade">Список писем</div>
+        </div></div>
+        <p class="muted" style="font-size:14px">Модель Apple Mail: оба ящика в одном дереве, можно добавить «Все входящие». Шапка освобождается под поиск.</p>
+        <div class="pc"><div><b>Плюсы</b>Сводный вид двух ящиков</div><div><b>Минусы</b>Перестройка сайдбара, длинное дерево</div></div>
+      </div>
+    </div>
+
+    <article class="finding" style="margin-top:16px">
+      <div class="txt">
+        <div class="tags"><span class="sev p2">P2</span><span class="where">#folders</span></div>
+        <h3>Сайдбар папок: звёзды на каждой строке, обрезанные имена</h3>
+        <p class="muted">Контурная звезда стоит у всех 25 папок, это 25 одинаковых иконок. Имена режутся на 220 px: «Ошибки синхро…», «Локальные о…». Счётчиков непрочитанных у папок не видно.</p>
+        <div class="fix"><b>Исправление</b>Звезда только на hover и у избранных. Справа счётчик непрочитанных. Ширина сайдбара меняется перетаскиванием, полное имя в title. Системные папки отделить от пользовательских.</div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="a">предложение</i></div>
+        <div class="scroll"><div class="m" style="max-width:260px;min-width:240px;background:var(--mb)">
+          <div style="padding:10px 8px;display:grid;gap:2px">
+            <span style="font-size:11px;color:var(--mm);padding:4px 8px">Избранное</span>
+            <span style="padding:5px 8px;display:flex">Мухина Вера<span style="flex:1"></span><span style="color:#501820">★</span></span>
+            <span style="padding:5px 8px;display:flex;background:#f3e8ea;border-radius:7px;font-weight:600;color:#501820">Входящие<span style="flex:1"></span><span class="badge">7</span></span>
+            <span style="padding:5px 8px">Черновики</span>
+            <span style="padding:5px 8px;display:flex">Отправленные<span style="flex:1"></span><span style="color:#b9bec5">☆</span></span>
+            <span style="font-size:11px;color:var(--mm);padding:10px 8px 4px">Папки</span>
+            <span style="padding:5px 8px;display:flex">Ошибки синхронизации<span style="flex:1"></span><span class="fade">3</span></span>
+            <span style="padding:5px 8px 5px 22px" class="fade">Конфликты</span>
+          </div>
+        </div></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ CALENDAR ============ -->
+  <section class="s" id="cal">
+    <header><h2>Календарь</h2><span class="muted">1 находка P0, 1 P1</span></header>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p0">P0</span><span class="where">#grid .aas-ev</span></div>
+        <h3>Параллельные встречи режутся до «FW:» и «Daily»</h3>
+        <p class="muted">Утром до 5 событий в одной полосе. Каждое получает 40-60 px, названия превращаются в «FW:», «Комитет по иници…». Понять, что за встреча, можно только кликом.</p>
+        <div class="fix"><b>Исправление</b>Максимум 3 колонки в полосе, остальное в «+2» с поповером. Узкое событие показывает только время и цветную полосу, полное имя в title. Префиксы «FW:», «RE:» из названий убирать.</div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="a">предложение</i>полосы + «ещё N»</div>
+        <div class="scroll"><div class="m">
+          <div class="cal">
+            <div class="h"></div><div class="h">Ср 23</div><div class="h">Чт 24</div><div class="h today"><span>Пт 25</span></div>
+            <div class="tm" style="height:180px;position:relative"><span style="position:absolute;right:6px;top:0">10</span><span style="position:absolute;right:6px;top:60px">11</span><span style="position:absolute;right:6px;top:120px">12</span></div>
+            <div class="col"><div class="gl" style="top:60px"></div><div class="gl" style="top:120px"></div>
+              <div class="ev" style="top:4px;height:52px;right:50%;background:#f3e8ea;border-left:3px solid #501820"><b>Синк продукта</b>10:05</div>
+              <div class="ev" style="top:26px;height:26px;left:52%;background:#eef0f3;border-left:3px solid #8a939c"><b>Daily ELK</b></div>
+              <div class="ev" style="top:62px;height:26px;right:50%;background:#e4efec;border-left:3px solid #003830"><b>Daily CMS</b></div>
+              <div class="ev" style="top:62px;height:26px;left:52%;background:#fff;border:1px solid var(--ml);text-align:center;font-weight:600;color:var(--mm)">+2</div>
+              <div class="ev" style="top:122px;height:40px;background:#f3e8ea;border-left:3px solid #501820"><b>Статус B2B: дизайн и маркетинг</b>12:00</div>
+            </div>
+            <div class="col"><div class="gl" style="top:60px"></div><div class="gl" style="top:120px"></div>
+              <div class="ev" style="top:26px;height:26px;background:#eef0f3;border-left:3px solid #8a939c"><b>Daily ELK</b></div>
+              <div class="ev" style="top:62px;height:26px;background:#e4efec;border-left:3px solid #003830"><b>Daily CMS Team</b></div>
+              <div class="ev" style="top:122px;height:50px;right:50%;background:#f3e8ea;border-left:3px solid #501820"><b>Рабочая группа</b>12:00</div>
+              <div class="ev" style="top:122px;height:26px;left:52%;background:repeating-linear-gradient(135deg,#f5f6f8 0 5px,#eceef1 5px 10px);color:var(--mm)"><b style="text-decoration:line-through">Backend</b></div>
+            </div>
+            <div class="col"><div class="gl" style="top:60px"></div><div class="gl" style="top:120px"></div>
+              <div class="ev" style="top:4px;height:52px;right:50%;background:#f3e8ea;border-left:3px solid #501820"><b>Синк продукта</b>10:05</div>
+              <div class="ev" style="top:26px;height:26px;left:52%;background:#eef0f3;border-left:3px solid #8a939c"><b>Daily ELK</b></div>
+              <div class="now" style="top:98px"></div>
+              <div class="ev" style="top:122px;height:40px;background:#fff;border:1.5px dashed #501820;color:#501820"><b>Интеграция с платежами</b>ждёт ответа</div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+    </article>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p1">P1</span><span class="where">.aas-ev--*, категории Outlook</span></div>
+        <h3>Восемь насыщенных цветов на одном экране</h3>
+        <p class="muted">Горчичный, красный, розовый, фиолетовый, бирюзовый, коричневый, зелёный, серо-голубой. Все залиты полностью. Взгляд не может найти главное, а бренд-цвет аккаунта теряется. Правило skill: один акцент, остальное нейтрально.</p>
+        <div class="fix"><b>Исправление</b>Светлая заливка + цветная полоса 3 px слева. Категория Outlook определяет только цвет полосы (приглушённая палитра из 6 оттенков). Статус выражается формой: принято = заливка, не отвечено = пунктир, отменено = штриховка. Часы вне рабочего дня (из настроек) свернуть в полосу 24 px.</div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="b">сейчас</i><i class="a">предложение</i></div>
+        <div class="scroll"><div class="m" style="padding:14px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div style="display:grid;gap:4px">
+            <div style="background:#c19a00;color:#fff;border-radius:4px;padding:4px 6px">Daily ELK</div>
+            <div style="background:#b9322d;color:#fff;border-radius:4px;padding:4px 6px">Lunch</div>
+            <div style="background:#ff7fbf;color:#fff;border-radius:4px;padding:4px 6px">Онбординг селлера</div>
+            <div style="background:#8f5ec7;color:#fff;border-radius:4px;padding:4px 6px">B2B IT leads sync</div>
+            <div style="background:#8a5222;color:#fff;border-radius:4px;padding:4px 6px">Статус B2B</div>
+            <div style="background:#0f8a8a;color:#fff;border-radius:4px;padding:4px 6px">Синк продукта</div>
+          </div>
+          <div style="display:grid;gap:4px">
+            <div style="background:#f6f1e1;border-left:3px solid #a8872a;border-radius:4px;padding:4px 6px">Daily ELK</div>
+            <div style="background:#f3f4f6;border-left:3px solid #9aa1a9;border-radius:4px;padding:4px 6px;color:var(--mm)">Lunch</div>
+            <div style="background:#fff;border:1.5px dashed #501820;border-radius:4px;padding:3px 6px;color:#501820">Онбординг селлера</div>
+            <div style="background:#efeaf5;border-left:3px solid #7d67a3;border-radius:4px;padding:4px 6px">B2B IT leads sync</div>
+            <div style="background:#f3ebe5;border-left:3px solid #8f6a4f;border-radius:4px;padding:4px 6px">Статус B2B</div>
+            <div style="background:#f3e8ea;border-left:3px solid #501820;border-radius:4px;padding:4px 6px">Синк продукта</div>
+          </div>
+        </div></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ MODALS ============ -->
+  <section class="s" id="modals">
+    <header><h2>Compose, настройки, карточка встречи</h2><span class="muted">3 находки</span></header>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p0">P0</span><span class="where">#evjoin … #evclose</span></div>
+        <h3>Карточка встречи: ответ спрятан внизу, «Принять» выглядит выключенной</h3>
+        <ul>
+          <li>RSVP-кнопки стоят в одном ряду с «Изменить», «Удалить», «Закрыть». «Принять» залита приглушённым розовым и читается как disabled.</li>
+          <li>Описание начинается с сырой шапки <code>-----Original Appointment-----</code>, From, To, Sent на 8 строк.</li>
+          <li>Эмодзи 📍 рядом с местом, в остальном интерфейсе SVG-иконки.</li>
+        </ul>
+        <div class="fix"><b>Исправление</b>Ответ сверху сегментом «Принять / Под вопросом / Отклонить» с явным текущим состоянием. Ниже время, место, «Подключиться». Служебная шапка пересланного приглашения свёрнута в «Исходное приглашение». Изменить и Удалить в меню «•••».</div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="a">предложение</i></div>
+        <div class="scroll"><div class="m">
+          <div style="padding:16px 18px;display:grid;gap:12px">
+            <div style="display:flex;gap:8px;align-items:start"><div style="flex:1"><div style="font-size:16px;font-weight:600">Синк продукта</div><div class="fade">Пн 21 сент., 10:05-10:50, повторяется пн, ср, пт</div></div><span class="btn ic">•••</span><span class="btn ic">×</span></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="seg"><span class="on" style="color:#107c41">✓ Принято</span><span>Под вопросом</span><span>Отклонить</span></span><span style="flex:1"></span><span class="btn pri">Подключиться</span></div>
+            <div style="display:grid;grid-template-columns:90px 1fr;gap:6px 10px;font-size:12px"><span class="fade">Где</span><span>ЛБ-1619 ВКС / Толк</span><span class="fade">Организатор</span><span>Орлов Павел</span><span class="fade">Участники</span><span>10: 1 принял, 9 без ответа</span></div>
+            <div style="border-top:1px solid var(--ml);padding-top:10px" class="fade">▸ Исходное приглашение (пересланное)</div>
+          </div>
+        </div></div>
+      </div>
+    </article>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p1">P1</span><span class="where">#cfile</span></div>
+        <h3>Compose: системный «Choose Files / No file chosen» на английском</h3>
+        <p class="muted">Нативный input файла выбивается из стиля и языка. Поле «Копия» всегда открыто, хотя нужно редко. Окно модальное и закрывает письмо, на которое отвечаешь.</p>
+        <div class="fix"><b>Исправление</b>Кнопка-скрепка «Прикрепить» и зона drag-and-drop по всему телу письма. Чипы файлов с размером и крестиком. «Копия» раскрывается ссылкой справа от «Кому». Для ответа: встроенный редактор под письмом вместо модалки.</div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="a">предложение</i></div>
+        <div class="scroll"><div class="m">
+          <div class="bar" style="padding:10px 14px"><b>Новое письмо</b><span style="flex:1"></span><span class="fade">Черновик сохранён</span></div>
+          <div style="padding:8px 14px;border-bottom:1px solid var(--ml);display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="fade">Кому</span><span class="pill" style="background:var(--mb)">Мухина Вера</span><span style="flex:1"></span><span style="color:#501820;font-size:12px">Копия</span></div>
+          <div style="padding:8px 14px;border-bottom:1px solid var(--ml)"><span class="fade">Тема</span>&nbsp; Расчёт по КН</div>
+          <div style="padding:12px 14px;min-height:70px">Вера, добрый день. Прикладываю расчёт.</div>
+          <div class="bar" style="border-top:1px solid var(--ml);border-bottom:0;padding:10px 14px;flex-wrap:wrap"><span class="btn pri">Отправить</span><span class="btn">Прикрепить</span><span class="pill" style="border:1px solid var(--ml)">расчёт.xlsx, 48 КБ ×</span></div>
+        </div></div>
+      </div>
+    </article>
+
+    <article class="finding">
+      <div class="txt">
+        <div class="tags"><span class="sev p2">P2</span><span class="where">#scancel #ssave</span></div>
+        <h3>Настройки: «Отмена» и «Сохранить» над формой</h3>
+        <p class="muted">Кнопки стоят между вкладками и полями, пользователь нажимает их до того, как увидел форму. Серверные адреса и подсказки «По умолчанию: https://…» занимают половину высоты, хотя меняются раз в год.</p>
+        <div class="fix"><b>Исправление</b>Действия в закреплённый низ модалки. Серверные URL спрятать под «Дополнительно». Показывать статус подключения аккаунта («подключён, синхронизация 14:28») рядом с названием.</div>
+      </div>
+      <div class="viz">
+        <div class="cap"><i class="a">предложение</i></div>
+        <div class="scroll"><div class="m">
+          <div style="padding:14px 16px;display:grid;gap:10px">
+            <div style="display:flex;align-items:center;gap:8px"><b style="color:#501820">Alfa-Bank</b><span class="pill" style="background:#e5f3ea;color:#1d6b3f;padding:1px 8px">подключён, 14:28</span></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div><div class="fade" style="font-size:11px">Email</div><div style="border:1px solid var(--ml);border-radius:8px;padding:5px 8px">i.lebedeva@corp.example</div></div><div><div class="fade" style="font-size:11px">Пароль</div><div style="border:1px solid var(--ml);border-radius:8px;padding:5px 8px" class="fade">не менять</div></div></div>
+            <div style="color:#501820;font-size:12px">▸ Дополнительно: сервер, домен</div>
+          </div>
+          <div class="bar" style="border-top:1px solid var(--ml);border-bottom:0;justify-content:flex-end;background:var(--mb)"><span class="btn">Отмена</span><span class="btn pri">Сохранить</span></div>
+        </div></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ POLISH ============ -->
+  <section class="s" id="polish">
+    <header><h2>Полировка и токены</h2><span class="muted">правила taste-skill против текущего кода</span></header>
+    <div class="tokens">
+      <table>
+        <thead><tr><th>Правило</th><th>Сейчас</th><th>Предложение</th><th>Приоритет</th></tr></thead>
+        <tbody>
+          <tr><td>Без чистого чёрного</td><td><span class="swatch" style="background:#000"></span><code>--aas-ink: #000000</code></td><td><span class="swatch" style="background:#16181c"></span><code>#16181c</code>, тон из той же холодной серой шкалы, что <code>--aas-text</code></td><td><span class="sev p2">P2</span></td></tr>
+          <tr><td>Один стиль иконок</td><td>Глифы <code>⟳ ‹ › ▸ ☆</code>, эмодзи 📍 и 📎, SVG шестерёнка</td><td>Один набор SVG (Phosphor Regular, 1.5 px), без эмодзи</td><td><span class="sev p2">P2</span></td></tr>
+          <tr><td>Табличные цифры</td><td>Время в списке и сетке календаря пропорциональное</td><td><code>font-variant-numeric: tabular-nums</code> на .t, .tm, счётчиках</td><td><span class="sev p2">P2</span></td></tr>
+          <tr><td>Нажатие ощущается</td><td>Нет <code>:active</code> у кнопок и строк</td><td><code>transform: scale(.98)</code> на 120 мс, строка: фон на :active</td><td><span class="sev p2">P2</span></td></tr>
+          <tr><td>Единый формат дат</td><td><code>11:11</code>, <code>24.09 15:33</code>, <code>2026-09-15 16:47</code>, <code>21 сент. 2026 г.</code></td><td>Один форматтер: сегодня «11:11», вчера, день недели, «24 сент.», год только если не текущий</td><td><span class="sev p1">P1</span></td></tr>
+          <tr><td>Иконка без подписи</td><td>На 1100 px «Синхронизировать» становится кружком «○»</td><td>SVG-стрелки + tooltip; время «Обновлено 14:28» переехать в tooltip</td><td><span class="sev p1">P1</span></td></tr>
+          <tr><td>Фокус с клавиатуры</td><td>Кольцо фокуса есть не везде (строки списка, папки)</td><td><code>:focus-visible</code> 2 px акцентом на всех интерактивных элементах</td><td><span class="sev p1">P1</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ PLAN ============ -->
+  <section class="s" id="plan">
+    <header><h2>План внедрения</h2><span class="muted">порядок по методике: меньше риска, больше эффекта сначала</span></header>
+    <div class="road">
+      <div class="st"><span class="n">1</span><div><h3>Починить скрытое</h3><p>Заголовок папки, панель действий письма с меню «•••», поиск и синхронизация на узком окне.</p></div><span class="eff">~0.5 дня · только CSS/JS</span></div>
+      <div class="st"><span class="n">2</span><div><h3>Строка письма и даты</h3><p>Состояние непрочитанного, аватары, чекбокс на hover, единый форматтер дат, очистка превью.</p></div><span class="eff">~1 день · + тесты JS</span></div>
+      <div class="st"><span class="n">3</span><div><h3>Календарь</h3><p>Полоса + светлая заливка, статус формой, «+N» для пересечений, свёрнутые нерабочие часы.</p></div><span class="eff">~1.5 дня</span></div>
+      <div class="st"><span class="n">4</span><div><h3>Карточка встречи и compose</h3><p>RSVP сверху, свёрнутое исходное приглашение, прикрепление файлов своим контролом.</p></div><span class="eff">~1 день</span></div>
+      <div class="st"><span class="n">5</span><div><h3>Навигация, вариант A</h3><p>Переключатель аккаунта и переключатель раздела, горячие клавиши, контекстная панель выбора.</p></div><span class="eff">~1 день</span></div>
+      <div class="st"><span class="n">6</span><div><h3>Полировка</h3><p>Токен ink, набор иконок, :active, focus-visible, пустое состояние панели чтения.</p></div><span class="eff">~0.5 дня</span></div>
+    </div>
+  </section>
+
+  <footer>Скриншоты живого приложения использованы только для анализа и в отчёт не включены. Все имена, темы писем и адреса в макетах вымышлены. Макеты показаны в светлой банковской теме; в тёмных темах StylesBA правила те же.</footer>
+</div>
