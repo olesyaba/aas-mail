@@ -1397,3 +1397,45 @@ class OutlookReplyHeaderTest(unittest.TestCase):
         with mock.patch.object(mail_cmd, "handle", side_effect=lambda c, act, **kw: seen.update(kw) or {"ok": True}):
             webapp.call(a, "mail", {"action": "reply", "item_id": "14:404", "body": "ok"})
         self.assertEqual(seen["body"], "ok")
+
+
+class SelfUpdateTest(unittest.TestCase):
+    def setUp(self):
+        webapp._update_cache.clear()
+
+    def _gh(self, stdout="", code=0, stderr=""):
+        from unittest import mock
+        run = mock.Mock(return_value=mock.Mock(returncode=code, stdout=stdout, stderr=stderr))
+        return mock.patch.multiple(webapp, _gh_path=mock.Mock(return_value="/x/gh")), mock.patch.object(webapp.subprocess, "run", run)
+
+    def test_version_compare(self):
+        self.assertGreater(webapp._ver_tuple("1.2.12"), webapp._ver_tuple("1.2.11"))
+        self.assertGreater(webapp._ver_tuple("v1.10.0"), webapp._ver_tuple("1.9.9"))
+
+    def test_newer_release_with_zip_is_offered(self):
+        body = json.dumps({"tagName": "v99.0.0", "body": "notes", "assets": [{"name": "AAS-mail-99.0.0-mac.zip"}]})
+        a, b = self._gh(body)
+        with a, b:
+            u = webapp.update_check(force=True)
+        self.assertTrue(u["available"]); self.assertEqual(u["latest"], "99.0.0")
+        self.assertFalse(u["can_install"], "a dev checkout is never replaced")
+        self.assertIn("git pull", u["reason"])
+
+    def test_same_version_or_no_zip_is_not_offered(self):
+        cur = webapp.APP_META["version"]
+        for rel in ({"tagName": "v" + cur, "assets": [{"name": "x-mac.zip"}]},
+                    {"tagName": "v99.0.0", "assets": [{"name": "icon.png"}]}):
+            a, b = self._gh(json.dumps(rel))
+            with a, b:
+                self.assertFalse(webapp.update_check(force=True)["available"], rel)
+
+    def test_no_access_explains_gh_login(self):
+        a, b = self._gh(code=1, stderr="HTTP 404: Not Found")
+        with a, b:
+            u = webapp.update_check(force=True)
+        self.assertFalse(u["available"]); self.assertIn("gh auth login", u["reason"])
+
+    def test_install_refused_without_update(self):
+        a, b = self._gh(code=1, stderr="HTTP 404: Not Found")
+        with a, b:
+            self.assertFalse(webapp.update_install()["ok"])

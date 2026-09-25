@@ -248,7 +248,7 @@ def upstream_handler(domain: str, action: str):
 
 
 class UiContractTest(unittest.TestCase):
-    ROUTED = {"prefs", "about", "accounts", "account-config", "unread", "message", "retry", "sync", "invite", "warm",
+    ROUTED = {"prefs", "about", "accounts", "account-config", "update", "unread", "message", "retry", "sync", "invite", "warm",
               "mail", "folders", "events", "people", "settings"}
 
     def test_parser_sees_the_calls(self):

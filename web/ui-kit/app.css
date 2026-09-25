@@ -825,3 +825,8 @@ input[type="checkbox"].aas-sw:focus-visible { outline: 2px solid var(--aas-accen
 #rtools #mv { flex: none; width: auto; max-width: 180px; }
 /* Read / unread: the same dot icons as the selection bar. */
 #rtools .aas-btn .aas-readdot { display: inline-block; margin-right: 6px; width: 9px; height: 9px; vertical-align: 0; }
+
+/* Self-update: release notes in the confirmation dialog. */
+.aas-upd__notes{max-height:220px;overflow:auto;white-space:pre-wrap;font-size:var(--aas-t-xs);color:var(--aas-muted);
+  background:var(--aas-panel-2);border:1px solid var(--aas-line);border-radius:var(--aas-r-sm);padding:8px 10px;margin:8px 0}
+#updbtn{white-space:nowrap}

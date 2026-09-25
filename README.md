@@ -25,6 +25,31 @@ bash build_dist.sh         # → ../dist/AAS-mail-*-mac.zip
 
 Коллеги вводят свои логин/пароль в Настройках; серверы уже подставлены.
 
+## Установка у коллег и автообновление
+
+Нужен доступ к этому репозиторию. Один раз:
+
+```bash
+gh repo clone olesyaba/aas-mail && cd aas-mail && ./install.sh
+# (без gh: git clone git@github.com:olesyaba/aas-mail.git && cd aas-mail && ./install.sh)
+```
+
+`install.sh` при необходимости ставит GitHub CLI (`brew install gh`), просит `gh auth login`,
+скачивает последний релиз и кладёт `AAS mail.app` в `~/Applications`.
+
+Дальше приложение само проверяет GitHub Releases (через 15 с после запуска и раз в 6 ч;
+вручную — Настройки → О приложении → «Проверить обновления»). Когда есть новая версия,
+в шапке появляется «Обновить до X»: приложение скачивает релиз своим `gh`-логином,
+проверяет версию внутри архива, закрывается, заменяет себя и открывается снова
+(при сбое возвращает старую версию; журнал — `~/.config/eas-bridge/update.log`).
+Сборка из исходников (`build_app.sh`) не заменяет себя — только сообщает о версии.
+
+Выпуск новой версии: поднять `version` в `webapp.py`, дописать `RELEASE_NOTES.txt`, закоммитить и
+
+```bash
+app/release.sh             # тесты → dist zip → privacy scan → gh release create vX.Y.Z
+```
+
 ## Тесты
 
 ```bash

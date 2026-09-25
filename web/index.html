@@ -31,6 +31,7 @@ try {
   </div>
   <div class="aas-spacer"></div>
   <input id="search" type="search" placeholder="Поиск по почте">
+  <button class="aas-btn aas-btn--primary aas-btn--sm" id="updbtn" hidden title="Вышла новая версия AAS mail">Обновить</button>
   <span id="synctxt" class="aas-sync__txt"></span>
   <button class="aas-btn aas-sync" id="syncbtn" title="Принудительная синхронизация почты и календаря с сервером"><span class="aas-sync__ic ic">⟳</span><span class="lbl">Синхронизировать</span></button>
   <button class="aas-btn aas-btn--primary" id="newbtn">Создать</button>
@@ -561,6 +562,46 @@ async function autoSyncTick() {
     lastSync = new Date(); setSyncText();
   } finally { autoBusy = false; }
 }
+/* ---------- self-update (GitHub Releases via the user's gh login) ---------- */
+let updateInfo = null;
+function updateText(u) {
+  if (!u) return '';
+  if (u.available) return `Доступна версия ${u.latest}` + (u.can_install ? '' : ` — ${u.reason}`);
+  if (u.reason) return u.reason;
+  return u.latest ? 'У вас последняя версия' : '';
+}
+function paintUpdate() {
+  const b = $('#updbtn'); if (!b) return;
+  const u = updateInfo;
+  b.hidden = !(u && u.available && u.can_install);
+  if (!b.hidden) { b.textContent = `Обновить до ${u.latest}`; b.title = 'Скачать и установить новую версию; приложение перезапустится'; }
+  const st = $('#updstate'); if (st) st.textContent = updateText(u);
+}
+async function checkUpdate(force = false) {
+  try { updateInfo = await api('update', {action: 'check', force}); } catch (_) { return; }
+  paintUpdate();
+}
+function bindUpdateCheck() {
+  const b = $('#updcheck'); if (!b) return;
+  b.onclick = guard(async () => { b.disabled = true; $('#updstate').textContent = 'Проверяю…';
+    try { await checkUpdate(true); } finally { b.disabled = false; } });
+}
+function confirmUpdate() {
+  const u = updateInfo; if (!u?.can_install) return;
+  openModal(`<h3>Обновить AAS mail до ${esc(u.latest)}?</h3>
+    <p>Новая версия скачается из GitHub, приложение закроется и откроется уже обновлённым (около минуты). Настройки, пароли и кэш сохраняются.</p>
+    ${u.notes ? `<div class="aas-upd__notes">${esc(u.notes)}</div>` : ''}
+    <div class="acts2"><button class="aas-btn" id="updno">Позже</button><button class="aas-btn aas-btn--primary" id="updyes">Обновить</button></div>`);
+  $('#updno').onclick = closeModal;
+  $('#updyes').onclick = guard(async () => {
+    $('#updyes').disabled = true;
+    try { await api('update', {action: 'install'}); }
+    finally { const x = $('#updyes'); if (x) x.disabled = false; }
+    closeModal(); toast('Скачиваю обновление — приложение перезапустится само');
+  });
+}
+$('#updbtn').onclick = confirmUpdate;
+
 function armAutoSync() {
   clearInterval(autoTimer);
   if (prefs.auto_sync > 0) autoTimer = setInterval(autoSyncTick, prefs.auto_sync * 60000);
@@ -1466,6 +1507,9 @@ $('#setbtn').onclick = async () => {
     <div data-pane="about" hidden class="aas-about">
       <h4 class="aas-about__title">${esc(aboutMeta.name || 'AAS mail')}</h4>
       <div class="aas-about__ver">Версия ${esc(aboutMeta.version || '')}</div>
+      <div class="f aas-upd"><div class="frow" style="align-items:center;gap:8px">
+        <button type="button" class="aas-btn" id="updcheck">Проверить обновления</button>
+        <span id="updstate" class="hint">${esc(updateText(updateInfo))}</span></div></div>
       <p>${esc(aboutMeta.description || '')}</p>
       <p>Контакт в Mattermost: <b>${esc(aboutMeta.contact_mm || '@olesya_ba')}</b></p>
       ${Array.isArray(aboutMeta.thanks) && aboutMeta.thanks.length ? `
@@ -1483,6 +1527,7 @@ $('#setbtn').onclick = async () => {
     document.querySelectorAll('.aas-settings-tabs .aas-btn').forEach(x => x.classList.toggle('on', x === b));
     document.querySelectorAll('[data-pane]').forEach(pane => { pane.hidden = pane.dataset.pane !== b.dataset.sp; });
     $('#ssave').style.display = b.dataset.sp === 'about' ? 'none' : '';
+    if (b.dataset.sp === 'about') bindUpdateCheck();
   });
   document.querySelectorAll('[data-theme-v]').forEach(b => b.onclick = () => {
     document.querySelectorAll('[data-theme-v]').forEach(x => x.classList.toggle('on', x === b));
@@ -1892,6 +1937,7 @@ $('#bulkunread')?.addEventListener('click', bulkMark(false));
   setTimeout(() => applyAuthState(accounts), 0);  // tabs exist after buildAccountTabs
   buildAccountTabs(); setBrand();
   calMode = prefs.cal_view; $('#thr').checked = prefs.threads; $('#window').value = String(prefs.mail_window ?? 5); $('#sort').value = prefs.mail_sort || 'date_desc'; armAutoSync();
+  setTimeout(() => checkUpdate(), 15000); setInterval(() => checkUpdate(), 6 * 3600 * 1000);
   if (aboutMeta.needs_setup) {
     toast('Первый запуск: укажите логин и пароль. Адреса серверов уже подставлены.');
     setTimeout(() => $('#setbtn').click(), 200);

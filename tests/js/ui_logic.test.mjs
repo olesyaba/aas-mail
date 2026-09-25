@@ -163,7 +163,7 @@ test('refreshUnread is always called with an account id first', () => {
 });
 
 test('every api() domain has a backend route', () => {
-  const routes = new Set(['prefs', 'about', 'accounts', 'account-config', 'unread', 'message', 'retry', 'sync', 'invite', 'warm',
+  const routes = new Set(['prefs', 'about', 'accounts', 'account-config', 'update', 'unread', 'message', 'retry', 'sync', 'invite', 'warm',
     'mail', 'folders', 'events', 'people', 'settings']);
   const used = new Set([...script.matchAll(/api\('([\w-]+)'/g)].map(m => m[1]));
   assert.deepEqual([...used].filter(d => !routes.has(d)), []);

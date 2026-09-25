@@ -41,7 +41,7 @@ MAX_BODY = 40 * 1024 * 1024
 # Product identity (About page + UI chrome).
 APP_META = {
     "name": "AAS mail",
-    "version": "1.2.11",
+    "version": "1.2.12",
     "description": "Локальный клиент почты и календаря Alfa / Alfa-Seller поверх Exchange ActiveSync.",
     "contact_mm": "@olesya_ba",
     "thanks_intro": "Спасибо за тест-рейды и светлые идеи:",
@@ -1887,6 +1887,96 @@ def retry_login(a: Acct) -> dict:
     return r
 
 
+# -- self-update from GitHub Releases ------------------------------------------
+# Colleagues with access to the private repo install `gh` once (`gh auth login`);
+# the app then finds newer releases and replaces itself (app/self_update.sh).
+# Dev builds (a project checkout, not a bundle) only report — they update via git.
+
+UPDATE_REPO = "olesyaba/aas-mail"
+UPDATE_CHECK_S = 6 * 3600
+_update_cache: dict = {}
+_update_lock = threading.Lock()
+
+
+def _ver_tuple(v: str) -> tuple:
+    return tuple(int(x) for x in re.findall(r"\d+", v or "")[:4])
+
+
+def _app_bundle() -> Path | None:
+    """The .app this server runs from (dist build), or None for a dev checkout."""
+    for p in Path(__file__).resolve().parents:
+        if p.suffix == ".app":
+            return p
+    return None
+
+
+def _gh_path() -> str | None:
+    import shutil
+    for c in (shutil.which("gh"), "/opt/homebrew/bin/gh", "/usr/local/bin/gh",
+              str(Path.home() / ".local/bin/gh")):
+        if c and os.access(c, os.X_OK):
+            return c
+    return None
+
+
+def update_check(force: bool = False) -> dict:
+    """Latest release vs this version. Cached for UPDATE_CHECK_S; never raises."""
+    with _update_lock:
+        if not force and _update_cache and time.time() - _update_cache.get("ts", 0) < UPDATE_CHECK_S:
+            return dict(_update_cache)
+    cur = APP_META["version"]
+    out = {"ok": True, "current": cur, "latest": None, "tag": None, "available": False, "notes": "",
+           "can_install": False, "reason": "", "ts": time.time()}
+    gh = _gh_path()
+    if not gh:
+        out["reason"] = "Для обновлений установите GitHub CLI: brew install gh, затем gh auth login"
+    else:
+        try:
+            r = subprocess.run([gh, "release", "view", "--repo", UPDATE_REPO, "--json", "tagName,body,assets"],
+                               capture_output=True, text=True, timeout=25)
+            if r.returncode != 0:
+                last = ((r.stderr or "").strip().splitlines() or ["?"])[-1]
+                low = last.lower()
+                out["reason"] = ("Нет доступа к репозиторию — выполните в Терминале: gh auth login"
+                                 if "auth" in low or "404" in low or "not found" in low
+                                 else "Не удалось проверить обновления: " + last[:200])
+            else:
+                j = json.loads(r.stdout or "{}")
+                tag = str(j.get("tagName") or "")
+                has_zip = any(str(a.get("name", "")).endswith("-mac.zip") for a in j.get("assets") or [])
+                out.update(latest=tag.lstrip("v"), tag=tag, notes=str(j.get("body") or "")[:3000])
+                out["available"] = has_zip and _ver_tuple(out["latest"]) > _ver_tuple(cur)
+        except Exception as e:  # noqa: BLE001 — offline, timeout, bad JSON
+            out["reason"] = f"Не удалось проверить обновления: {type(e).__name__}"
+    bundle = _app_bundle()
+    out["can_install"] = bool(out["available"] and gh and bundle)
+    if out["available"] and not bundle:
+        out["reason"] = "Сборка из исходников: обновите через git pull и app/build_app.sh"
+    with _update_lock:
+        _update_cache.clear()
+        _update_cache.update(out)
+    return dict(out)
+
+
+def update_install() -> dict:
+    """Start app/self_update.sh detached: it outlives this server when the app quits."""
+    info = update_check(force=True)
+    if not info.get("can_install"):
+        return {"ok": False, "error": "bad_request",
+                "message": info.get("reason") or "Новой версии нет — у вас последняя."}
+    here = Path(__file__).resolve().parent
+    script = next((p for p in (here / "self_update.sh", here / "app" / "self_update.sh") if p.exists()), None)
+    if not script:
+        return {"ok": False, "error": "bad_request", "message": "В сборке нет self_update.sh"}
+    with open(bridge.DATA_DIR / "update.log", "a") as logf:
+        subprocess.Popen(["/bin/bash", str(script), _gh_path(), UPDATE_REPO, info["tag"],
+                          str(_app_bundle()), info["latest"]],
+                         stdout=logf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                         start_new_session=True)
+    log.info("self-update to %s started", info["latest"])
+    return {"ok": True, "started": True, "latest": info["latest"]}
+
+
 # -- preferences (signature, view, sync) ---------------------------------------
 
 PREFS_PATH = bridge.DATA_DIR / "prefs.json"
@@ -2548,6 +2638,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, **APP_META,
                                    "needs_setup": account_needs_setup(cfg),
                                    "defaults": dict(DEFAULT_EAS_URLS)})
+            if path == "/api/update":
+                if params.get("action") == "install":
+                    return self._json(update_install())
+                return self._json(update_check(force=bool(params.get("force"))))
             if path == "/api/accounts":
                 return self._json({"ok": True, "accounts": [
                     {"id": x.id, "name": x.name, "email": x.email, "green": x.green,

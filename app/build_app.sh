@@ -40,7 +40,7 @@ if [ "$BUNDLE_SERVER" = "1" ]; then
   echo "Bundling eas-bridge server into the app…"
   DEST="$APP/Contents/Resources/eas-bridge"
   mkdir -p "$DEST/web" "$DEST/vendor"
-  cp "$ROOT/webapp.py" "$ROOT/bridge.py" "$DEST/"
+  cp "$ROOT/webapp.py" "$ROOT/bridge.py" "$ROOT/app/self_update.sh" "$DEST/"
   cp -R "$ROOT/web/"* "$DEST/web/"
 
   # Vendor outlook_activesync_mcp (client only — no fastmcp needed for the UI).
