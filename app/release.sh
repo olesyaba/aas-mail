@@ -26,4 +26,4 @@ git push origin HEAD
 gh release create "$TAG" "$ZIP" --repo "$REPO" --target "$(git rev-parse HEAD)" \
   --title "AAS mail $VERSION" --notes-file "$NOTES"
 rm -f "$NOTES"
-echo "Опубликовано: $TAG — установленные приложения предложат обновиться в течение 6 часов (или по кнопке «Проверить обновления»)."
+echo "Опубликовано: $TAG — в режиме «Автоматически» приложения обновятся сами в течение 6 часов; вручную — Настройки → Обновления → «Проверить сейчас»."

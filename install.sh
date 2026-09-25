@@ -2,7 +2,7 @@
 # Install (or reinstall) the latest AAS mail from the private GitHub repo's Releases.
 #   ./install.sh            — from a clone of the repo
 # Needs access to github.com/olesyaba/aas-mail. Later updates come from the app itself
-# (button «Обновить до …» / Настройки → О приложении).
+# (Настройки → Обновления: автоматически или по запросу).
 set -euo pipefail
 REPO="olesyaba/aas-mail"
 DEST="$HOME/Applications"
