@@ -285,6 +285,19 @@ test('event card: long description has no inner scroller, participants collapse'
   assert.doesNotMatch(html, /max-height:180px/);
 });
 
+test('incoming mail: long To/Cc lists collapse with expand', () => {
+  const {recipBlock} = load(['recipBlock']);
+  const many = Array.from({length: 5}, (_, i) => ({name: `u${i}`, address: `u${i}@x.ru`}));
+  const collapsed = recipBlock('Кому', many);
+  assert.match(collapsed, /<details class="aas-mc__recips">/);
+  assert.match(collapsed, /и ещё 3/);
+  assert.match(collapsed, /aas-mc__recips-full/);
+  const short = recipBlock('Кому', many.slice(0, 2));
+  assert.doesNotMatch(short, /<details/);
+  assert.match(short, /^<div class="aas-mc__recips">Кому:/);
+  assert.equal(recipBlock('Копия', []), '');
+});
+
 test('reply form shows the original under an Outlook header block', () => {
   const {quotedOriginal} = load(['quotedOriginal']);
   const html = quotedOriginal({from: [{name: 'Егор', address: 'e@b.ru'}], to: [{address: 'me@b.ru'}], cc: [],

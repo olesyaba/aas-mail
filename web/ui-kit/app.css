@@ -292,6 +292,51 @@ body.green #folders {
   font-size: 13px;
 }
 
+.aas-mc__from {
+  color: var(--aas-text);
+  margin-bottom: 2px;
+}
+
+/* Long To/Cc: one summary line; expand for the full address list. */
+.aas-mc__recips {
+  margin-top: 2px;
+}
+
+.aas-mc__recips > summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline;
+}
+
+.aas-mc__recips > summary::-webkit-details-marker {
+  display: none;
+}
+
+.aas-mc__recips > summary::after {
+  content: " ▸";
+  color: var(--aas-muted);
+}
+
+.aas-mc__recips[open] > summary::after {
+  content: " ▾";
+}
+
+.aas-mc__more {
+  color: var(--aas-accent-text);
+}
+
+.aas-mc__recips-full {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: var(--aas-panel-2);
+  border-radius: var(--aas-r-sm, 6px);
+  max-height: 160px;
+  overflow: auto;
+  word-break: break-word;
+  line-height: 1.45;
+  color: var(--aas-text);
+}
+
 .aas-mc__acts {
   padding: 6px 14px;
   display: flex;
@@ -557,8 +602,36 @@ a.aas-btn--primary { color: var(--aas-on-accent); text-decoration: none; }
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-  margin-top: 14px;
+  margin: 14px 0;
   flex-wrap: wrap;
+}
+
+/* Compose / settings: Отправить / Сохранить pinned under the title; body scrolls below. */
+#modal.aas-modal--actions-top {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+#modal.aas-modal--actions-top > .aas-settings-tabs,
+#modal.aas-modal--actions-top > .acts2:not(.meeting-rsvp) {
+  flex-shrink: 0;
+}
+
+#modal.aas-modal--actions-top > .acts2:not(.meeting-rsvp) {
+  margin: 0 -18px 10px;
+  padding: 0 18px 12px;
+  background: var(--aas-panel);
+  border-bottom: 1px solid var(--aas-line);
+}
+
+#modal.aas-modal--actions-top > .aas-modal__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 -18px;
+  padding: 0 18px 12px;
 }
 
 .aas-hint,

@@ -95,6 +95,17 @@ function toast(msg, err) {
 const guard = fn => async (...a) => { try { return await fn(...a); } catch (e) { if (!e.silent) toast(e.message, true); } };
 const who = a => !a ? '' : (a.name || a.address || '');
 const whoFull = a => !a ? '' : (a.name && a.address ? `${a.name} <${a.address}>` : (a.address || a.name || ''));
+/** Incoming mail: long To/Cc lists stay collapsed; click summary to expand. */
+function recipBlock(label, list) {
+  if (!list?.length) return '';
+  const fulls = list.map(whoFull);
+  if (list.length <= 3) {
+    return `<div class="aas-mc__recips">${label}: ${esc(fulls.join(', '))}</div>`;
+  }
+  const preview = list.slice(0, 2).map(who).map(esc).join(', ');
+  const more = list.length - 2;
+  return `<details class="aas-mc__recips"><summary>${label}: ${preview} <span class="aas-mc__more">и ещё ${more}</span></summary><div class="aas-mc__recips-full">${esc(fulls.join(', '))}</div></details>`;
+}
 // Turn URLs in already-escaped text into links that open outside the app window.
 const linkify = h => h.replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
 /** First Teams/Zoom/Telemost/… URL from location or body (plain or HTML). */
@@ -209,9 +220,15 @@ function openModal(html) {
   if (!confirmDiscard()) { const e = new Error('cancelled'); e.silent = true; throw e; }
   const m = $('#modal');
   if (!$('#ov').classList.contains('floating')) resetModalPos();  // a floating window keeps its place
-  m.innerHTML = html; delete m.dataset.dirty; $('#ov').classList.add('on'); return m;
+  m.innerHTML = html; delete m.dataset.dirty;
+  m.classList.toggle('aas-modal--actions-top', !!m.querySelector(':scope > .aas-modal__scroll'));
+  $('#ov').classList.add('on'); return m;
 }
-function closeModal() { $('#ov').classList.remove('on'); $('#modal').innerHTML = ''; delete $('#modal').dataset.dirty; resetModalPos(); }
+function closeModal() {
+  $('#ov').classList.remove('on');
+  const m = $('#modal'); m.innerHTML = ''; m.classList.remove('aas-modal--actions-top');
+  delete m.dataset.dirty; resetModalPos();
+}
 const closeModalSafe = () => { if (confirmDiscard()) closeModal(); };
 $('#modal').addEventListener('input', () => { $('#modal').dataset.dirty = '1'; });
 $('#ov').addEventListener('mousedown', e => { if (e.target.id === 'ov') closeModalSafe(); });
@@ -1081,8 +1098,7 @@ function bindAttachments(box, m, atts) {
 function aasSaved(ok, text) { toast(text, !ok); }
 function renderCard(c) {
   const j = c.j, m = c.m, mb = c.el.querySelector('.aas-mc__body');
-  const to = j.to.map(whoFull).join(', '), cc = j.cc.map(whoFull).join(', ');
-  mb.innerHTML = `<div class="aas-mc__meta"><b>${esc(j.from.map(whoFull).join(', '))}</b><br>Кому: ${esc(to)}${cc ? `<br>Копия: ${esc(cc)}` : ''}</div>
+  mb.innerHTML = `<div class="aas-mc__meta"><div class="aas-mc__from"><b>${esc(j.from.map(whoFull).join(', '))}</b></div>${recipBlock('Кому', j.to)}${recipBlock('Копия', j.cc)}</div>
     <div class="aas-mc__acts"><button class="aas-btn aas-btn--sm" data-a="reply">Ответить</button><button class="aas-btn aas-btn--sm" data-a="replyall">Ответить всем</button><button class="aas-btn aas-btn--sm" data-a="fwd">Переслать</button></div>
     ${attachmentsHtml(m, [...j.attachments, ...(j.images || [])])}
     ${j.invite ? inviteCard(j.invite) : ''}
@@ -1425,6 +1441,8 @@ function composeForm(ctx) {
   const mode = ctx?.mode || 'new';
   const title = {new: 'Новое письмо', reply: ctx?.all ? 'Ответить всем' : 'Ответить', fwd: 'Переслать'}[mode];
   openModal(`<h3>${title}</h3>
+    <div class="acts2"><button class="aas-btn" id="ccancel">Отмена</button><button class="aas-btn aas-btn--primary" id="csend">Отправить</button></div>
+    <div class="aas-modal__scroll">
     ${mode === 'reply' ? `<div class="f"><label>Кому</label><div>${esc(ctx.j.from.map(whoFull).join(', '))}${ctx.all ? ' и остальные адресаты' : ''}</div></div>
       <div class="f"><label>Тема</label><div>Re: ${esc(ctx.j.subject)}</div></div>` : `
     <div class="f"><label>Кому</label><div class="aas-people"><input type="text" id="cto" placeholder="фамилия или email"></div>
@@ -1434,7 +1452,7 @@ function composeForm(ctx) {
     <div class="f"><label>Текст</label><textarea id="cbody" rows="10"></textarea></div>
     ${mode === 'reply' ? '' : '<div class="f"><input type="file" id="cfile" multiple> <div id="cfiles"></div></div>'}
     ${mode !== 'new' && ctx?.j ? quotedOriginal(ctx.j) : ''}
-    <div class="acts2"><button class="aas-btn" id="ccancel">Отмена</button><button class="aas-btn aas-btn--primary" id="csend">Отправить</button></div>`);
+    </div>`);
   $('#cbody').value = sigBlock(mode);
   for (const id of ['cto', 'ccc']) { const el = $('#' + id); if (el) bindPeopleInput(el); }
   const fi = $('#cfile');
@@ -1501,6 +1519,8 @@ $('#setbtn').onclick = async () => {
   const defs = acctCfg.defaults || {};
   openModal(`<h3>Настройки</h3>
     <div class="aas-settings-tabs"><button class="aas-btn on" data-sp="acct">Аккаунты</button><button class="aas-btn" data-sp="mail">Почта</button><button class="aas-btn" data-sp="upd">Обновления</button><button class="aas-btn" data-sp="about">О приложении</button></div>
+    <div class="acts2"><button class="aas-btn" id="scancel">Отмена</button><button class="aas-btn aas-btn--primary" id="ssave">Сохранить</button></div>
+    <div class="aas-modal__scroll">
     <div data-pane="acct">
     ${acctFields('m', 'bank', 'Alfa-Bank', {...acctCfg.main, hasPass: !!acctCfg.main.has_password}, null,
       'Формат ДОМЕН\\логин, например moscow\\U_XXXXX', defs.main || '')}
@@ -1568,7 +1588,7 @@ $('#setbtn').onclick = async () => {
       </div>` : ''}
       <p class="hint">Локальный клиент поверх Exchange ActiveSync · данные не уходят с этой машины.</p>
     </div>
-    <div class="acts2"><button class="aas-btn" id="scancel">Отмена</button><button class="aas-btn aas-btn--primary" id="ssave">Сохранить</button></div>`);
+    </div>`);
   document.querySelectorAll('.aas-settings-tabs [data-sp]').forEach(b => b.onclick = () => {
     document.querySelectorAll('.aas-settings-tabs .aas-btn').forEach(x => x.classList.toggle('on', x === b));
     document.querySelectorAll('[data-pane]').forEach(pane => { pane.hidden = pane.dataset.pane !== b.dataset.sp; });
