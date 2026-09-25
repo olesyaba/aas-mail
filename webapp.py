@@ -41,7 +41,7 @@ MAX_BODY = 40 * 1024 * 1024
 # Product identity (About page + UI chrome).
 APP_META = {
     "name": "AAS mail",
-    "version": "1.2.15",
+    "version": "1.2.16",
     "description": "Локальный клиент почты и календаря Alfa / Alfa-Seller поверх Exchange ActiveSync.",
     "contact_mm": "@olesya_ba",
     "thanks_intro": "Спасибо за тест-рейды и светлые идеи:",
@@ -321,6 +321,7 @@ def save_account_config(p: dict) -> dict:
         log.warning("[%s] login check after save failed: %s", aid, e)
         login_ok, message = False, _friendly_error(new_acct, "settings", "status", e)
     new_acct.backend = backend
+    _mail_cache_load(new_acct)  # same login and server → keep the saved letters
     ACCTS[aid] = new_acct
     if login_ok:
         threading.Thread(target=backend.ensure_identity, daemon=True).start()
@@ -610,6 +611,9 @@ def call(a: Acct, domain: str, params: dict) -> dict:
     mods = {"mail": mail, "folders": folders, "events": calendar, "people": people, "settings": settings}
     mod = mods.get(domain)
     action = params.pop("action", None)
+    cache_only = bool(params.pop("cache_only", False))
+    if domain == "mail" and action == "list" and cache_only:
+        return mail_cached_list(a, params)
     if mod is None or not action:
         return {"ok": False, "error": "bad_request", "message": f"unknown call {domain}/{action}",
                 "action": action or "", "count": 0, "items": []}
@@ -638,33 +642,60 @@ def call(a: Acct, domain: str, params: dict) -> dict:
         params["body"] = (params.get("body") or "").rstrip() + _outlook_quote_header(a, params["item_id"])
     params.pop("no_quote_header", None)
     backend = a.get()
-    with backend.lock:
-        try:
-            if domain == "mail" and action == "list":
-                res = _mail_list_paged(a, backend, params)
-                fid = params.get("folder")
-                if fid and res.get("ok", True):
-                    box = a.mail_boxes.get(str(fid))
-                    if box is not None and box.get("by_id"):
-                        recount_unread_from_box(a, str(fid), box)
-                    elif not params.get("cursor"):
-                        recount_unread_from_items(a, str(fid), res.get("items") or [])
-                return res
-            backend._pace()
-            res = mod.handle(backend.client, action, **params)
-            if domain == "people" and action == "find" and res.get("ok", True):
-                _people_find_store(a, params, res)
-            # Local mail-box patches after writes so the next delta refresh is coherent.
-            if domain == "mail" and res.get("ok", True):
-                _mail_box_after_write(a, action, params, res)
+    write = action in _WRITE_ACTIONS
+    if not backend.lock.acquire(timeout=LOCK_WAIT_WRITE_S if write else LOCK_WAIT_S):
+        return _busy_answer(a, domain, action, params)
+    try:
+        return _call_locked(a, backend, mod, domain, action, params)
+    finally:
+        backend.lock.release()
+
+
+_WRITE_ACTIONS = frozenset({"send", "reply", "forward", "move", "delete", "mark_read", "flag",
+                            "create", "update", "cancel", "respond"})
+
+
+def _busy_answer(a: Acct, domain: str, action: str, params: dict) -> dict:
+    """The mailbox is stuck on a slow call: the open folder from cache, else a clear error."""
+    fid = str(params.get("folder") or "")
+    box = a.mail_boxes.get(fid) if domain == "mail" and action == "list" and not params.get("cursor") else None
+    msg = (f"Сервер {a.name} сейчас не отвечает" +
+           (f", повторю через {int(acct_down_for(a)) + 1} с" if acct_down_for(a) else "") + ".")
+    if box and box.get("by_id"):
+        items = _mail_sorted_items(box)
+        return {"ok": True, "action": "list", "count": len(items), "items": items, "has_more": False,
+                "next_cursor": None, "delta": True, "stale": True, "cached": len(box["by_id"]), "message": msg}
+    log.info("[%s] %s/%s: mailbox busy, answered without waiting", a.id, domain, action)
+    return {"ok": False, "action": action, "count": 0, "items": [], "error": "unreachable", "message": msg}
+
+
+def _call_locked(a: Acct, backend, mod, domain: str, action: str, params: dict) -> dict:
+    try:
+        if domain == "mail" and action == "list":
+            res = _mail_list_paged(a, backend, params)
+            fid = params.get("folder")
+            if fid and res.get("ok", True):
+                box = a.mail_boxes.get(str(fid))
+                if box is not None and box.get("by_id"):
+                    recount_unread_from_box(a, str(fid), box)
+                elif not params.get("cursor"):
+                    recount_unread_from_items(a, str(fid), res.get("items") or [])
             return res
-        except Exception as e:  # noqa: BLE001 — surfaced to the UI as data
-            log.warning("[%s] %s/%s failed: %s", a.id, domain, action, e)
-            if domain == "mail" and getattr(e, "status", None) == 120:
-                a.send_down_until = time.time() + SEND_OUTAGE_S
-            return {"ok": False, "action": action, "count": 0, "items": [],
-                    "error": getattr(e, "code", None) or type(e).__name__,
-                    "message": _friendly_error(a, domain, action, e)}
+        backend._pace()
+        res = mod.handle(backend.client, action, **params)
+        if domain == "people" and action == "find" and res.get("ok", True):
+            _people_find_store(a, params, res)
+        # Local mail-box patches after writes so the next delta refresh is coherent.
+        if domain == "mail" and res.get("ok", True):
+            _mail_box_after_write(a, action, params, res)
+        return res
+    except Exception as e:  # noqa: BLE001 — surfaced to the UI as data
+        log.warning("[%s] %s/%s failed: %s", a.id, domain, action, e)
+        if domain == "mail" and getattr(e, "status", None) == 120:
+            a.send_down_until = time.time() + SEND_OUTAGE_S
+        return {"ok": False, "action": action, "count": 0, "items": [],
+                "error": getattr(e, "code", None) or type(e).__name__,
+                "message": _friendly_error(a, domain, action, e)}
 
 
 # MS-ASCMD MeetingResponse status codes → what the user can do about it.
@@ -679,7 +710,7 @@ _MEETING_RESPONSE_STATUS = {
 def _is_backoff(e) -> bool:
     """Throttled (503) or password latch (401): more requests only make it worse —
     never answer these with a heavier fallback (full dump / full sync)."""
-    return getattr(e, "code", None) in ("throttled", "auth_failed")
+    return getattr(e, "code", None) in ("throttled", "auth_failed") or _is_unreachable(e)
 
 
 def _auth_message(a: Acct) -> str:
@@ -713,6 +744,10 @@ def _friendly_error(a: Acct, domain: str, action: str, e: Exception) -> str:
                 "автосинхронизация повторит сама.")
     if getattr(e, "code", None) == "auth_failed":
         return _auth_message(a)
+    if _is_unreachable(e):
+        left = acct_down_for(a)
+        return (f"Сервер {a.name} не отвечает (VPN или сбой на сервере)." +
+                (f" Повторю через {int(left) + 1} с." if left else ""))
     if domain == "events" and action == "respond":
         status = getattr(e, "status", None)
         if status in _MEETING_RESPONSE_STATUS:
@@ -973,8 +1008,18 @@ def _patch_deep_foldersync():
             try:
                 got, mode = _folder_delta(self, cache), "delta"
             except Exception as e:  # noqa: BLE001
+                if _is_unreachable(e) or _is_backoff(e):
+                    # No server: keep showing the folders we know; a full FolderSync
+                    # would only fail the same way (and cost more when it is back).
+                    log.info("folder delta deferred (%s) — cached tree", e)
+                    return cache["tree"]
                 log.info("folder delta failed (%s) — full FolderSync", e)
-        folders, key = got or _deep_folder_tree(self)
+        try:
+            folders, key = got or _deep_folder_tree(self)
+        except Exception as e:  # noqa: BLE001
+            if deep and (_is_unreachable(e) or _is_backoff(e)):
+                return cache["tree"]
+            raise
         with self.store.transaction() as st:
             st["folders"] = {"cached_at": client_mod._now_epoch_iso(), "tree": folders,
                              "deep": True, "sync_key": key}
@@ -991,7 +1036,9 @@ def folders_list(a: Acct, refresh: bool = False) -> dict:
     from outlook_activesync_mcp.commands.provision import FOLDER_TYPES
     from outlook_activesync_mcp.models import envelope
     backend = a.get()
-    with backend.lock:
+    if not backend.lock.acquire(timeout=LOCK_WAIT_S):
+        return _busy_answer(a, "folders", "list", {})
+    try:
         try:
             backend._pace()
             tree = backend.client.foldersync(force=refresh)
@@ -1005,6 +1052,8 @@ def folders_list(a: Acct, refresh: bool = False) -> dict:
             return {"ok": False, "action": "list", "count": 0, "items": [],
                     "error": getattr(e, "code", None) or type(e).__name__,
                     "message": _friendly_error(a, "folders", "list", e)}
+    finally:
+        backend.lock.release()
 
 
 def _ensure_foldercreate_tokens():
@@ -1532,6 +1581,129 @@ def _cal_load(a: Acct, start, end) -> bool:
         a.cv.notify_all()  # a cold cal_events() is waiting for loaded
     log.info("[%s] calendar from disk: %d masters → %d events", a.id, len(blob["masters"]), len(items))
     return True
+
+
+# Mail folders survive a restart the same way: the cached letters of every folder the
+# app has listed, with the SyncKey generation they belong to. On launch the open
+# folder is shown from disk at once and refreshed with a delta (Add/Change/Delete
+# since last time, well under a second) instead of a SyncKey=0 prime of the whole
+# window. The generation is checked against the client's state file on the first
+# delta round: a mismatch re-primes that folder (see _mail_apply_delta).
+MAIL_CACHE_VERSION = 1
+MAIL_CACHE_EVERY_S = 15
+_MAIL_BOX_KEYS = ("filter", "fields", "label", "gen", "complete", "next_cursor", "ts")
+
+
+def _mail_cache_path(a: Acct):
+    return bridge.DATA_DIR / f"mailcache-{a.id}.pkl"
+
+
+def _mail_cache_sig(a: Acct) -> tuple:
+    """Cheap fingerprint of the mail cache: changes when letters arrive, go or flip read."""
+    out = []
+    for cid, b in list(a.mail_boxes.items()):
+        by_id = b.get("by_id") or {}
+        out.append((cid, b.get("gen"), round(float(b.get("ts") or 0), 3), len(by_id),
+                    sum(1 for m in list(by_id.values()) if not m.get("is_read"))))
+    return tuple(sorted(out, key=lambda x: str(x[0])))
+
+
+def _mail_cache_save(a: Acct) -> bool:
+    """Snapshot the primed folders under the mailbox lock (skip if it is busy) and write
+    them atomically, readable by this user only. Returns True when a file was written."""
+    import pickle
+    lock = getattr(a.backend, "lock", None)
+    if lock is not None and not lock.acquire(timeout=2):
+        return False
+    try:
+        # The SyncKey each folder was at goes along: on load it must still be the one in
+        # the client's state file, or the letters in between would never come again.
+        try:
+            keys = a.backend.client.store.get("collections", {}) if a.backend.client else {}
+        except Exception:  # noqa: BLE001
+            keys = {}
+        boxes = {cid: {**{k: b.get(k) for k in _MAIL_BOX_KEYS}, "by_id": dict(b["by_id"]),
+                       "sync_key": (keys.get(cid) or {}).get("sync_key")}
+                 for cid, b in a.mail_boxes.items()
+                 if b.get("by_id") and b.get("gen") is not None and type(b.get("filter")) is not object}
+    finally:
+        if lock is not None:
+            lock.release()
+    path = _mail_cache_path(a)
+    tmp = path.with_suffix(".tmp")
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            pickle.dump({"v": MAIL_CACHE_VERSION, "owner": _cal_cache_owner(a), "boxes": boxes}, f,
+                        protocol=pickle.HIGHEST_PROTOCOL)
+        os.replace(tmp, path)
+        return True
+    except Exception as e:  # noqa: BLE001
+        log.info("[%s] mail cache not saved: %s", a.id, e)
+        return False
+
+
+def _mail_cache_load(a: Acct) -> int:
+    """Fill a.mail_boxes from disk; another login or server on this account → ignored."""
+    import pickle
+    try:
+        with open(_mail_cache_path(a), "rb") as f:
+            blob = pickle.load(f)
+        if blob.get("v") != MAIL_CACHE_VERSION or blob.get("owner") != _cal_cache_owner(a):
+            return 0
+        boxes = blob["boxes"]
+    except FileNotFoundError:
+        return 0
+    except Exception as e:  # noqa: BLE001
+        log.info("[%s] mail cache unreadable: %s", a.id, e)
+        return 0
+    # A folder whose SyncKey moved on after the save (the app quit between a refresh
+    # and the next save) keeps its letters on screen but gets one full listing.
+    try:
+        state = json.loads((bridge.DATA_DIR / a.cfg.get("state_name", "state.json")).read_text())
+        cols = state.get("collections") or {}
+    except Exception:  # noqa: BLE001
+        cols = {}
+    behind = 0
+    for cid, b in boxes.items():
+        cur = cols.get(cid) or {}
+        if not b.get("sync_key") or cur.get("sync_key") != b["sync_key"] or cur.get("generation") != b.get("gen"):
+            b["gen"], behind = None, behind + 1
+        b.pop("sync_key", None)
+        if cid not in a.mail_boxes:
+            a.mail_boxes[cid] = b
+    a._mail_saved_sig = _mail_cache_sig(a)
+    log.info("[%s] mail from disk: %d folders, %d letters (%d to re-list)", a.id, len(boxes),
+             sum(len(b["by_id"]) for b in boxes.values()), behind)
+    return len(boxes)
+
+
+def _mail_cache_keeper() -> None:
+    """Write each account's mail cache when it changed (checked every 15 s)."""
+    while True:
+        time.sleep(MAIL_CACHE_EVERY_S)
+        for a in list(ACCTS.values()):
+            try:
+                sig = _mail_cache_sig(a)
+                if sig and sig != getattr(a, "_mail_saved_sig", None) and _mail_cache_save(a):
+                    a._mail_saved_sig = sig
+            except Exception as e:  # noqa: BLE001
+                log.info("[%s] mail cache keeper: %s", a.id, e)
+
+
+def mail_cached_list(a: Acct, params: dict) -> dict:
+    """The open folder straight from cache, no server call and no lock: the UI draws it
+    at once and then asks for the real (delta) list."""
+    fid = str(params.get("folder") or "")
+    box = a.mail_boxes.get(fid)
+    fields = params.get("fields")
+    want_fields = tuple(sorted(fields)) if fields else None
+    if (not box or not box.get("by_id") or box.get("filter") != _mail_norm_filter(params.get("filter"))
+            or box.get("fields") != want_fields):
+        return {"ok": True, "action": "list", "count": 0, "items": [], "from_cache": True, "miss": True}
+    items = _mail_sorted_items(box)
+    return {"ok": True, "action": "list", "count": len(items), "items": items, "has_more": False,
+            "next_cursor": None, "from_cache": True, "cached": len(box["by_id"])}
 
 
 # AAS-24-02. Upstream stops a calendar listing after 8 pages. Exchange fills a page
@@ -3127,6 +3299,79 @@ def _patch_empty_sync_tree():
         log.exception("wbxml None-safe patch failed")
 
 
+# ── Unreachable server: fail fast instead of queueing ─────────────────────────
+# Every ActiveSync call of one mailbox runs under its backend lock. When Exchange
+# stops answering (VPN drop, «Connection reset», 90 s read timeouts), each queued
+# call used to wait out its own timeout in turn: the Bank list hung for minutes and
+# the browser's six connections to this server filled with waiting Bank requests,
+# so even Seller mail sat on «Загрузка…». After a failure the client now refuses to
+# call out for a short, growing pause; the next call after it is the probe.
+UNREACH_BACKOFF_S = (10, 20, 40, 60)
+LOCK_WAIT_S = 20        # a read waits this long for a busy mailbox, then answers from cache
+LOCK_WAIT_WRITE_S = 60  # sends / moves / deletes may wait longer
+
+
+def _is_unreachable(e) -> bool:
+    """The server could not be contacted (as opposed to a refusal or a bad request)."""
+    if getattr(e, "code", None) == "unreachable":
+        return True
+    msg = str(e)
+    return getattr(e, "code", None) == "not_authenticated" and "недоступен" in msg
+
+
+def _down_state(client) -> dict:
+    return client.__dict__.setdefault("_eas_down", {"until": 0.0, "n": 0})
+
+
+def acct_down_for(a: "Acct") -> float:
+    """Seconds left in this mailbox's fail-fast pause (0 when it is reachable)."""
+    b = a.backend
+    c = getattr(b, "client", None) if b is not None else None
+    if c is None:
+        return 0.0
+    return max(0.0, _down_state(c)["until"] - time.time())
+
+
+def _fail_fast_command(orig):
+    from outlook_activesync_mcp.errors import NotAuthenticated
+
+    class ServerDown(NotAuthenticated):
+        code = "unreachable"
+
+    def command(self, cmd, node, *, policy_key=None, allow_empty=False):
+        st = _down_state(self)
+        left = st["until"] - time.time()
+        if left > 0:
+            raise ServerDown(f"сервер не отвечает, повторю через {int(left) + 1} с")
+        try:
+            tree = orig(self, cmd, node, policy_key=policy_key, allow_empty=allow_empty)
+        except Exception as e:  # noqa: BLE001
+            if _is_unreachable(e):
+                st["n"] += 1
+                pause = UNREACH_BACKOFF_S[min(st["n"], len(UNREACH_BACKOFF_S)) - 1]
+                st["until"] = time.time() + pause
+                log.warning("%s: server unreachable (%s) — fail fast for %s s", cmd, e, pause)
+                raise ServerDown(f"сервер не отвечает ({e}); повторю через {pause} с") from e
+            raise
+        if st["n"]:
+            log.info("%s: server reachable again after %s failures", cmd, st["n"])
+        st["n"], st["until"] = 0, 0.0
+        return tree
+
+    command._eas_fail_fast = True  # type: ignore[attr-defined]
+    return command
+
+
+def _patch_unreachable_fail_fast():
+    try:
+        from outlook_activesync_mcp.client import EasClient
+    except ImportError:
+        return
+    if getattr(EasClient.command, "_eas_fail_fast", False):
+        return
+    EasClient.command = _fail_fast_command(EasClient.command)
+
+
 def main():
     logging.basicConfig(level=os.environ.get("EAS_MAIL_LOG", "INFO"),
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -3137,9 +3382,13 @@ def main():
     _patch_moveitems_status()
     _patch_calendar_attendees()
     _patch_event_update_attendees()
+    _patch_unreachable_fail_fast()  # last: wraps the other command patches
     _write_runtime_token()
     cfg = ensure_config()
     ACCTS.update(load_accounts(cfg))
+    for acct in ACCTS.values():
+        _mail_cache_load(acct)      # letters on screen at once; the first refresh is a delta
+    threading.Thread(target=_mail_cache_keeper, daemon=True).start()
     main_acct = ACCTS["main"]
     # Don't poke Exchange until the user has entered credentials (first-run dist).
     if not account_needs_setup(cfg):

@@ -43,17 +43,29 @@ try {
 </header>
 <main>
   <section class="view on" id="mail">
-    <nav id="folders" class="aas-folders"></nav>
+    <nav id="folders" class="aas-folders" aria-label="Папки"></nav>
+    <div class="aas-resizer" id="foldresize" role="separator" aria-orientation="vertical" aria-label="Ширина панели папок" tabindex="0" title="Потяните, чтобы изменить ширину"></div>
     <div id="list">
       <div id="listbar" class="aas-listbar">
         <label class="aas-bulkbar__all aas-listbar__all" title="Выбрать все письма на экране"><input type="checkbox" id="selall0" aria-label="Выбрать все"></label>
         <span class="aas-listbar__head"><span id="listtitle">Входящие</span><span id="listunread" class="aas-listbar__unread"></span></span>
-        <select id="window" title="За какой период показывать письма">
-          <option value="3">1 нед.</option><option value="4">2 нед.</option>
-          <option value="5" selected>1 мес.</option><option value="0">Все</option></select>
-        <select id="sort" title="Порядок писем (цепочки — по последнему письму); применяется к загруженным письмам, «Ещё» догружает более старые">
-          <option value="date_desc" selected>Новые сверху</option><option value="date_asc">Старые сверху</option>
-          <option value="from">По отправителю</option><option value="subject">По теме</option></select></div>
+        <span class="aas-viewwrap">
+          <button type="button" class="aas-btn aas-btn--sm" id="viewbtn" aria-haspopup="true" aria-expanded="false" title="Период и порядок писем">Вид</button>
+          <div class="aas-pop" id="viewpop" hidden>
+            <label for="window">Период</label>
+            <select id="window" title="За какой период показывать письма">
+              <option value="3">1 неделя</option><option value="4">2 недели</option>
+              <option value="5" selected>1 месяц</option><option value="0">За всё время</option></select>
+            <label for="sort">Порядок</label>
+            <select id="sort" title="Цепочки идут по последнему письму; применяется к загруженным письмам, «Ещё» догружает более старые">
+              <option value="date_desc" selected>Новые сверху</option><option value="date_asc">Старые сверху</option>
+              <option value="from">По отправителю</option><option value="subject">По теме</option></select>
+            <div class="hint">Группировка в цепочки: Настройки → Почта</div>
+          </div>
+        </span></div>
+      <div id="listfilter" class="aas-listfilter" role="group" aria-label="Показать">
+        <span class="aas-seg aas-seg--soft"><button type="button" class="on" data-f="all">Все</button><button type="button" data-f="unread">Непрочитанные</button><button type="button" data-f="att">С вложениями</button></span>
+      </div>
       <div id="bulkbar" class="aas-bulkbar" hidden>
         <label class="aas-bulkbar__all" title="Выбрать все на экране"><input type="checkbox" id="selall"></label>
         <span id="selcount" class="aas-bulkbar__count"></span>
@@ -64,7 +76,7 @@ try {
         <button type="button" class="aas-btn aas-btn--sm aas-btn--icon aas-btn--danger" id="bulkdel" title="Удалить выбранные (Delete)" aria-label="Удалить выбранные"><svg class="aas-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
         <button type="button" class="aas-btn aas-btn--sm aas-btn--ghost aas-btn--icon" id="bulkclear" title="Снять выделение" aria-label="Снять выделение"><svg class="aas-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
       </div>
-      <div id="rows"></div>
+      <div id="rows" role="listbox" aria-label="Письма"></div>
     </div>
     <div id="reader"></div>
   </section>
@@ -72,6 +84,7 @@ try {
     <div id="calbar">
       <button class="aas-btn aas-btn--icon" id="prev" title="Назад" aria-label="Назад"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><button class="aas-btn" id="today">Сегодня</button><button class="aas-btn aas-btn--icon" id="next" title="Вперёд" aria-label="Вперёд"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
       <h2 id="caltitle"></h2><span class="aas-spacer"></span>
+      <button type="button" class="aas-btn aas-btn--sm aas-btn--ghost" id="caloff" hidden title="Показать или свернуть часы вне рабочего дня">Всё время</button>
       <div class="aas-seg" id="calmode"><button data-m="day">День</button><button data-m="work">Раб. неделя</button><button data-m="week">Неделя</button></div>
     </div>
     <div id="weekwrap">
@@ -89,7 +102,16 @@ const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let ACCT = 'main', accounts = [{id: 'main', name: 'Alfa-Bank', green: false}];
 async function api(domain, body, acct = ACCT) {
-  const r = await fetch('/api/' + domain, {method: 'POST', headers: {'X-Tok': TOK, 'Content-Type': 'application/json'}, body: JSON.stringify({...body, acct})});
+  // Never wait forever: a request the server has not answered in 150 s is dropped,
+  // so a hung call cannot hold one of the browser's few connections to the app.
+  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  const t = ctl ? setTimeout(() => ctl.abort(), 150000) : 0;
+  let r;
+  try {
+    r = await fetch('/api/' + domain, {method: 'POST', headers: {'X-Tok': TOK, 'Content-Type': 'application/json'}, body: JSON.stringify({...body, acct}), signal: ctl?.signal});
+  } catch (e) {
+    const err = new Error(e?.name === 'AbortError' ? 'Сервер не ответил вовремя' : 'Нет связи с приложением'); err.code = 'unreachable'; throw err;
+  } finally { clearTimeout(t); }
   const j = await r.json();
   if (j.ok === false) { const err = new Error(j.message || j.error || 'Ошибка'); err.code = j.error; throw err; }
   return j;
@@ -219,6 +241,14 @@ function cleanPreview(s) {
   if (q > 0) t = t.slice(0, q).trim();
   return t;
 }
+/** Initials in a soft tile; hue from the address so a person keeps one colour. */
+function avatar(p) {
+  const name = (p?.name || '').replace(/["']/g, '').trim(), addr = (p?.address || '').toLowerCase();
+  const words = name.split(/[\s,.]+/).filter(w => /^[\p{L}]/u.test(w));
+  const ini = (words.length ? words.slice(0, 2).map(w => w[0]) : [(addr || '?')[0]]).join('').toUpperCase();
+  let h = 0; for (const ch of addr || name) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return `<span class="aas-av" style="--h:${h % 360}" aria-hidden="true">${esc(ini)}</span>`;
+}
 /** Stroke icons (one set, 1.8 px) instead of emoji and text glyphs. */
 const ICONS = {
   clip: '<path d="m21.4 11.6-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/>',
@@ -233,9 +263,23 @@ const ICONS = {
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
   play: '<path d="m6 3 14 9-14 9V3Z"/>',
+  star: '<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1L12 2Z"/>',
+  plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+  more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
 };
+/** One wording for meeting times everywhere: «пн, 21 сент., 10:05–10:50»; the year
+ *  only when it is not this one; a second date only when the meeting spans days. */
+function fmtRange(s, e, allDay = false, now = new Date()) {
+  if (!(s instanceof Date) || isNaN(s)) return '';
+  const d = x => `${RU_WD_SHORT[x.getDay()]}, ${x.getDate()} ${RU_MON[x.getMonth()]}${x.getFullYear() !== now.getFullYear() ? ' ' + x.getFullYear() : ''}`;
+  const t = x => `${pad(x.getHours())}:${pad(x.getMinutes())}`;
+  if (allDay) return `${d(s)}, весь день`;
+  if (!(e instanceof Date) || isNaN(e) || +e === +s) return `${d(s)}, ${t(s)}`;
+  return isoDay(s) === isoDay(e) ? `${d(s)}, ${t(s)}–${t(e)}` : `${d(s)}, ${t(s)} – ${d(e)}, ${t(e)}`;
+}
 const icon = (name, size = 16) => `<svg class="aas-ic" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
 /* ---------- preferences (kept on the server) ---------- */
@@ -303,6 +347,7 @@ function listStep(dir) {
   if (!g) return null;
   openGroup(g);
   next.scrollIntoView?.({block: 'nearest'});
+  if (document.activeElement?.classList?.contains('aas-row')) document.querySelector(`#rows .aas-row[data-key="${CSS.escape(g.key)}"]`)?.focus?.();
   return g.key;
 }
 document.addEventListener('keydown', e => {
@@ -360,6 +405,13 @@ let view = 'mail';
 const bindTab = b => b.onclick = () => showView(view, b.dataset.acct || 'main');
 document.querySelectorAll('.aas-tab').forEach(bindTab);
 document.querySelectorAll('#sect [data-view]').forEach(b => b.onclick = () => showView(b.dataset.view, ACCT));
+/* ⌘1 / ⌘2 — mailbox by order; ⌘⇧C — mail ⇄ calendar. Not while a dialog is open. */
+document.addEventListener('keydown', e => {
+  if (!e.metaKey || e.ctrlKey || e.altKey || modalOpen()) return;
+  const n = /^Digit([1-9])$/.exec(e.code)?.[1];
+  if (n && !e.shiftKey) { const a = accounts[+n - 1]; if (a) { e.preventDefault(); showView(view, a.id); } return; }
+  if (e.shiftKey && e.code === 'KeyC') { e.preventDefault(); showView(view === 'cal' ? 'mail' : 'cal', ACCT); }
+});
 function buildAccountTabs() {
   const box = $('#tabs') || $('.aas-tabs');
   const main = accounts.find(a => a.id === 'main'), first = box.querySelector('.aas-tab__name');
@@ -370,6 +422,8 @@ function buildAccountTabs() {
     bindTab(b); box.appendChild(b);
   });
   box.classList.toggle('aas-accts--single', accounts.length < 2);
+  box.querySelectorAll('.aas-tab').forEach((t, i) => t.dataset.key = `⌘${i + 1}`);
+  document.querySelectorAll('#sect [data-view]').forEach(t => t.title = '⌘⇧C: почта ⇄ календарь');
   paintTabBadges();
 }
 function setBrand() {
@@ -412,7 +466,7 @@ function paintTabBadges() {
     badge.hidden = !n;
     badge.textContent = n > 99 ? '99+' : String(n);
     const auth = accounts.find(a => a.id === acct)?.auth_error;
-    b.title = auth || `Входящие: ${n} непрочитанных · всего в ящике: ${u.total || 0}`;
+    b.title = auth || `Входящие: ${n} непрочитанных · всего в ящике: ${u.total || 0}${b.dataset.key ? ` (${b.dataset.key})` : ''}`;
   });
   // AAS-24-05: same rule on the Dock icon (sum of every account's Inbox).
   const total = accounts.reduce((sum, a) => sum + inboxUnread(a.id), 0);
@@ -544,7 +598,8 @@ function setSyncText() {
   const auto = prefs.auto_sync > 0 ? `Автоматически каждые ${prefs.auto_sync} мин: открытая папка или календарь и счётчики всех ящиков.` : 'Автосинхронизация выключена.';
   const hint = `${auto} Интервал — в Настройки → Почта.`;
   $('#synctxt').title = hint;
-  $('#syncbtn').title = 'Синхронизировать сейчас: почта, календарь (полностью) и счётчики. ' + hint;
+  // The time lives in the button's tooltip, not as a line of text in the header.
+  $('#syncbtn').title = ($('#synctxt').textContent ? $('#synctxt').textContent + '\n' : '') + 'Синхронизировать сейчас: почта, календарь (полностью) и счётчики. ' + hint;
 }
 async function syncAll() {
   if (syncing) return;
@@ -730,7 +785,10 @@ const LIST_FIELDS = ['subject', 'from', 'received', 'is_read', 'has_attachments'
 let selectedKeys = new Set();
 /** Row keys being dragged onto a folder (null when no mail drag is in progress). */
 let dragKeys = null;
-const groupsOnScreen = () => groupItems(allItems);
+/** Quick filter above the list: all / unread / with attachments (client-side, loaded mail). */
+let listFilter = 'all';
+const FILTERS = {all: () => true, unread: g => g.items.some(m => !m.is_read), att: g => g.items.some(m => m.has_attachments)};
+const groupsOnScreen = () => groupItems(allItems).filter(FILTERS[listFilter] || FILTERS.all);
 function itemsForKeys(keys) {
   const set = keys instanceof Set ? keys : new Set(keys);
   return groupsOnScreen().filter(g => set.has(g.key)).flatMap(g => g.items);
@@ -742,6 +800,7 @@ function syncBulkBar(total) {
   // the header keeps a «select all» box so mass actions stay discoverable.
   bar.hidden = n === 0;
   $('#listbar')?.classList.toggle('aas-listbar--hidden', n > 0);
+  $('#listfilter')?.classList.toggle('aas-listbar--hidden', n > 0);
   $('#rows')?.classList.toggle('selecting', n > 0);
   const all0 = $('#selall0'); if (all0) all0.checked = false;
   const cnt = $('#selcount'); if (cnt) cnt.textContent = n ? `Выбрано: ${n}` : '';
@@ -802,12 +861,12 @@ function switchAccount(id) {
   if (nb) nb.className = a.green ? 'aas-btn aas-btn--lime' : 'aas-btn aas-btn--primary';
   const saved = acctStates[id];
   restore(saved || freshState());
-  selectedKeys = new Set();
+  selectedKeys = new Set(); curKey = null; curGroup = null;  // the reader shows the summary, so no row stays «open»
   $('#search').value = searchQ; showReaderEmpty();
   if (saved) {
     renderFolders(folderItems); $('#listtitle').textContent = folders.find(f => f.folder_id === curFolder)?.name || ''; renderList(!!nextCursor);
   } else {
-    $('#folders').innerHTML = ''; $('#listtitle').textContent = ''; $('#rows').innerHTML = '<div class="aas-empty">Загрузка…</div>'; loadFolders();
+    $('#folders').innerHTML = ''; $('#listtitle').textContent = 'Загрузка…'; $('#rows').innerHTML = '<div class="aas-empty">Загрузка…</div>'; paintListHead(); loadFolders();
   }
   $('#dot').className = 'aas-status-dot'; setSyncText();
 }
@@ -818,6 +877,12 @@ function showAcctError(e) {
   $('#rows').innerHTML = `<div class="aas-empty"><b>Не удалось подключиться к «${esc(a?.name || 'Alfa-Bank')}»</b><br><span style="font-size:13px">${esc(e.message)}</span><br><br>
     <button class="aas-btn aas-btn--primary" id="retrybtn">Повторить вход</button><div class="hint">Если менялся пароль или включали VPN, нажмите «Повторить вход».</div></div>`;
   $('#retrybtn').onclick = guard(async () => { $('#rows').innerHTML = '<div class="aas-empty">Подключение…</div>'; await api('retry', {}); checkAuth(); loadFolders(); });
+  // A dropped connection (not a refused password) comes back by itself: look again.
+  if (e.code === 'unreachable' || e.code === 'not_authenticated') {
+    const acct = ACCT;
+    clearTimeout(showAcctError.t);
+    showAcctError.t = setTimeout(() => { if (acct === ACCT && !folders.length) loadFolders(); }, 20000);
+  }
 }
 function renderFolders(items) {
   folderItems = items;
@@ -832,26 +897,33 @@ function renderFolders(items) {
   folders.filter(f => !known.has(f.folder_id)).forEach(f => out.push([f, 0]));
   folderTree = out;
   const favs = out.filter(([f]) => isFav(f.folder_id));
-  const rest = out.filter(([f]) => !isFav(f.folder_id));
+  // Mailbox folders (Входящие, Черновики, Отправленные, Удалённые, Исходящие) first,
+  // then the user's own tree; a folder kept under Входящие is indented from «Папки».
+  const own = f => String(f.type) === '12' || String(f.type) === '1';
+  const byId = new Map(folders.map(f => [f.folder_id, f]));
+  const ownDepth = f => { let d = 0, p = byId.get(f.parent_id); while (p) { if (own(p)) d++; p = byId.get(p.parent_id); } return d; };
+  const sys = out.filter(([f]) => !isFav(f.folder_id) && !own(f));
+  const mine = out.filter(([f]) => !isFav(f.folder_id) && own(f)).map(([f]) => [f, ownDepth(f)]);
   const row = ([f, d]) => {
     const n = counts[f.folder_id] || 0, more = partial.has(f.folder_id);
     const badge = n ? `<span class="aas-badge" title="${more ? 'Не меньше ' + n + ' непрочитанных — папка ещё догружается' : n + ' непрочитанных за период'}">${n > 99 ? '99+' : n}${more && n <= 99 ? '+' : ''}</span>` : '';
-    const pin = `<button class="aas-folder__pin ${isFav(f.folder_id) ? 'on' : ''}" data-pin="${esc(f.folder_id)}" title="Избранное">${isFav(f.folder_id) ? '★' : '☆'}</button>`;
+    const pin = `<button class="aas-folder__pin ${isFav(f.folder_id) ? 'on' : ''}" data-pin="${esc(f.folder_id)}" tabindex="-1" title="${isFav(f.folder_id) ? 'Убрать из избранного' : 'В избранное'}" aria-label="Избранное">${icon('star', 13)}</button>`;
     // AAS-24-08: only the user's own folders (EAS type 12) can be deleted.
     const del = String(f.type) === '12' ? `<button class="aas-folder__del" data-del="${esc(f.folder_id)}" title="Удалить папку" aria-label="Удалить папку «${esc(f.name)}»">${icon('trash', 13)}</button>` : '';
-    return `<div class="aas-folder ${f.folder_id === curFolder ? 'on' : ''}" data-id="${esc(f.folder_id)}" style="padding-left:${10 + d * 16}px" title="${esc(f.name)}"><span class="aas-folder__name">${esc(f.name)}</span>${badge}${del}${pin}</div>`;
+    return `<div class="aas-folder ${f.folder_id === curFolder ? 'on' : ''}" data-id="${esc(f.folder_id)}" role="button" tabindex="0"${f.folder_id === curFolder ? ' aria-current="true"' : ''} style="padding-left:${10 + d * 16}px" title="${esc(f.name)}"><span class="aas-folder__name">${esc(f.name)}</span>${badge}${del}${pin}</div>`;
   };
   let html = '';
   const total = u.total || 0;
   html += `<div class="aas-folder-total" title="Входящие и свои папки, за выбранный период (без Отправленных, Черновиков и Удалённых)">Непрочитанные<span class="aas-badge"${total ? '' : ' hidden'}>${total > 999 ? '999+' : total}${partial.size && total <= 999 ? '+' : ''}</span></div>`;
-  if (favs.length) html += `<div class="aas-folder-sec">Избранные</div>` + favs.map(row).join('');
-  if (rest.length) html += (favs.length ? `<div class="aas-folder-sec">Папки</div>` : '') + rest.map(row).join('');
-  html += `<div class="aas-folder-tools"><button class="aas-btn" id="newfolder" title="Создать новую папку">＋ Папка</button></div>`;
+  if (favs.length) html += `<div class="aas-folder-sec">Избранные</div>` + favs.map(([f]) => row([f, 0])).join('');
+  if (sys.length) html += `<div class="aas-folder-sec">Почта</div>` + sys.map(([f]) => row([f, 0])).join('');
+  if (mine.length) html += `<div class="aas-folder-sec">Папки</div>` + mine.map(row).join('');
+  html += `<div class="aas-folder-tools"><button class="aas-btn" id="newfolder" title="Создать новую папку">${icon('plus', 14)}Папка</button></div>`;
   $('#folders').innerHTML = html;
   paintListHead();
-  document.querySelectorAll('.aas-folder[data-id]').forEach(el => el.onclick = e => {
-    if (e.target.closest('[data-pin],[data-del]')) return;
-    openFolder(el.dataset.id);
+  document.querySelectorAll('.aas-folder[data-id]').forEach(el => {
+    el.onclick = e => { if (e.target.closest('[data-pin],[data-del]')) return; openFolder(el.dataset.id); };
+    el.onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el) { e.preventDefault(); openFolder(el.dataset.id); } };
   });
   document.querySelectorAll('.aas-folder[data-id]').forEach(el => {
     const ok = () => dragKeys && el.dataset.id !== curFolder;
@@ -932,9 +1004,11 @@ function warmFolders() {
 }
 function openFolder(id) {
   rememberFolder(id);
+  clearTimeout(listRetry.t); clearInterval(listRetry.tick); listRetry.n = 0; listStale = '';
   curFolder = id; searchQ = ''; $('#search').value = '';
   selectedKeys = new Set(); fillBulkMove();
-  document.querySelectorAll('.aas-folder').forEach(el => el.classList.toggle('on', el.dataset.id === id));
+  document.querySelectorAll('.aas-folder').forEach(el => { el.classList.toggle('on', el.dataset.id === id);
+    if (el.dataset.id === id) el.setAttribute('aria-current', 'true'); else el.removeAttribute('aria-current'); });
   $('#listtitle').textContent = folders.find(f => f.folder_id === id)?.name || '';
   if (!curGroup) showReaderEmpty();
   loadListGuarded(true);
@@ -944,26 +1018,76 @@ const normSubj = s => (s || '').replace(/^\s*((re|fwd?|fw|отв|ответ|пе
 const keyOf = m => (prefs.threads ? 't:' + normSubj(m.thread_topic || m.subject) : 'i:' + m.item_id);
 
 async function loadList(reset) {
-  const acct = ACCT, box = $('#rows');
+  const acct = ACCT, box = $('#rows'), folder = curFolder;
   if (reset) { box.innerHTML = '<div class="aas-empty">Загрузка…</div>'; nextCursor = null; selectedKeys = new Set(); }
+  // Saved letters first (from the server's disk cache, no Exchange round-trip), then
+  // the real list, which is a delta against that same cache.
+  let fresh = false, fromCache = false;
+  if (reset && !searchQ && folder) {
+    api('mail', {action: 'list', folder, limit: 40, filter: +$('#window').value, fields: LIST_FIELDS, cache_only: true}).then(c => {
+      if (fresh || acct !== ACCT || folder !== curFolder || !(c.items || []).length) return;
+      fromCache = true; allItems = c.items; renderList(false);
+    }).catch(() => {});
+  }
   let j;
   try {
     if (searchQ) j = await api('mail', {action: 'search', query: searchQ, limit: 40, fields: LIST_FIELDS});
     else j = await api('mail', nextCursor && !reset
       ? {action: 'list', cursor: nextCursor, limit: 40, fields: LIST_FIELDS}
       : {action: 'list', folder: curFolder, limit: 40, filter: +$('#window').value, fields: LIST_FIELDS});
-  } catch (e) { if (reset && acct === ACCT) box.innerHTML = ''; throw e; }
+  } catch (e) {
+    fresh = true;
+    if (acct !== ACCT) throw e;
+    if (fromCache && folder === curFolder && ['unreachable', 'not_authenticated'].includes(e.code)) {
+      // The saved letters are on screen: keep them, say so, refresh quietly later.
+      listStale = e.message || 'Нет связи с сервером'; armStaleRefresh(); renderList(false);
+      $('#dot').className = 'aas-status-dot aas-status-dot--err'; e.silent = true; throw e;
+    }
+    if (reset && !searchQ && ['unreachable', 'not_authenticated'].includes(e.code)) {
+      // No server: say so in the list and try again by itself (10 → 60 s).
+      scheduleListRetry(e); e.silent = true; $('#dot').className = 'aas-status-dot aas-status-dot--err';
+    } else if (reset) box.innerHTML = '';
+    throw e;
+  }
+  fresh = true;
   if (acct !== ACCT) return;
+  listRetry.n = 0; clearTimeout(listRetry.t);
+  listStale = j.stale ? (j.message || 'Нет связи с сервером') : '';
+  if (listStale) armStaleRefresh();
   nextCursor = j.next_cursor || null;
   allItems = reset ? j.items : allItems.concat(j.items);
   renderList(!!(nextCursor || (searchQ && j.has_more)));
-  $('#dot').className = 'aas-status-dot aas-status-dot--ok';
+  $('#dot').className = 'aas-status-dot aas-status-dot--' + (listStale ? 'err' : 'ok');
   // Seed Inbox ids on a normal open so the first auto-sync does not treat
   // already-visible mail as "new".
   if (!searchQ && inboxIds[acct] && curFolder === inboxIds[acct] && (j.items || []).length)
     noteIncoming(acct, j.items);
 }
 const loadListGuarded = guard(loadList);
+/* Server unreachable: the list says so, counts down and reloads by itself. A cached
+   («stale») answer shows the saved letters under a one-line notice and is refreshed
+   quietly until the server is back. */
+const listRetry = {t: null, tick: null, n: 0};
+let listStale = '', staleT = null;
+function scheduleListRetry(e) {
+  clearTimeout(listRetry.t); clearInterval(listRetry.tick);
+  const acct = ACCT, folder = curFolder, name = accounts.find(a => a.id === acct)?.name || 'сервер';
+  let left = [10, 20, 40, 60][Math.min(listRetry.n++, 3)];
+  const box = $('#rows');
+  box.innerHTML = `<div class="aas-empty aas-listerr"><b>Нет связи с «${esc(name)}»</b>
+    <span>${esc(String(e.message || '').replace(/\s*Повторю[^.]*\.?\s*$/, ''))}</span><span class="aas-listerr__cd"></span>
+    <button type="button" class="aas-btn aas-btn--sm" id="listretry">Повторить сейчас</button></div>`;
+  const cd = () => { const el = $('#rows .aas-listerr__cd'); if (el) el.textContent = `Повторю сам через ${left} с`; };
+  cd(); listRetry.tick = setInterval(() => { left = Math.max(0, left - 1); cd(); }, 1000);
+  const again = () => { clearInterval(listRetry.tick); clearTimeout(listRetry.t);
+    if (acct === ACCT && folder === curFolder && view === 'mail' && !searchQ) loadListGuarded(true); };
+  listRetry.t = setTimeout(again, left * 1000);
+  $('#listretry').onclick = again;
+}
+function armStaleRefresh() {
+  clearTimeout(staleT);
+  staleT = setTimeout(() => { if (listStale && view === 'mail' && !searchQ) loadListQuiet(); }, 20000);
+}
 
 function groupItems(items) {
   const map = new Map(), order = [];
@@ -995,14 +1119,20 @@ function renderList(hasMore) {
   // Drop selections that no longer exist on screen.
   const alive = new Set(groups.map(g => g.key));
   selectedKeys = new Set([...selectedKeys].filter(k => alive.has(k)));
-  if (!allItems.length) box.innerHTML = '<div class="aas-empty">Писем нет</div>';
+  if (!groups.length) box.innerHTML = `<div class="aas-empty">${!allItems.length ? 'Писем нет' : listFilter === 'unread' ? 'Непрочитанных нет' : 'Писем с вложениями нет'}</div>`;
   const frag = document.createDocumentFragment();  // one reflow for the whole list
+  if (listStale && groups.length) {
+    const n = document.createElement('div'); n.className = 'aas-stale'; n.setAttribute('role', 'status');
+    n.textContent = `${listStale.replace(/\s*Повторю[^.]*\.?\s*$/, '')} Показаны сохранённые письма, обновлю сам.`;
+    frag.appendChild(n);
+  }
   sortGroups(groups, prefs.mail_sort).forEach(g => frag.appendChild(rowEl(g)));
   if (hasMore) {
     const more = document.createElement('div'); more.className = 'more';
     more.innerHTML = '<button class="aas-btn">Ещё</button>'; more.firstChild.onclick = () => loadListGuarded(false); frag.appendChild(more);
   }
   box.appendChild(frag);
+  if (!box.querySelector('.aas-row[tabindex="0"]')) { const f = box.querySelector('.aas-row'); if (f) f.tabIndex = 0; }
   syncBulkBar(groups.length);
   paintListHead();
 }
@@ -1024,13 +1154,21 @@ function rowEl(g) {
   const ico = unread
     ? `<button type="button" class="aas-row__ico" data-read="1" title="Непрочитанное: нажмите, чтобы отметить прочитанным" aria-label="Отметить прочитанным"><span class="aas-readdot"></span></button>`
     : `<button type="button" class="aas-row__ico" data-read="0" title="Прочитано: нажмите, чтобы отметить непрочитанным" aria-label="Отметить непрочитанным"><span class="aas-readdot aas-readdot--read"></span></button>`;
-  el.innerHTML = `<div class="aas-row__top">
-      <label class="aas-row__chk" title="Выбрать"><input type="checkbox" aria-label="Выбрать письмо" ${selectedKeys.has(g.key) ? 'checked' : ''}></label>
-      ${ico}<span class="aas-row__from">${esc(senders)}${n > 1 ? `<span class="cnt">${n}</span>` : ''}</span>
+  // Avatar with the newest sender's initials; on hover / while selecting it turns
+  // into the selection checkbox (same slot, no extra column).
+  el.innerHTML = `${ico}<div class="aas-row__lead">${avatar(m.from)}
+      <label class="aas-row__chk" title="Выбрать"><input type="checkbox" aria-label="Выбрать письмо" ${selectedKeys.has(g.key) ? 'checked' : ''}></label></div>
+    <div class="aas-row__main"><div class="aas-row__top">
+      <span class="aas-row__from">${esc(senders)}${n > 1 ? `<span class="cnt">${n}</span>` : ''}</span>
       ${g.items.some(x => x.has_attachments) ? `<span class="aas-row__clip" title="Есть вложения">${icon('clip', 13)}</span>` : ''}
       <span class="aas-row__date" title="${esc(m.received || '')}">${esc(fmtWhen(m.received))}</span></div>
     <div class="aas-row__subj">${esc((prefs.threads ? m.thread_topic || m.subject : m.subject) || '(без темы)')}${catChips(g.items.flatMap(x => x.categories || []))}</div>
-    <div class="aas-row__prev">${esc(cleanPreview(m.preview))}</div>`;
+    <div class="aas-row__prev">${esc(cleanPreview(m.preview))}</div></div>`;
+  // Keyboard: one row in the Tab order (the open one, else the first); Enter opens.
+  el.tabIndex = g.key === curKey ? 0 : -1;
+  el.setAttribute('role', 'option'); el.setAttribute('aria-selected', String(g.key === curKey));
+  el.setAttribute('aria-label', `${unread ? 'Не прочитано. ' : ''}${senders}. ${m.thread_topic || m.subject || 'без темы'}. ${fmtWhen(m.received)}`);
+  el.onkeydown = e => { if (e.key === 'Enter' && e.target === el) { e.preventDefault(); openGroup(g); } };
   el.querySelector('.aas-row__chk input').onclick = e => {
     e.stopPropagation();
     if (e.target.checked) selectedKeys.add(g.key); else selectedKeys.delete(g.key);
@@ -1108,8 +1246,10 @@ let cards = [];  // {m, j, el, open}
 const cardOf = id => cards.find(c => c.m.item_id === id);
 
 function openGroup(g) {
+  if (!dropInlineCompose()) return;
   curKey = g.key; curGroup = g; const token = ++openToken;
-  document.querySelectorAll('.aas-row').forEach(r => r.classList.toggle('on', r.dataset.key === g.key));
+  document.querySelectorAll('.aas-row').forEach(r => { const on = r.dataset.key === g.key;
+    r.classList.toggle('on', on); r.tabIndex = on ? 0 : -1; r.setAttribute('aria-selected', String(on)); });
   const subject = g.items[0].thread_topic || g.items[0].subject || '(без темы)';
   cards = []; midOpen = false;
   // Every action stays on screen at any width: labels fold into icons (container
@@ -1209,11 +1349,7 @@ async function loadCard(c) {
 const RSVP_DONE = {accept: 'Вы приняли приглашение', tentative: 'Вы ответили «Под вопросом»', decline: 'Вы отклонили приглашение'};
 function inviteWhen(inv) {
   if (!inv.start) return '';
-  const d = new Date(inv.start.replace(' ', 'T'));
-  const day = d.toLocaleDateString('ru-RU', {weekday: 'short', day: 'numeric', month: 'long'});
-  if (inv.all_day) return day + ' · весь день';
-  const t = s => (s || '').slice(11, 16);
-  return `${day} · ${t(inv.start)}${inv.end ? '–' + t(inv.end) : ''}`;
+  return fmtRange(localDate(inv.start), inv.end ? localDate(inv.end) : null, inv.all_day);
 }
 function inviteCard(inv) {
   const cancelled = inv.method === 'cancel';
@@ -1297,7 +1433,7 @@ function renderCard(c) {
   mb.querySelector('.aas-mc__acts').onclick = guard(e => { const a = e.target.dataset?.a; if (a) return act(a, c); });
 }
 function act(a, c) {
-  const send = c => composeForm({mode: a === 'fwd' ? 'fwd' : 'reply', all: a === 'replyall', m: c.m, j: c.j});
+  const send = c => composeForm({mode: a === 'fwd' ? 'fwd' : 'reply', all: a === 'replyall', m: c.m, j: c.j, inline: true});
   if (c.j) return send(c);
   return loadCard(c).then(() => { if (c.j) send(c); });
 }
@@ -1351,8 +1487,32 @@ function afterRemove(g) {
   renderList(!!nextCursor); showReaderEmpty();
 }
 
-$('#sort').onchange = e => { savePrefs({mail_sort: e.target.value}); if (allItems.length) renderList(!!nextCursor); };
-$('#window').onchange = () => { savePrefs({mail_window: +$('#window').value}); loadListGuarded(true); };
+$('#sort').onchange = e => { savePrefs({mail_sort: e.target.value}); paintViewBtn(); if (allItems.length) renderList(!!nextCursor); };
+$('#window').onchange = () => { savePrefs({mail_window: +$('#window').value}); paintViewBtn(); loadListGuarded(true); };
+/** «Вид» shows what is in force when it differs from the default (1 месяц, новые сверху). */
+function paintViewBtn() {
+  const b = $('#viewbtn'); if (!b) return;
+  const w = $('#window'), so = $('#sort');
+  const parts = [w.value !== '5' ? w.selectedOptions[0]?.textContent : '', so.value !== 'date_desc' ? so.selectedOptions[0]?.textContent.toLowerCase() : ''].filter(Boolean);
+  b.textContent = parts.length ? parts.join(', ').replace(/^./, c => c.toLowerCase()) : 'Вид';
+  b.title = `Период: ${w.selectedOptions[0]?.textContent}. Порядок: ${so.selectedOptions[0]?.textContent.toLowerCase()}`;
+}
+$('#viewbtn').onclick = e => {
+  e.stopPropagation();
+  const pop = $('#viewpop'), open = pop.hidden;
+  pop.hidden = !open; $('#viewbtn').setAttribute('aria-expanded', String(open));
+  if (open) pop.querySelector('select')?.focus();
+};
+document.addEventListener('mousedown', e => {
+  const pop = $('#viewpop');
+  if (pop && !pop.hidden && !e.target.closest('.aas-viewwrap')) { pop.hidden = true; $('#viewbtn').setAttribute('aria-expanded', 'false'); }
+});
+$('#viewpop').addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); $('#viewpop').hidden = true; $('#viewbtn').focus(); } });
+document.querySelectorAll('#listfilter [data-f]').forEach(b => b.onclick = () => {
+  listFilter = b.dataset.f;
+  document.querySelectorAll('#listfilter [data-f]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+  selectedKeys = new Set(); renderList(!!nextCursor);
+});
 $('#search').addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   searchQ = e.target.value.trim();
@@ -1364,6 +1524,9 @@ async function loadListQuiet() {
   try {
     const j = await api('mail', {action: 'list', folder: curFolder, limit: 40, filter: +$('#window').value, fields: LIST_FIELDS});
     if (acct !== ACCT) return;
+    const wasStale = listStale;
+    listStale = j.stale ? (j.message || 'Нет связи с сервером') : '';
+    if (listStale) armStaleRefresh(); else if (wasStale) $('#dot').className = 'aas-status-dot aas-status-dot--ok';
     // Server returns the whole folder cache after a SyncKey delta — replace so
     // read/unread and deletes from other clients show up without a full prime.
     if (j.delta) {
@@ -1379,7 +1542,7 @@ async function loadListQuiet() {
     const fresh = (j.items || []).filter(m => !have.has(m.item_id));
     if (fresh.length) { allItems = fresh.concat(allItems); renderList(!!nextCursor); lastSync = new Date(); setSyncText(); }
     if (inboxIds[acct] && curFolder === inboxIds[acct]) noteIncoming(acct, j.items || []);
-  } catch (e) { /* quiet */ }
+  } catch (e) { if (listStale) armStaleRefresh(); /* quiet */ }
 }
 
 /* ---------- compose ---------- */
@@ -1642,11 +1805,21 @@ function quotedOriginal(j) {
       <div><b>Тема:</b> ${esc(j.subject || '')}</div></div>
     <div class="aas-quote__body">${esc(text.trim())}</div></div>`;
 }
+/** A reply being written under the letter. Returns false if the user keeps it. */
+function dropInlineCompose() {
+  const x = $('.aas-inline-compose'); if (!x) return true;
+  if (x.dataset.dirty === '1' && !confirm('Закрыть недописанный ответ? Текст пропадёт.')) return false;
+  x.remove(); return true;
+}
+/** New letter: a dialog. Reply / forward from the reader: a form under the conversation,
+ *  so the letter stays readable while answering (the dialog stays for «Создать»). */
 function composeForm(ctx) {
+  const inline = !!ctx?.inline && !!$('#conv') && !modalOpen();
+  if (!dropInlineCompose()) return;
   files = [];
   const mode = ctx?.mode || 'new';
   const title = {new: 'Новое письмо', reply: ctx?.all ? 'Ответить всем' : 'Ответить', fwd: 'Переслать'}[mode];
-  openModal(`<h3>${title}</h3>
+  const html = (`<h3>${title}</h3>
     <div class="acts2"><button class="aas-btn" id="ccancel">Отмена</button><button class="aas-btn aas-btn--primary" id="csend">Отправить</button></div>
     <div class="aas-modal__scroll">
     ${mode === 'reply' ? `<div class="f"><label>Кому</label><div>${esc(ctx.j.from.map(whoFull).join(', '))}${ctx.all ? ' и остальные адресаты' : ''}</div></div>
@@ -1660,6 +1833,13 @@ function composeForm(ctx) {
       <span class="hint">или перетащите файлы в окно</span><div id="cfiles"></div></div>`}
     ${mode !== 'new' && ctx?.j ? quotedOriginal(ctx.j) : ''}
     </div>`);
+  let root, close;
+  if (inline) {
+    root = document.createElement('section'); root.className = 'aas-inline-compose'; root.setAttribute('aria-label', title);
+    root.innerHTML = html; $('#conv').appendChild(root);
+    root.addEventListener('input', () => { root.dataset.dirty = '1'; });
+    close = () => root.remove();
+  } else { root = openModal(html); close = closeModal; }
   $('#cbody').value = sigBlock(mode);
   for (const id of ['cto', 'ccc']) { const el = $('#' + id); if (el) bindPeopleInput(el); }
   const fi = $('#cfile');
@@ -1667,14 +1847,14 @@ function composeForm(ctx) {
   if (fi) {
     fi.onchange = async () => { await addFiles(fi.files); fi.value = ''; };
     // Drop anywhere on the letter window.
-    const m = $('#modal');
+    const m = root;
     m.ondragover = e => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); m.classList.add('aas-dropping'); } };
     m.ondragleave = e => { if (e.target === m) m.classList.remove('aas-dropping'); };
     m.ondrop = guard(async e => { if (!e.dataTransfer?.files?.length) return; e.preventDefault(); m.classList.remove('aas-dropping'); await addFiles(e.dataTransfer.files); });
   }
   const ccs = $('#ccshow');
   if (ccs) ccs.onclick = () => { $('#ccrow').hidden = false; ccs.hidden = true; $('#ccc').focus(); };
-  $('#ccancel').onclick = closeModal;
+  $('#ccancel').onclick = close;
   $('#csend').onclick = guard(async () => {
     const btn = $('#csend'); btn.disabled = true; btn.textContent = 'Отправка…';
     try {
@@ -1693,11 +1873,12 @@ function composeForm(ctx) {
         await api('mail', {action: 'forward', item_id: ctx.m.item_id, to, body, attachments: atts});
         rememberAddrsFromFields($('#cto').value);
       } else await api('mail', {action: 'reply', item_id: ctx.m.item_id, body, reply_all: !!ctx.all});
-      closeModal(); toast('Отправлено');
+      close(); toast('Отправлено');
     } finally { btn.disabled = false; btn.textContent = 'Отправить'; }
   });
   const ta = $('#cbody'); ta.setSelectionRange(0, 0);
-  (mode === 'reply' ? ta : $('#cto')).focus();
+  if (inline) root.scrollIntoView({block: 'start', behavior: 'smooth'});
+  (mode === 'reply' ? ta : $('#cto')).focus({preventScroll: inline});
 }
 function drawFiles() {
   $('#cfiles').innerHTML = files.map((f, i) => `<span class="aas-attendee">${esc(f.name)} <small>${fmtSize(f.size)}</small><button type="button" data-i="${i}" aria-label="Убрать ${esc(f.name)}">${icon('x', 12)}</button></span>`).join('');
@@ -1770,7 +1951,7 @@ $('#setbtn').onclick = async () => {
       <div class="frow" style="align-items:center;gap:8px">
         <select id="smailsound" style="flex:1">${[['notice14', 'Notice'], ['short', 'Short'], ['none', 'Без звука']].map(([v, t]) =>
           `<option value="${v}" ${(prefs.mail_sound || 'notice14') === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
-        <button type="button" class="aas-btn" id="smailsound_preview" title="Прослушать">▶</button>
+        <button type="button" class="aas-btn aas-btn--icon" id="smailsound_preview" title="Прослушать" aria-label="Прослушать">${icon('play', 14)}</button>
       </div>
       <div class="hint">Уведомление macOS, когда во «Входящих» появляется новое непрочитанное. «Без звука» — только баннер.</div></div>
     <div class="f"><label>Подпись (добавляется в новые письма, ответы и пересылки)</label>
@@ -1890,6 +2071,7 @@ $('#today').onclick = () => {
   const wrap = $('#weekwrap'); if (wrap) wrap._scrolled = false;
   loadCal();
 };
+$('#caloff').onclick = () => { calOffOpen = !calOffOpen; drawCal(); };
 $('#calmode').onclick = e => { const m = e.target.dataset?.m; if (!m) return; calMode = m; savePrefs({cal_view: m}); $('#weekwrap')._scrolled = false; loadCal(); };
 let events = [];
 
@@ -1966,14 +2148,20 @@ function drawCal() {
   });
   $('#allday').innerHTML = '<div></div>' + days.map(() => '<div class="cell"></div>').join('');
   const cells = [...$('#allday').children].slice(1);
-  $('#grid').innerHTML = '<div class="hours">' + [...Array(24)].map((_, h) => `<div>${h ? pad(h) + ':00' : ''}</div>`).join('') + '</div>' + days.map(() => '<div class="col"></div>').join('');
+  // Hour heights: empty hours outside the working day fold to a thin band (click it,
+  // or «Всё время» in the bar, to unfold), so the working day fills the screen.
+  const sc = calScale(days, HP);
+  const runs = sc.runs.map(([a, b]) => `<button type="button" class="aas-offlabel" style="top:${sc.Y[a]}px;height:${sc.Y[b] - sc.Y[a]}px" title="Показать ${pad(a)}:00–${pad(b)}:00">${pad(a)}–${pad(b)}</button>`).join('');
+  $('#grid').innerHTML = '<div class="hours">' + [...Array(24)].map((_, h) => `<div style="height:${sc.H[h]}px">${h && sc.H[h] === HP ? pad(h) + ':00' : ''}</div>`).join('') + runs + '</div>' + days.map(() => '<div class="col"></div>').join('');
+  $('#grid').querySelectorAll('.aas-offlabel').forEach(b => b.onclick = () => { calOffOpen = true; drawCal(); });
+  const cb = $('#caloff'); if (cb) { cb.hidden = !sc.runs.length && !calOffOpen; cb.textContent = calOffOpen ? 'Рабочее время' : 'Всё время'; }
   const cols = [...$('#grid').children].slice(1);
   days.forEach((d, i) => {
     const day0 = d.getTime(), day1 = day0 + 864e5;
     const todays = events.filter(e => e.s.getTime() < day1 && Math.max(e.e.getTime(), e.s.getTime() + 1) > day0);
     todays.filter(e => e.is_all_day).forEach(e => {
       const c = document.createElement('div'); c.className = 'aas-chip'; c.textContent = evTitle(e); c.title = e.subject || ''; c.onclick = () => eventView(e);
-      if (e._cat) c.style.setProperty('--evc', catColor(e._cat));
+      if (e._cat) c.style.setProperty('--evc', mutedCat(catColor(e._cat)));
       cells[i].appendChild(c);
     });
     const timed = todays.filter(e => !e.is_all_day && e.e.getTime() > day0).sort((a, b) => a.s - b.s || b.e - a.e);
@@ -1981,11 +2169,15 @@ function drawCal() {
     // Empty-slot click → new meeting (Outlook / Alfa-Bank calendar).
     cols[i].style.cursor = 'cell';
     cols[i].title = 'Нажмите на слот, чтобы создать встречу';
+    cols[i].style.backgroundImage = 'none';
+    // Hour lines, except inside a folded run (a line every few px would read as a hatch).
+    for (let h = 1; h < 24; h++) if (sc.H[h - 1] === HP || sc.H[h] === HP) {
+      const l = document.createElement('div'); l.className = 'aas-hline'; l.style.top = sc.Y[h] + 'px'; cols[i].appendChild(l); }
     cols[i].onclick = ev => {
       if (ev.target.closest('.aas-ev')) return;
       const rect = cols[i].getBoundingClientRect();
       const y = Math.max(0, ev.clientY - rect.top);
-      const mins = Math.min(23 * 60 + 30, Math.floor(y / HP * 60));
+      const mins = Math.min(23 * 60 + 30, Math.floor(sc.minsAt(y)));
       const snapped = Math.floor(mins / 30) * 30;
       const start = new Date(d);
       start.setHours(Math.floor(snapped / 60), snapped % 60, 0, 0);
@@ -1995,14 +2187,14 @@ function drawCal() {
     const MAXL = wide ? 6 : 3, hidden = new Map();  // group id → hidden events
     timed.forEach(e => {
       const st = Math.max(e.s.getTime(), day0), en = Math.min(e.e.getTime(), day1);
-      const top = (st - day0) / 36e5 * HP, h = Math.max(18, (en - st) / 36e5 * HP - 2);
+      const top = sc.yOf((st - day0) / 36e5), h = Math.max(18, sc.yOf((en - day0) / 36e5) - top - 2);
       const slots = Math.min(e._n, MAXL);
       if (e._n > MAXL && e._l >= MAXL - 1) { (hidden.get(e._g) || hidden.set(e._g, []).get(e._g)).push({e, top}); return; }
       const el = document.createElement('div');
       el.className = 'aas-ev' + (e.busy_status ? ' aas-ev--' + e.busy_status : '') + (wide ? ' wide' : '') + (e._cat ? ' aas-ev--cat' : '') +
         (e.meeting_status === 'cancelled' ? ' aas-ev--cancelled' : '') + (e.response_type === 'not_responded' ? ' aas-ev--pending' : '') + (h < 30 ? ' aas-ev--short' : '');
       el.style.cssText = `top:${top}px;height:${h}px;left:${e._l * 100 / slots}%;width:calc(${100 / slots}% - 3px)`;
-      if (e._cat) el.style.setProperty('--evc', catColor(e._cat));
+      if (e._cat) el.style.setProperty('--evc', mutedCat(catColor(e._cat)));
       const t1 = `${pad(e.s.getHours())}:${pad(e.s.getMinutes())}–${pad(e.e.getHours())}:${pad(e.e.getMinutes())}`;
       const hasJoin = !!e._join, title = esc(evTitle(e));
       el.innerHTML = (wide ? `<div class="l1">${title}<small>${t1}${e.location ? ' · ' + esc(e.location) : ''}${hasJoin ? ' · ссылка' : ''}</small></div>`
@@ -2025,15 +2217,41 @@ function drawCal() {
     const ws = prefs.work_start ?? 9, we = prefs.work_end ?? 18;
     [[0, ws], [we, 24]].forEach(([a, b]) => { if (b <= a) return;
       const off = document.createElement('div'); off.className = 'aas-offhours';
-      off.style.cssText = `top:${a * HP}px;height:${(b - a) * HP}px`; cols[i].prepend(off); });
+      off.style.cssText = `top:${sc.Y[a]}px;height:${sc.Y[b] - sc.Y[a]}px`; cols[i].prepend(off); });
     if (isoDay(d) === today) {
       const now = new Date(), line = document.createElement('div'); line.className = 'aas-nowline';
-      line.style.top = ((now - d) / 36e5 * HP) + 'px'; cols[i].appendChild(line);
+      line.style.top = sc.yOf((now - d) / 36e5) + 'px'; cols[i].appendChild(line);
     }
   });
   const wrap = $('#weekwrap');
-  if (!wrap._scrolled) { const h = days.some(d => isoDay(d) === today) ? Math.max(0, new Date().getHours() - 2) : 8; wrap.scrollTop = h * HP - 10; wrap._scrolled = true; }
+  if (!wrap._scrolled) { const h = days.some(d => isoDay(d) === today) ? Math.max(0, new Date().getHours() - 2) : 8; wrap.scrollTop = Math.max(0, sc.Y[h] - 10); wrap._scrolled = true; }
 }
+let calOffOpen = false;
+const OFF_H = 6;  // px per folded hour
+/** Hour heights for the grid. An hour folds when it is outside the working day, holds
+ *  no timed meeting on any visible day and is not the current hour. Returns heights H,
+ *  tops Y (25 values), folded runs [[from, to)], yOf(hours) and minsAt(y) for clicks. */
+function calScale(days, hp, list = events, now = new Date()) {
+  const ws = prefs.work_start ?? 9, we = prefs.work_end ?? 18, busy = new Set();
+  for (const d of days) {
+    const day0 = startOfDay(d).getTime(), day1 = day0 + 864e5;
+    for (const e of list) {
+      if (e.is_all_day || e.s.getTime() >= day1 || Math.max(e.e.getTime(), e.s.getTime() + 1) <= day0) continue;
+      const a = Math.max(0, (e.s - day0) / 36e5), b = Math.min(24, (Math.max(e.e.getTime(), e.s.getTime() + 1) - day0) / 36e5);
+      for (let h = Math.floor(a); h < Math.ceil(b); h++) busy.add(h);
+    }
+  }
+  if (days.some(d => isoDay(d) === isoDay(now))) busy.add(now.getHours());
+  const H = [...Array(24)].map((_, h) => !calOffOpen && (h < ws || h >= we) && !busy.has(h) ? OFF_H : hp);
+  const Y = [0]; H.forEach((x, h) => Y.push(Y[h] + x));
+  const runs = []; for (let h = 0; h < 24; h++) if (H[h] !== hp) { const a = h; while (h < 24 && H[h] !== hp) h++; runs.push([a, h]); h--; }
+  const yOf = t => { t = Math.min(24, Math.max(0, t)); const h = Math.min(23, Math.floor(t)); return Y[h] + (t - h) * H[h]; };
+  const minsAt = y => { let h = 0; while (h < 23 && Y[h + 1] <= y) h++; return h * 60 + Math.min(1, (y - Y[h]) / H[h]) * 60; };
+  return {H, Y, runs, yOf, minsAt};
+}
+/** Category colours come from a bright Outlook-like palette; in the grid they are
+ *  pulled toward grey so eight categories do not shout at once. */
+const mutedCat = c => `color-mix(in oklch, ${c} 68%, #8b9199)`;
 
 /** «5 приняли · 1 отклонил · 2 без ответа» — the collapsed participants line. */
 function attSummary(att, st) {
@@ -2061,7 +2279,7 @@ function evBodyHtml(body) {
 /** «+N» in a crowded slot: the folded meetings as a list; each opens its card. */
 function showMoreEvents(list) {
   const el = openModal(`<h3>Ещё ${list.length} ${plural(list.length, 'встреча', 'встречи', 'встреч')}</h3>
-    <div class="aas-evlist">${list.map((e, i) => `<button type="button" class="aas-evlist__row" data-i="${i}" style="--evc:${e._cat ? catColor(e._cat) : 'var(--aas-busy)'}">
+    <div class="aas-evlist">${list.map((e, i) => `<button type="button" class="aas-evlist__row" data-i="${i}" style="--evc:${e._cat ? mutedCat(catColor(e._cat)) : 'var(--aas-busy)'}">
       <span class="aas-evlist__t">${pad(e.s.getHours())}:${pad(e.s.getMinutes())}–${pad(e.e.getHours())}:${pad(e.e.getMinutes())}</span>
       <span class="aas-evlist__s">${esc(evTitle(e))}</span></button>`).join('')}</div>
     <div class="acts2"><button class="aas-btn" id="evmclose">Закрыть</button></div>`);
@@ -2085,7 +2303,7 @@ function eventView(e) {
   const link = e._join ?? joinURL(e.location, e.body);
   const el = openModal(`<h3>${esc(evTitle(e))}${e.is_recurring ? '<span class="aas-pill">серия</span>' : ''}${canRespond ? '<span class="aas-pill">встреча</span>' : ''}${e.meeting_status === 'cancelled' ? '<span class="aas-pill aas-pill--cancel">отменена</span>' : ''}</h3>
     ${(e.categories || []).length ? `<div class="f aas-cats">${catChips(e.categories)}</div>` : ''}
-    <div class="f aas-evwhen">${icon('clock', 14)} ${e.is_all_day ? 'Весь день, ' + e.s.toLocaleDateString('ru-RU') : `${e.s.toLocaleString('ru-RU', {dateStyle: 'medium', timeStyle: 'short'})} – ${e.e.toLocaleTimeString('ru-RU', {timeStyle: 'short'})}`}</div>
+    <div class="f aas-evwhen">${icon('clock', 14)} ${esc(fmtRange(e.s, e.e, e.is_all_day))}${e.is_recurring ? ', повторяется' : ''}</div>
     ${canRespond || link ? `<div class="f aas-evtop">${canRespond ? `<span class="aas-rsvpseg" role="group" aria-label="Ваш ответ">${rsvpBtn('accept', 'Принять') + rsvpBtn('tentative', 'Под вопросом') + rsvpBtn('decline', 'Отклонить')}</span>` : ''}
       ${link ? `<a class="aas-btn aas-btn--primary" id="evjoin" href="${esc(link)}" target="_blank" rel="noopener noreferrer" title="Открыть ссылку встречи в браузере: ${esc(link)}">Подключиться</a>` : ''}</div>` : ''}
     ${canRespond && !['accepted', 'tentative', 'declined'].includes(my) ? '<div class="hint aas-hint-tight">Вы ещё не ответили организатору</div>' : ''}
@@ -2095,25 +2313,47 @@ function eventView(e) {
     </dl>
     ${isMeeting && att.length ? `<details class="f aas-att"${att.length <= 3 ? ' open' : ''}><summary><label>Участники (${att.length})</label>${attSummary(att, st)}</summary><ul class="att-list">${att.map(a => `<li>${esc(a.name || a.address)}${a.status ? ` <small style="color:var(--muted)">— ${st[a.status] || esc(a.status)}</small>` : ''}</li>`).join('')}</ul></details>` : ''}
     ${e.body ? `<div class="f"><label>Описание</label>${evBodyHtml(e.body)}</div>` : ''}
-    <div class="acts2 aas-rsvp meeting-rsvp">
-      <button class="aas-btn" id="evedit">Изменить</button><button class="aas-btn aas-btn--danger" id="evdel">${iAmOrg && isMeeting ? 'Отменить' : 'Удалить'}</button><button class="aas-btn" id="evclose">Закрыть</button></div>`);
+    <div class="aas-modal__hacts"><button type="button" class="aas-btn aas-btn--ghost aas-btn--icon" id="evmore" aria-haspopup="menu" title="Ещё" aria-label="Ещё действия">${icon('more')}</button><button type="button" class="aas-btn aas-btn--ghost aas-btn--icon" id="evclose" title="Закрыть (Esc)" aria-label="Закрыть">${icon('x')}</button></div>`);
   $('#evclose').onclick = closeModal;
+  // Rare actions live behind «•••»: the card is for reading and answering.
+  $('#evmore').onclick = () => openMenu($('#evmore'), [
+    {label: 'Изменить', run: () => eventForm(e)},
+    {label: iAmOrg && isMeeting ? 'Отменить встречу' : 'Удалить', danger: true, run: removeEvent},
+  ]);
   el.querySelectorAll('[data-r]').forEach(b => b.onclick = guard(async () => {
     if (b.getAttribute('aria-pressed') === 'true') return;  // already the answer
     const r = await api('events', {action: 'respond', item_id: e.item_id, response: b.dataset.r, notify: true}, e._acct || ACCT);
     if (r.via === 'mail') { closeModal(); toast('Сервер не принял ответ напрямую — отправили его организатору письмом'); loadCal(); return; }
     closeModal(); toast('Ответ отправлен организатору'); loadCal();
   }));
-  $('#evedit').onclick = () => eventForm(e);
-  $('#evdel').onclick = guard(async () => {
+  const removeEvent = guard(async () => {
     if (!confirm(e.is_recurring ? 'Отменить это событие серии?' : (iAmOrg && isMeeting ? 'Отменить событие? Участникам уйдёт уведомление.' : 'Удалить событие?'))) return;
     await api('events', {action: 'cancel', item_id: e.item_id}, e._acct || ACCT); closeModal(); toast(iAmOrg && isMeeting ? 'Событие отменено' : 'Удалено'); loadCal();
   });
 }
 
+/** Small action menu under `anchor`: [{label, run, danger}]. Esc, a click outside or
+ *  a choice closes it; it lives in <body> so a scrolling modal cannot clip it. */
+function openMenu(anchor, items) {
+  document.querySelector('.aas-menu')?.remove();
+  const m = document.createElement('div'); m.className = 'aas-menu'; m.setAttribute('role', 'menu');
+  m.innerHTML = items.map((it, i) => `<button type="button" role="menuitem" class="aas-menu__it${it.danger ? ' aas-menu__it--danger' : ''}" data-i="${i}">${esc(it.label)}</button>`).join('');
+  document.body.appendChild(m);
+  const r = anchor.getBoundingClientRect();
+  m.style.top = Math.round(r.bottom + 4) + 'px';
+  m.style.left = Math.round(Math.max(8, r.right - m.offsetWidth)) + 'px';
+  const close = () => { m.remove(); window.removeEventListener('keydown', key, true); document.removeEventListener('mousedown', out, true); };
+  const key = e => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); close(); anchor.focus(); } };
+  const out = e => { if (!m.contains(e.target) && e.target !== anchor) close(); };
+  window.addEventListener('keydown', key, true); document.addEventListener('mousedown', out, true);
+  m.querySelectorAll('[data-i]').forEach(b => b.onclick = () => { close(); items[+b.dataset.i].run(); });
+  m.querySelector('button')?.focus();
+}
 /** New/edit event form.
  *  opts.start — Date from a calendar slot click;
  *  opts.day ('YYYY-MM-DD') + opts.hour/minute — from the tray. */
+/** Free/busy state as a coloured dot (ok / warn / bad / unknown) instead of emoji. */
+const avDot = c => `<span class="aas-avdot aas-avdot--${c || 'unk'}" aria-hidden="true"></span>`;
 function eventForm(e, opts = {}) {
   const editing = !!(e && e.item_id);
   const now = new Date(); now.setMinutes(0, 0, 0); now.setHours(now.getHours() + 1);
@@ -2181,22 +2421,21 @@ function eventForm(e, opts = {}) {
       const l = await api('events', {action: 'list', start: isoDay(st), end: isoDay(new Date(en.getTime() + 864e5)), limit: 300});
       if (tok !== avTok) return;
       const hit = (l.items || []).filter(e => { const es = new Date(e.start_iso), ee = e.end ? localDate(e.end) : es; return es < en && ee > st && e.busy_status !== 'free'; });
-      box.innerHTML = '<div>ℹ️ Этот сервер не отдаёт занятость участников — проверен только ваш календарь.</div>' +
-        (hit.length ? hit.map(e => `<div>⛔ Пересечение: ${esc(e.subject || '(без темы)')} (${new Date(e.start_iso).toLocaleTimeString('ru-RU', {timeStyle: 'short'})})</div>`).join('') : '<div>✅ У вас в это время свободно</div>');
+      box.innerHTML = `<div class="aas-avline">${icon('info', 14)} Этот сервер не отдаёт занятость участников, проверен только ваш календарь.</div>` +
+        (hit.length ? hit.map(e => `<div class="aas-avline">${avDot('bad')}Пересечение: ${esc(evTitle(e))} (${fmtRange(new Date(e.start_iso))})</div>`).join('') : `<div class="aas-avline">${avDot('ok')}У вас в это время свободно</div>`);
       return;
     }
     if (tok !== avTok) return;
     const L = {'0': ['свободен', 'ok'], '1': ['под вопросом', 'warn'], '2': ['занят', 'bad'], '3': ['вне офиса', 'bad'], '4': ['нет данных', '']};
     const rows = (j.items || []).map(x => {
       const fb = x.freebusy || ''; const w = ['2', '3', '1', '0'].find(c => fb.includes(c)) || '4'; const [t, c] = L[w];
-      return `<div>${c === 'ok' ? '✅' : c === 'warn' ? '⚠️' : c === 'bad' ? '⛔' : '❔'} ${esc(x.name || x.address)} — ${t}</div>`; });
-    (j.unresolved || []).forEach(u => rows.push(`<div>❔ ${esc(u.query)} — не найден/неоднозначен, занятость неизвестна</div>`));
+      return `<div class="aas-avline">${avDot(c)}${esc(x.name || x.address)}: ${t}</div>`; });
+    (j.unresolved || []).forEach(u => rows.push(`<div class="aas-avline">${avDot('')}${esc(u.query)}: не найден или неоднозначен, занятость неизвестна</div>`));
     box.innerHTML = rows.join('') || 'Нет данных';
     if ((j.items || []).some(x => /[23]/.test(x.freebusy || ''))) {
       try { const f = await api('people', {action: 'find_free_slots', who: att, duration_minutes: Math.max(15, Math.round((en - st) / 6e4)), start: isoLocal(st), count: 3});
         if (tok !== avTok) return;
-        const slotLabel = x => { const a = new Date(x.start_iso), b = new Date(x.end_iso);
-          return `${a.toLocaleDateString('ru-RU', {weekday: 'short', day: 'numeric', month: 'numeric'})}, ${pad(a.getHours())}:${pad(a.getMinutes())}–${pad(b.getHours())}:${pad(b.getMinutes())}`; };
+        const slotLabel = x => fmtRange(new Date(x.start_iso), new Date(x.end_iso));
         if ((f.items || []).length) box.innerHTML += `<div style="margin-top:6px">Свободно у всех (рабочий день ${pad(f.work_start ?? prefs.work_start)}:00–${pad(f.work_end ?? prefs.work_end)}:00):</div>`
           + '<div class="aas-slots">' + f.items.map(x => `<button class="aas-btn aas-btn--sm" type="button" data-s="${esc(x.start_iso)}" data-e="${esc(x.end_iso)}">${esc(slotLabel(x))}</button>`).join('') + '</div>';
         box.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { $('#est').value = isoLocal(new Date(b.dataset.s)); $('#een').value = isoLocal(new Date(b.dataset.e)); runAvailability(); });
@@ -2235,6 +2474,29 @@ function eventForm(e, opts = {}) {
     closeModal(); if (!mimeFailed) toast(editing ? 'Сохранено' : 'Событие создано'); loadCal();
   });
 }
+
+/* Folder column width: drag the divider (or ←/→ on it); remembered on this Mac. */
+(() => {
+  const bar = $('#foldresize'), nav = $('#folders'); if (!bar || !nav) return;
+  const set = w => { w = Math.round(Math.min(380, Math.max(160, w))); nav.style.width = w + 'px'; return w; };
+  const save = w => { try { localStorage.setItem('aas-folders-w', String(w)); } catch (_) {} };
+  try { const w = +localStorage.getItem('aas-folders-w'); if (w) set(w); } catch (_) {}
+  bar.addEventListener('pointerdown', e => {
+    const x0 = e.clientX, w0 = nav.getBoundingClientRect().width;
+    try { bar.setPointerCapture(e.pointerId); } catch (_) {}
+    document.body.classList.add('aas-resizing');
+    const move = ev => set(w0 + ev.clientX - x0);
+    const up = () => { bar.removeEventListener('pointermove', move); bar.removeEventListener('pointerup', up);
+      document.body.classList.remove('aas-resizing'); save(nav.getBoundingClientRect().width); };
+    bar.addEventListener('pointermove', move); bar.addEventListener('pointerup', up);
+    e.preventDefault();
+  });
+  bar.addEventListener('keydown', e => {
+    const d = {ArrowLeft: -16, ArrowRight: 16}[e.key]; if (!d) return;
+    e.preventDefault(); save(set(nav.getBoundingClientRect().width + d));
+  });
+  bar.addEventListener('dblclick', () => { nav.style.width = ''; try { localStorage.removeItem('aas-folders-w'); } catch (_) {} });
+})();
 
 /* ---------- start ---------- */
 $('#selall0')?.addEventListener('change', e => {
@@ -2290,7 +2552,7 @@ $('#bulkunread')?.addEventListener('click', bulkMark(false));
   if (acc.status === 'fulfilled') accounts = acc.value.accounts;
   setTimeout(() => applyAuthState(accounts), 0);  // tabs exist after buildAccountTabs
   buildAccountTabs(); setBrand(); showReaderEmpty();
-  calMode = prefs.cal_view; $('#window').value = String(prefs.mail_window ?? 5); $('#sort').value = prefs.mail_sort || 'date_desc'; armAutoSync();
+  calMode = prefs.cal_view; $('#window').value = String(prefs.mail_window ?? 5); $('#sort').value = prefs.mail_sort || 'date_desc'; paintViewBtn(); armAutoSync();
   armUpdates();
   if (aboutMeta.needs_setup) {
     toast('Первый запуск: укажите логин и пароль. Адреса серверов уже подставлены.');

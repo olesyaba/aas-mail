@@ -417,3 +417,69 @@ test('evTitle drops the FW:/RE: of a forwarded invitation', () => {
   assert.equal(evTitle({subject: 'RE: Fwd: Daily'}), 'Daily');
   assert.equal(evTitle({}), '(без темы)');
 });
+
+test('fmtRange: one wording for meeting times, year only when not this one', () => {
+  const {fmtRange} = load(['fmtRange']);
+  const now = new Date(2026, 8, 25, 12);
+  assert.equal(fmtRange(new Date(2026, 8, 21, 10, 5), new Date(2026, 8, 21, 10, 50), false, now), 'пн, 21 сент., 10:05–10:50');
+  assert.equal(fmtRange(new Date(2026, 8, 21), null, true, now), 'пн, 21 сент., весь день');
+  assert.equal(fmtRange(new Date(2025, 11, 31, 23), new Date(2026, 0, 1, 1), false, now), 'ср, 31 дек. 2025, 23:00 – чт, 1 янв., 01:00');
+});
+
+test('calendar: empty hours outside the working day fold, busy and current hours stay', () => {
+  const {calScale, ctx} = load(['calScale']);
+  vm.runInContext('prefs.work_start = 9; prefs.work_end = 18', ctx);
+  const day = new Date(2026, 8, 21), at = (h, m = 0) => new Date(2026, 8, 21, h, m);
+  const sc = calScale([day], 48, [{s: at(7, 30), e: at(8, 15)}], new Date(2026, 8, 25, 12));
+  assert.equal(sc.H[7], 48, 'a meeting at 7:30 keeps 7 and 8 open');
+  assert.equal(sc.H[8], 48);
+  assert.equal(sc.H[3], 6);
+  assert.equal(sc.H[12], 48, 'working hours never fold');
+  assert.deepEqual(JSON.parse(JSON.stringify(sc.runs)), [[0, 7], [18, 24]]);
+  assert.equal(sc.yOf(9), sc.Y[9]);
+  assert.equal(Math.round(sc.minsAt(sc.Y[10] + 24)), 10 * 60 + 30, 'a click maps back to 10:30');
+});
+
+test('avatar: two initials from the name, a stable hue from the address', () => {
+  const {avatar} = load(['avatar']);
+  assert.match(avatar({name: 'Орлов Павел', address: 'p@x.ru'}), />ОП</);
+  assert.match(avatar({name: '"Karpov, Denis"', address: 'd@x.ru'}), />KD</);
+  assert.match(avatar({address: 'sd@x.ru'}), />S</);
+  assert.equal(avatar({name: 'A B', address: 'q@x.ru'}).match(/--h:(\d+)/)[1], avatar({name: 'C', address: 'q@x.ru'}).match(/--h:(\d+)/)[1]);
+});
+
+test('list filter: unread / with attachments narrow what is on screen', () => {
+  const {groupsOnScreen, ctx} = load(['groupsOnScreen']);
+  vm.runInContext(`prefs.threads = false; allItems = [
+    {item_id: 'a', is_read: false}, {item_id: 'b', is_read: true, has_attachments: true}, {item_id: 'c', is_read: true}]`, ctx);
+  assert.equal(groupsOnScreen().length, 3);
+  vm.runInContext(`listFilter = 'unread'`, ctx); assert.deepEqual(plain(groupsOnScreen().map(g => g.key)), ['i:a']);
+  vm.runInContext(`listFilter = 'att'`, ctx); assert.deepEqual(plain(groupsOnScreen().map(g => g.key)), ['i:b']);
+});
+
+test('no server: the list says so, counts down and retries by itself', () => {
+  const timers = [];
+  const x = load(['scheduleListRetry', 'listRetry']);
+  x.ctx.setTimeout = (fn, ms) => { timers.push(ms); return timers.length; };
+  let html = '';
+  const qs = x.ctx.document.querySelector;
+  x.ctx.document.querySelector = sel => sel === '#rows' ? {set innerHTML(v) { html = v; }} : qs(sel);
+  vm.runInContext("accounts = [{id: 'main', name: 'Alfa-Bank'}]", x.ctx);
+  x.scheduleListRetry({message: 'Сервер Alfa-Bank не отвечает.'});
+  x.scheduleListRetry({message: ''});
+  assert.match(html, /Нет связи с «Alfa-Bank»/);
+  assert.match(html, /Повторить сейчас/);
+  assert.deepEqual(timers, [10000, 20000], 'backs off: 10 s, then 20 s');
+});
+
+test('opening a folder asks for the saved letters first, then the real (delta) list', () => {
+  const {loadList, fetches, ctx} = load(['loadList']);
+  vm.runInContext("curFolder = '14'; searchQ = ''", ctx);
+  fetches.length = 0;
+  loadList(true);
+  const lists = fetches.filter(f => f.url === '/api/mail' && f.body.action === 'list');
+  assert.equal(lists.length, 2);
+  assert.equal(lists[0].body.cache_only, true, 'cache first: no Exchange round-trip');
+  assert.equal(lists[1].body.cache_only, undefined);
+  assert.equal(lists[1].body.folder, '14');
+});

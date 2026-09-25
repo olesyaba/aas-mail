@@ -1252,3 +1252,190 @@ kbd {
 #bulkbar .aas-btn--icon { width: 32px; height: 30px; padding: 0; }
 #bulkbar .aas-btn .aas-readdot { margin: 0; }
 #bulkbar .aas-mvwrap .aas-bulkbar__mv { position: absolute; inset: 0; width: 100%; max-width: none; opacity: 0; padding: 0; }
+
+/* ═══ UI refresh, part 2 (rest of the taste audit) ═══════════════════════ */
+
+/* Last sync time moved into the sync button's tooltip. */
+#synctxt { display: none; }
+
+/* List header: «Вид» popover (period + order) and the quick filter row */
+.aas-viewwrap { position: relative; flex: none; }
+#viewbtn { white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.aas-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  width: 230px;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  background: var(--aas-panel);
+  border: 1px solid var(--aas-line);
+  border-radius: var(--aas-r-md);
+  box-shadow: var(--aas-shadow);
+  color: var(--aas-text);
+}
+.aas-pop[hidden] { display: none; }
+.aas-pop label { font-size: 12px; color: var(--aas-muted); margin-top: 4px; }
+#listbar .aas-pop select { width: 100%; }
+.aas-listfilter { padding: 6px 12px; border-bottom: 1px solid var(--aas-line); }
+.aas-seg--soft { border-radius: 9px; background: var(--aas-panel-2); padding: 2px; gap: 2px; border-color: var(--aas-line); }
+.aas-seg--soft button {
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 3px 10px;
+  font-size: var(--aas-t-sm);
+  color: var(--aas-muted);
+}
+.aas-seg--soft button.on { background: var(--aas-panel); color: var(--aas-text); font-weight: 500; box-shadow: 0 1px 2px rgb(0 0 0 / 10%); }
+.aas-listfilter.aas-listbar--hidden { display: none; }
+
+/* Mail row: [unread dot] [avatar / checkbox] [text] */
+.aas-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 10px;
+  position: relative;
+  padding-left: 22px;
+}
+.aas-row:focus-visible { outline: 2px solid var(--aas-accent-text); outline-offset: -2px; }
+.aas-row > .aas-row__ico { position: absolute; left: 1px; top: 11px; width: 20px; height: 20px; }
+.aas-row__lead { position: relative; width: 28px; height: 28px; margin-top: 3px; }
+.aas-row__lead .aas-row__chk { position: absolute; inset: 0; display: grid; place-items: center; }
+.aas-row:hover .aas-av,
+.aas-row.sel .aas-av,
+#rows.selecting .aas-av,
+.aas-row__lead:focus-within .aas-av { visibility: hidden; }
+.aas-row__main { min-width: 0; display: grid; gap: 1px; }
+.aas-av {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: color-mix(in oklch, oklch(0.62 0.09 var(--h, 20)) 20%, var(--aas-panel));
+  color: color-mix(in oklch, oklch(0.45 0.1 var(--h, 20)) 70%, var(--aas-text));
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+/* Folders: filled star for favourites, resizable column */
+.aas-folder__pin .aas-ic { vertical-align: -2px; }
+.aas-folder__pin.on .aas-ic { fill: currentColor; }
+.aas-folder:focus-visible { outline: 2px solid var(--aas-accent-text); outline-offset: -2px; }
+#newfolder .aas-ic { margin-right: 2px; }
+.aas-resizer {
+  flex: none;
+  width: 7px;
+  margin: 0 -4px 0 -3px;
+  position: relative;
+  z-index: 3;
+  cursor: col-resize;
+}
+.aas-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: transparent;
+  transition: background var(--aas-dur) var(--aas-ease);
+}
+.aas-resizer:hover::after,
+.aas-resizer:focus-visible::after,
+body.aas-resizing .aas-resizer::after { background: var(--aas-accent); width: 2px; }
+.aas-resizer:focus-visible { outline: none; }
+body.aas-resizing { cursor: col-resize; user-select: none; }
+
+/* Event card: «•••» and × in the corner; no bottom bar */
+#modal { position: relative; }
+.aas-modal__hacts { position: absolute; top: 12px; right: 12px; display: flex; gap: 2px; z-index: 1; }
+.aas-modal__hacts .aas-btn { width: 32px; height: 32px; padding: 0; border-radius: 8px; }
+#modal h3:has(+ .aas-cats),
+#modal h3 { padding-right: 90px; }
+.aas-menu {
+  position: fixed;
+  z-index: 120;
+  min-width: 190px;
+  display: grid;
+  padding: 4px;
+  background: var(--aas-panel);
+  border: 1px solid var(--aas-line);
+  border-radius: 10px;
+  box-shadow: var(--aas-shadow);
+}
+.aas-menu__it {
+  border: 0;
+  background: none;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font: inherit;
+  color: var(--aas-text);
+  cursor: pointer;
+}
+.aas-menu__it:hover,
+.aas-menu__it:focus-visible { background: var(--aas-accent-bg); outline: none; }
+.aas-menu__it--danger { color: var(--aas-danger); }
+
+/* Free / busy lines: a dot, not an emoji */
+.aas-avline { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+.aas-avdot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--aas-muted); }
+.aas-avdot--ok { background: var(--aas-ok); }
+.aas-avdot--warn { background: var(--aas-warning); }
+.aas-avdot--bad { background: var(--aas-danger); }
+.aas-avdot--unk { background: transparent; border: 1.5px solid var(--aas-muted); }
+
+/* Reply / forward under the conversation */
+.aas-inline-compose {
+  margin: 14px 16px 24px;
+  padding: 14px 16px 4px;
+  border: 1px solid color-mix(in srgb, var(--aas-accent-text) 30%, var(--aas-line));
+  border-radius: var(--aas-r-md);
+  background: var(--aas-panel);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
+}
+.aas-inline-compose > h3 { margin: 0 0 4px; font-size: 15px; }
+.aas-inline-compose > .acts2 { margin: 0 0 10px; }
+.aas-inline-compose.aas-dropping { outline: 2px dashed var(--aas-accent-text); outline-offset: -6px; }
+
+/* Calendar: folded off-hours */
+.hours { position: relative; }
+.aas-offlabel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  padding: 0 6px 0 0;
+  border: 0;
+  background: none;
+  color: var(--aas-muted);
+  font: inherit;
+  font-size: 10px;
+  line-height: 1;
+  text-align: right;
+  cursor: pointer;
+  overflow: hidden;
+}
+.aas-offlabel:hover { color: var(--aas-accent-text); }
+.aas-hline { position: absolute; left: 0; right: 0; height: 1px; background: var(--aas-line); pointer-events: none; }
+/* Long sender lists / subjects: the text column must be allowed to shrink so the
+   ellipsis kicks in and the time stays visible. */
+.aas-row__main { grid-template-columns: minmax(0, 1fr); }
+.aas-row__main > * { min-width: 0; }
+
+/* No server: the list says so and retries by itself; cached letters get a notice. */
+.aas-listerr { display: grid; gap: 6px; justify-items: center; text-align: center; }
+.aas-listerr span { font-size: var(--aas-t-sm); color: var(--aas-muted); max-width: 32ch; }
+.aas-listerr__cd { font-variant-numeric: tabular-nums; }
+.aas-stale {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--aas-line);
+  background: color-mix(in srgb, var(--aas-warning) 14%, var(--aas-panel));
+  color: var(--aas-text);
+  font-size: var(--aas-t-xs);
+}
