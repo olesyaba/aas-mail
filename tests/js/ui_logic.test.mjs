@@ -483,3 +483,44 @@ test('opening a folder asks for the saved letters first, then the real (delta) l
   assert.equal(lists[1].body.cache_only, undefined);
   assert.equal(lists[1].body.folder, '14');
 });
+
+test('auto-sync keeps its interval when WebKit holds timers back (native nudge asks «due?»)', () => {
+  const {autoSyncDue, ctx} = load(['autoSyncDue']);
+  let ticks = 0;
+  vm.runInContext('prefs.auto_sync = 2', ctx);
+  ctx.__tick = () => ticks++;
+  vm.runInContext('autoSyncTick = () => { __tick(); lastTick = Date.now(); }', ctx);
+  vm.runInContext('lastTick = Date.now() - 30000', ctx);
+  assert.equal(autoSyncDue(), false, '30 s after a tick: not yet');
+  vm.runInContext('lastTick = Date.now() - 9 * 60000', ctx);
+  assert.equal(autoSyncDue(), true, '9 min late: runs now');
+  assert.equal(ticks, 1);
+  assert.equal(autoSyncDue(), false, 'and not twice');
+  vm.runInContext('prefs.auto_sync = 0; lastTick = 0', ctx);
+  assert.equal(autoSyncDue(), false, 'switched off in Settings');
+});
+
+test('the last sync time is one for the app, not swapped per account', () => {
+  const {snapshot} = load(['snapshot']);
+  assert.ok(!('lastSync' in snapshot()));
+});
+
+test('conversation: short recipients line — «мне» first, surname + initial, «и ещё N»', () => {
+  const {shortRecips, ctx} = load(['shortRecips']);
+  vm.runInContext("accounts = [{id: 'main', email: 'me@bank.test'}]; ACCT = 'main'", ctx);
+  const p = (name, address) => ({name, address});
+  assert.equal(shortRecips({to: [p('Балкаров Ислам Валерьевич', 'b@bank.test'), p('Я', 'me@bank.test')], cc: []}), 'мне, Балкаров И.');
+  const many = Array.from({length: 6}, (_, i) => p(`Фамилия${i} Имя`, `u${i}@bank.test`));
+  assert.equal(shortRecips({to: many, cc: []}), 'Фамилия0 И., Фамилия1 И., Фамилия2 И. и ещё 3');
+});
+
+test('plain-text reply: the quoted history folds, a letter that is only a quote stays open', () => {
+  const {foldQuoteText} = load(['foldQuoteText']);
+  const folded = foldQuoteText('Коллеги, ок.\n\n-----Original Message-----\nFrom: Иван\nSent: вчера\n\nстарое');
+  assert.match(folded, /Коллеги, ок\.<\/pre><details class="aas-q"><summary>Показать историю переписки<\/summary>/);
+  assert.match(folded, /-----Original Message-----/);
+  const onlyQuote = foldQuoteText('-----Original Message-----\nFrom: Иван\nSent: вчера');
+  assert.doesNotMatch(onlyQuote, /<details/);
+  assert.doesNotMatch(foldQuoteText('Просто письмо'), /<details/);
+  assert.match(foldQuoteText('Да.\nОт: Иван Петров\nОтправлено: пн\nКому: мне'), /<details/);
+});

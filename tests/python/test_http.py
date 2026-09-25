@@ -86,6 +86,22 @@ class GuardTest(ServerTest):
         self.assertIn(self.c.request("GET", "/ui-kit/../../webapp.py")[0].status, (403, 404))
         self.assertEqual(self.c.request("GET", "/ui-kit/missing.css")[0].status, 404)
 
+    def test_font_is_bundled_and_nothing_loads_from_the_internet(self):
+        """Golos Text ships inside the app: offline / behind VPN the UI keeps its font,
+        and opening the app sends no request to Google Fonts (or any other host)."""
+        import re
+        html = (webapp.WEB / "index.html").read_text(encoding="utf-8")
+        self.assertNotRegex(html, r"(?i)<(link|script)[^>]+(href|src)=\"https?://")
+        self.assertIn('href="/ui-kit/fonts.css"', html)
+        css = (webapp.WEB / "ui-kit" / "fonts.css").read_text(encoding="utf-8")
+        files = re.findall(r'url\("fonts/([^"]+\.woff2)"\)', css)
+        self.assertGreaterEqual(len(files), 2, "cyrillic and latin at least")
+        for name in files:
+            r, body = self.c.request("GET", f"/ui-kit/fonts/{name}")
+            self.assertEqual((r.status, r.getheader("Content-Type")), (200, "font/woff2"), name)
+            self.assertEqual(body[:4], b"wOF2", name)
+        self.assertTrue((webapp.WEB / "ui-kit" / "fonts" / "OFL.txt").is_file(), "the font licence ships with it")
+
     def test_unknown_get_is_404(self):
         self.assertEqual(self.c.request("GET", "/nope")[0].status, 404)
 

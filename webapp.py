@@ -41,7 +41,7 @@ MAX_BODY = 40 * 1024 * 1024
 # Product identity (About page + UI chrome).
 APP_META = {
     "name": "AAS mail",
-    "version": "1.2.17",
+    "version": "1.2.18",
     "description": "Локальный клиент почты и календаря Alfa / Alfa-Seller поверх Exchange ActiveSync.",
     "contact_mm": "@olesya_ba",
     "thanks_intro": "Спасибо за тест-рейды и светлые идеи:",
@@ -2908,6 +2908,8 @@ class Handler(BaseHTTPRequestHandler):
                 ctype = "text/css; charset=utf-8"
             elif target.suffix == ".html":
                 ctype = "text/html; charset=utf-8"
+            elif target.suffix == ".woff2":
+                ctype = "font/woff2"  # the bundled Golos Text (mimetypes may not know it)
             return self._send(200, target.read_bytes(), ctype)
         if u.path == "/attachment":
             if q.get("t", [""])[0] != TOKEN:
@@ -2979,6 +2981,8 @@ class Handler(BaseHTTPRequestHandler):
                 if params.get("sweep"):
                     return self._json(unread_sweep(a, params.get("filter"), params.get("fields"),
                                                    force=bool(params.get("force"))))
+                if params.get("tick"):  # one line per auto-sync tick: shows it keeps its interval
+                    log.info("[%s] auto-sync tick (%s window)", a.id, params["tick"])
                 return self._json(refresh_unread(a, force=bool(params.get("refresh"))))
             if path == "/api/message":
                 # No account lock here: fetch_mime / eas_attachments take it only

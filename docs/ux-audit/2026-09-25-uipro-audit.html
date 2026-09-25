@@ -1,0 +1,290 @@
+<title>AAS mail · три новые темы</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Serif:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f5f6f8; --panel:#ffffff; --panel2:#fafbfc; --line:#e3e6ea; --line2:#cfd4da;
+  --text:#1f2328; --muted:#66707a; --accent:#501820; --accent-bg:#f3e8ea; --accent-text:#501820;
+  --p0:#c4314b; --p0-bg:#fbe9ec; --p1:#8a5a00; --p1-bg:#fff4dc; --p2:#3f6f8f; --p2-bg:#e6f0f6;
+  --ok:#107c41;
+  --font:"Golos Text",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;--bg:#181a1d;--panel:#212428;--panel2:#1c1f22;--line:#33383e;--line2:#454b52;
+  --text:#e6e8ea;--muted:#9aa3ac;--accent:#8c2f3d;--accent-bg:#3a2227;--accent-text:#f2a7b1;
+  --p0:#ff8a9c;--p0-bg:#3b2227;--p1:#ffc857;--p1-bg:#3a3020;--p2:#8ec3e6;--p2-bg:#1f2e38;--ok:#5cc98b;}}
+:root[data-theme="dark"]{
+  color-scheme:dark;--bg:#181a1d;--panel:#212428;--panel2:#1c1f22;--line:#33383e;--line2:#454b52;
+  --text:#e6e8ea;--muted:#9aa3ac;--accent:#8c2f3d;--accent-bg:#3a2227;--accent-text:#f2a7b1;
+  --p0:#ff8a9c;--p0-bg:#3b2227;--p1:#ffc857;--p1-bg:#3a3020;--p2:#8ec3e6;--p2-bg:#1f2e38;--ok:#5cc98b;}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font:15px/1.55 var(--font);margin:0}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:20px;padding-block:40px 64px;display:grid;gap:48px}
+h1,h2,h3{margin:0;text-wrap:balance;line-height:1.2}
+h1{font-size:30px;font-weight:700;letter-spacing:-.01em}
+h2{font-size:22px;font-weight:600}
+h3{font-size:17px;font-weight:600}
+p{margin:0;max-width:68ch}
+.muted{color:var(--muted)}
+.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+code{font-family:var(--mono);font-size:.86em;background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+header.top{display:grid;gap:12px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:13px;color:var(--muted)}
+.meta b{color:var(--text);font-weight:600}
+
+section{display:grid;gap:20px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px}
+
+/* Audit table */
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:640px}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;background:var(--panel2)}
+tr:last-child td{border-bottom:0}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.sev{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px}
+.sev.p0{color:var(--p0);background:var(--p0-bg)}
+.sev.p1{color:var(--p1);background:var(--p1-bg)}
+.sev.p2{color:var(--p2);background:var(--p2-bg)}
+.good{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.good div{padding:14px 16px;font-size:14px}
+.good b{display:block;margin-bottom:2px}
+.fail{color:var(--p0);font-weight:600}
+
+/* Theme blocks */
+.theme{display:grid;gap:18px;padding:24px}
+.theme__head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px}
+.theme__head .src{font-size:13px;color:var(--muted)}
+.cols{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:820px){.cols{grid-template-columns:1fr}}
+.why{display:grid;gap:10px;font-size:14px}
+.why ul{margin:0;padding-left:18px;display:grid;gap:4px}
+.swatches{display:flex;flex-wrap:wrap;gap:6px}
+.sw{display:flex;align-items:center;gap:6px;font:12px var(--mono);padding:3px 8px 3px 3px;border:1px solid var(--line);border-radius:999px;background:var(--panel2)}
+.sw i{width:16px;height:16px;border-radius:50%;border:1px solid rgb(0 0 0 / 12%)}
+.ratios{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ratios b{color:var(--ok);font-weight:600}
+.modes{display:flex;gap:6px}
+.modes button{font:inherit;font-size:13px;padding:4px 12px;border-radius:999px;border:1px solid var(--line2);background:var(--panel);color:var(--text);cursor:pointer}
+.modes button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.modes button:focus-visible{outline:2px solid var(--accent-text);outline-offset:2px}
+
+/* ——— Mini mail window, painted only from --m-* tokens ——— */
+.mock{--m-radius:10px;--m-row:54px;--m-font:var(--font);--m-read:var(--font);--m-read-size:14px;--m-read-lh:1.55;
+  border-radius:12px;overflow:hidden;border:1px solid var(--m-line);background:var(--m-bg);color:var(--m-text);
+  font-family:var(--m-font);font-size:13px;display:grid;grid-template-columns:132px 200px minmax(0,1fr);min-height:330px;position:relative}
+@media (max-width:620px){.mock{grid-template-columns:1fr}.mock .m-side,.mock .m-list{display:none}}
+.m-side{padding:12px 8px;display:grid;align-content:start;gap:2px;background:var(--m-side);border-right:1px solid var(--m-line)}
+.m-acct{display:flex;gap:4px;margin-bottom:10px}
+.m-acct span{flex:1;text-align:center;font-size:11.5px;font-weight:600;padding:4px 0;border-radius:var(--m-pill,999px);color:var(--m-muted);border:1px solid var(--m-line)}
+.m-acct span.on{background:var(--m-accent);color:var(--m-on-accent);border-color:var(--m-accent)}
+.m-f{display:flex;justify-content:space-between;padding:5px 8px;border-radius:calc(var(--m-radius) - 4px);color:var(--m-text)}
+.m-f.on{background:var(--m-accent-bg);color:var(--m-accent-text);font-weight:600}
+.m-f em{font-style:normal;font-variant-numeric:tabular-nums;color:var(--m-accent-text);font-weight:600;font-size:12px}
+.m-list{border-right:1px solid var(--m-line);background:var(--m-list)}
+.m-row{height:var(--m-row);padding:8px 10px;border-bottom:1px solid var(--m-line);display:grid;align-content:center;gap:1px;overflow:hidden}
+.m-row .who{display:flex;justify-content:space-between;gap:6px;font-weight:500;white-space:nowrap}
+.m-row .who time{color:var(--m-muted);font-weight:400;font-size:11.5px;font-variant-numeric:tabular-nums}
+.m-row .subj{color:var(--m-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+.m-row.unread .who{font-weight:700;color:var(--m-unread)}
+.m-row.sel{background:var(--m-accent-bg)}
+.m-read{padding:16px 18px;display:grid;align-content:start;gap:10px;background:var(--m-panel)}
+.m-read h4{margin:0;font-family:var(--m-font);font-size:15px;font-weight:600;line-height:1.3}
+.m-from{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--m-muted)}
+.m-av{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;background:var(--m-accent-bg);color:var(--m-accent-text)}
+.m-body{font-family:var(--m-read);font-size:var(--m-read-size);line-height:var(--m-read-lh);max-width:60ch}
+.m-body p{margin:0 0 8px}
+.m-actions{display:flex;gap:6px;flex-wrap:wrap}
+.m-btn{font-size:12px;padding:5px 12px;border-radius:var(--m-pill,999px);border:1px solid var(--m-line-strong);color:var(--m-text);background:transparent}
+.m-btn.pri{background:var(--m-accent);color:var(--m-on-accent);border-color:var(--m-accent)}
+
+/* Theme 1 — Бумага */
+.t-paper{--m-bg:#f2efe8;--m-side:#f2efe8;--m-list:#f8f6f1;--m-panel:#fdfbf7;--m-line:#e2dcd0;--m-line-strong:#cbc3b4;
+  --m-text:#1a1a1a;--m-muted:#5f584e;--m-accent:#6b2430;--m-accent-bg:#efe3df;--m-accent-text:#6b2430;--m-on-accent:#fdfbf7;--m-unread:#1a1a1a;
+  --m-read:"PT Serif",Georgia,"Times New Roman",serif;--m-read-size:15.5px;--m-read-lh:1.65;--m-radius:4px;--m-pill:4px}
+/* Theme 2 — Стекло */
+.t-glass{--m-bg:linear-gradient(135deg,#c9d3e6,#e8d9df 55%,#d6e6df);--m-side:rgb(246 246 248 / 62%);--m-list:rgb(255 255 255 / 78%);--m-panel:#ffffff;
+  --m-line:rgb(0 0 0 / 9%);--m-line-strong:rgb(0 0 0 / 16%);--m-text:#1d1d1f;--m-muted:#636368;--m-accent:#7a2432;--m-accent-bg:rgb(122 36 50 / 10%);
+  --m-accent-text:#7a2432;--m-on-accent:#fff;--m-unread:#1d1d1f;--m-font:-apple-system,BlinkMacSystemFont,"Golos Text",system-ui,sans-serif;--m-radius:12px}
+.t-glass .m-side,.t-glass .m-list{backdrop-filter:blur(22px) saturate(170%);-webkit-backdrop-filter:blur(22px) saturate(170%)}
+.t-glass .m-read{margin:8px;border-radius:12px;box-shadow:0 1px 3px rgb(0 0 0 / 8%),0 8px 24px rgb(0 0 0 / 6%)}
+.t-glass.dark{--m-bg:linear-gradient(135deg,#1b2233,#2a1d24 55%,#18261f);--m-side:rgb(30 30 32 / 58%);--m-list:rgb(36 36 38 / 72%);--m-panel:#2c2c2e;
+  --m-line:rgb(255 255 255 / 9%);--m-line-strong:rgb(255 255 255 / 18%);--m-text:#f5f5f7;--m-muted:#a1a1a6;--m-accent:#a33a4b;--m-accent-bg:rgb(255 159 174 / 14%);
+  --m-accent-text:#ff9fae;--m-on-accent:#fff;--m-unread:#f5f5f7}
+/* Theme 3 — Сетка */
+.t-swiss{--m-bg:#ffffff;--m-side:#ffffff;--m-list:#ffffff;--m-panel:#ffffff;--m-line:#e5e5e5;--m-line-strong:#0a0a0a;
+  --m-text:#0a0a0a;--m-muted:#595959;--m-accent:#0a0a0a;--m-accent-bg:#f2f2f2;--m-accent-text:#c8261b;--m-on-accent:#fff;--m-unread:#0a0a0a;
+  --m-radius:2px;--m-pill:2px;--m-row:40px}
+.t-swiss .m-row{grid-template-columns:auto 1fr;align-items:center;column-gap:8px;padding-block:0}
+.t-swiss .m-row .subj{display:none}
+.t-swiss .m-row::before{content:"";width:6px;height:6px;border-radius:50%;background:transparent}
+.t-swiss .m-row.unread::before{background:var(--m-accent-text)}
+.t-swiss .m-f.on{background:transparent;box-shadow:inset 0 -2px 0 var(--m-text);border-radius:0;color:var(--m-text)}
+.t-swiss .m-read h4{font-size:20px;font-weight:700;letter-spacing:-.015em}
+.t-swiss .m-f em{color:var(--m-accent-text)}
+.t-swiss.dark{--m-bg:#000;--m-side:#000;--m-list:#000;--m-panel:#0e0e0f;--m-line:#262626;--m-line-strong:#ededed;--m-text:#ededed;--m-muted:#9a9a9a;
+  --m-accent:#ededed;--m-accent-bg:#1a1a1a;--m-accent-text:#ff5a4e;--m-on-accent:#0a0a0a;--m-unread:#ededed}
+
+.impl{display:grid;gap:10px;font-size:14px}
+.impl ol{margin:0;padding-left:20px;display:grid;gap:6px}
+footer{font-size:13px;color:var(--muted);display:grid;gap:6px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <span class="eyebrow">UI/UX Pro Max · аудит 25.09.2026</span>
+    <h1>AAS mail: три новые темы</h1>
+    <p class="muted">Прогнала веб-интерфейс (<code>web/index.html</code>, <code>web/ui-kit/*.css</code>) по чек-листу скилла ui-ux-pro-max v2.2.3, по приоритетам 1–7: доступность, взаимодействие, производительность, стиль, вёрстка, типографика и цвет, анимация. Контраст посчитан скриптом по формуле WCAG для каждой из восьми существующих тем. Ниже 8 находок и 3 темы, которых в приложении пока нет.</p>
+    <div class="meta"><span><b>8</b> существующих тем проверено</span><span><b>2</b> P0 · <b>4</b> P1 · <b>2</b> P2</span><span>Рекомендация скилла по умолчанию («Inbox blue» #2563EB) отброшена: синий в DESIGN.md записан в антипаттерны</span></div>
+  </header>
+
+  <section>
+    <h2>Что уже хорошо</h2>
+    <div class="good">
+      <div class="card"><b>Токены и темы</b>Все цвета идут через <code>--aas-*</code>, смена темы меняет только переменные. Новая тема = один CSS-блок.</div>
+      <div class="card"><b>Базовые темы по контрасту</b>Светлая и тёмная проходят AA: muted/panel 5.0 и 6.1.</div>
+      <div class="card"><b>Motion</b>Одна длительность 180 мс, <code>prefers-reduced-motion</code> обнуляет её.</div>
+      <div class="card"><b>Иконки и цифры</b>Эмодзи нет, одна SVG-обводка; <code>tabular-nums</code> на счётчиках и времени.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Находки</h2>
+    <div class="card scroll">
+      <table>
+        <thead><tr><th>Приор.</th><th>Правило скилла</th><th>Где</th><th>Что не так</th></tr></thead>
+        <tbody>
+          <tr><td><span class="sev p0">P0</span></td><td><code>color-contrast</code></td><td>tokens.css · royal-velvet-light</td><td>Текст <code>#f8f8f2</code> на кнопке <code>#d94f9a</code> даёт <span class="fail">3.56:1</span>. Мелкий текст на акцентной заливке не проходит AA 4.5.</td></tr>
+          <tr><td><span class="sev p0">P0</span></td><td><code>color-contrast</code></td><td>tokens.css · navy-orange-light, eclipse-almond</td><td>Muted-текст (даты, превью, счётчики): <span class="fail">3.82 / 3.63</span> в Navy светлой, <span class="fail">3.63</span> в Eclipse. Основной текст Eclipse на панели всего 5.95:1, для длинного чтения мало.</td></tr>
+          <tr><td><span class="sev p1">P1</span></td><td><code>readable-font-size</code></td><td>app.css ×8, components.css ×3</td><td>11 правил с 10–11 px: бейджи, метки, <code>.aas-people__badge</code> 10 px. Шкала DESIGN.md начинается с 12.</td></tr>
+          <tr><td><span class="sev p1">P1</span></td><td><code>focus-states</code></td><td>app.css:1352, 1383</td><td><code>outline:none</code> на <code>:focus-visible</code> у ресайзера и пунктов меню. У меню остаётся только фон, у ресайзера фокус не виден совсем.</td></tr>
+          <tr><td><span class="sev p1">P1</span></td><td><code>font-loading</code></td><td>index.html:8–10</td><td>Golos Text грузится с Google Fonts. Без сети (VPN банка, самолёт) приложение молча падает на системный шрифт, и каждая загрузка уходит во внешний сервис. Шрифт лучше положить в бандл через <code>@font-face</code>.</td></tr>
+          <tr><td><span class="sev p1">P1</span></td><td><code>contextual-live-badge-updates</code></td><td>index.html</td><td>Всего один <code>aria-live</code>/<code>role=status</code>. Новые письма, итог синка и ошибки Exchange скринридер не озвучивает.</td></tr>
+          <tr><td><span class="sev p2">P2</span></td><td><code>z-index-management</code></td><td>app.css, components.css</td><td>10 разных значений (2, 3, 4, 5, 20, 30, 50, 80, 99, 120) без шкалы. Нужны токены <code>--aas-z-*</code>: base / sticky / drawer / menu / modal / toast.</td></tr>
+          <tr><td><span class="sev p2">P2</span></td><td><code>color-semantic</code></td><td>app.css + components.css</td><td>25 «сырых» hex вне tokens.css. Каждый из них не перекрашивается темой, и новая тема упрётся в эти места.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">Все 8 пунктов обходятся без изменения логики: только CSS и разметка. P0 правятся заменой 4 hex-значений в tokens.css.</p>
+  </section>
+
+  <section>
+    <h2>Три темы</h2>
+    <p class="muted">Существующие темы (Navy, Velvet, Eclipse) меняют только палитру. Эти три меняют ещё и «материал»: шрифт чтения, плотность, радиусы, прозрачность. Каждая основана на стиле из базы скилла, а цвета подобраны под Vinho банка и Verde Селлера. Все пары проверены на AA.</p>
+
+    <!-- Theme 1 -->
+    <article class="card theme">
+      <div class="theme__head"><h3>1. «Бумага»</h3><span class="src">стиль <code>e-ink-paper</code> · только светлая</span></div>
+      <div class="cols">
+        <div class="mock t-paper" aria-label="Превью темы Бумага">
+          <div class="m-side"><div class="m-acct"><span class="on">Банк</span><span>Селлер</span></div>
+            <div class="m-f on">Входящие <em>12</em></div><div class="m-f">Отправленные</div><div class="m-f">Черновики</div><div class="m-f">Архив</div></div>
+          <div class="m-list">
+            <div class="m-row unread sel"><div class="who">Кредитный комитет <time>10:42</time></div><div class="subj">Повестка на четверг и материалы</div></div>
+            <div class="m-row unread"><div class="who">Служба ИБ <time>09:15</time></div><div class="subj">Плановая смена паролей</div></div>
+            <div class="m-row"><div class="who">А. Смирнова <time>вчера</time></div><div class="subj">Re: отчёт за III квартал</div></div>
+            <div class="m-row"><div class="who">HR-портал <time>вчера</time></div><div class="subj">Опрос вовлечённости</div></div>
+          </div>
+          <div class="m-read"><h4>Повестка на четверг и материалы</h4>
+            <div class="m-from"><span class="m-av">КК</span>Кредитный комитет · 10:42</div>
+            <div class="m-body"><p>Коллеги, добрый день. Направляем повестку заседания и пакет документов по трём заявкам.</p><p>Просьба до среды отметить вопросы, по которым нужен докладчик.</p></div>
+            <div class="m-actions"><span class="m-btn pri">Ответить</span><span class="m-btn">Переслать</span></div></div>
+        </div>
+        <div class="why">
+          <p>Для тех, кто читает длинные письма и регламенты. Письмо набрано серифом PT Serif (с кириллицей) 15.5 px, интерлиньяж 1.65, строка до 60 знаков. Интерфейс остаётся на Golos Text.</p>
+          <ul><li>Без теней и анимаций, переходы мгновенные: в стиле нет <code>transition</code>.</li><li>Радиусы 4 px, кнопки прямоугольные.</li><li>Вместо яркого Vinho чернильный <code>#6b2430</code>.</li></ul>
+          <div class="swatches"><span class="sw"><i style="background:#fdfbf7"></i>#FDFBF7</span><span class="sw"><i style="background:#f2efe8"></i>#F2EFE8</span><span class="sw"><i style="background:#1a1a1a"></i>#1A1A1A</span><span class="sw"><i style="background:#5f584e"></i>#5F584E</span><span class="sw"><i style="background:#6b2430"></i>#6B2430</span><span class="sw"><i style="background:#1f4a3f"></i>#1F4A3F</span></div>
+          <div class="ratios">текст <b>16.8</b> · muted <b>6.8</b> · банк <b>10.6</b> · селлер <b>9.6</b></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- Theme 2 -->
+    <article class="card theme">
+      <div class="theme__head"><h3>2. «Стекло»</h3><span class="src">стиль <code>liquid-glass</code> · светлая и тёмная</span>
+        <div class="modes" role="group" aria-label="Режим превью Стекла"><button type="button" id="glass-l" aria-pressed="true">Светлая</button><button type="button" id="glass-d" aria-pressed="false">Тёмная</button></div></div>
+      <div class="cols">
+        <div class="mock t-glass" id="glass" aria-label="Превью темы Стекло">
+          <div class="m-side"><div class="m-acct"><span class="on">Банк</span><span>Селлер</span></div>
+            <div class="m-f on">Входящие <em>12</em></div><div class="m-f">Отправленные</div><div class="m-f">Черновики</div><div class="m-f">Архив</div></div>
+          <div class="m-list">
+            <div class="m-row unread sel"><div class="who">Кредитный комитет <time>10:42</time></div><div class="subj">Повестка на четверг и материалы</div></div>
+            <div class="m-row unread"><div class="who">Служба ИБ <time>09:15</time></div><div class="subj">Плановая смена паролей</div></div>
+            <div class="m-row"><div class="who">А. Смирнова <time>вчера</time></div><div class="subj">Re: отчёт за III квартал</div></div>
+            <div class="m-row"><div class="who">HR-портал <time>вчера</time></div><div class="subj">Опрос вовлечённости</div></div>
+          </div>
+          <div class="m-read"><h4>Повестка на четверг и материалы</h4>
+            <div class="m-from"><span class="m-av">КК</span>Кредитный комитет · 10:42</div>
+            <div class="m-body"><p>Коллеги, добрый день. Направляем повестку заседания и пакет документов по трём заявкам.</p><p>Просьба до среды отметить вопросы, по которым нужен докладчик.</p></div>
+            <div class="m-actions"><span class="m-btn pri">Ответить</span><span class="m-btn">Переслать</span></div></div>
+        </div>
+        <div class="why">
+          <p>Нативный macOS Tahoe. Сайдбар и список полупрозрачные, сквозь них видны рабочий стол и обои, а письмо лежит на непрозрачной карточке: по HIG стекло только для навигации, не для контента.</p>
+          <ul><li>Почти всё уже готово: в <code>app/main.swift:81</code> стоит <code>drawsBackground = false</code>. Остаётся положить <code>NSVisualEffectView</code> (<code>.sidebar</code>) под WKWebView.</li><li>Шрифт интерфейса SF Pro, чтение остаётся на Golos.</li><li>Обязателен fallback: при <code>prefers-reduced-transparency</code> панели становятся непрозрачными.</li><li><code>backdrop-filter</code> только на двух колонках. На каждой строке списка он будет тормозить.</li></ul>
+          <div class="swatches"><span class="sw"><i style="background:#1d1d1f"></i>#1D1D1F</span><span class="sw"><i style="background:#636368"></i>#636368</span><span class="sw"><i style="background:#7a2432"></i>#7A2432</span><span class="sw"><i style="background:#00604d"></i>#00604D</span><span class="sw"><i style="background:#2c2c2e"></i>#2C2C2E</span><span class="sw"><i style="background:#ff9fae"></i>#FF9FAE</span></div>
+          <div class="ratios">светлая: текст <b>16.8</b> · muted <b>6.0</b> · банк <b>9.9</b> — тёмная: текст <b>12.8</b> · muted <b>5.4</b> · банк <b>7.2</b></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- Theme 3 -->
+    <article class="card theme">
+      <div class="theme__head"><h3>3. «Сетка»</h3><span class="src">стили <code>minimalism-and-swiss-style</code> + <code>data-dense-dashboard</code>, тёмная из <code>dark-mode-oled</code></span>
+        <div class="modes" role="group" aria-label="Режим превью Сетки"><button type="button" id="swiss-l" aria-pressed="true">Светлая</button><button type="button" id="swiss-d" aria-pressed="false">OLED</button></div></div>
+      <div class="cols">
+        <div class="mock t-swiss" id="swiss" aria-label="Превью темы Сетка">
+          <div class="m-side"><div class="m-acct"><span class="on">Банк</span><span>Селлер</span></div>
+            <div class="m-f on">Входящие <em>12</em></div><div class="m-f">Отправленные</div><div class="m-f">Черновики</div><div class="m-f">Архив</div></div>
+          <div class="m-list">
+            <div class="m-row unread sel"><div class="who">Кредитный комитет <time>10:42</time></div></div>
+            <div class="m-row unread"><div class="who">Служба ИБ <time>09:15</time></div></div>
+            <div class="m-row"><div class="who">А. Смирнова <time>вчера</time></div></div>
+            <div class="m-row"><div class="who">HR-портал <time>вчера</time></div></div>
+            <div class="m-row"><div class="who">Казначейство <time>вт</time></div></div>
+            <div class="m-row"><div class="who">Сервис-деск <time>вт</time></div></div>
+          </div>
+          <div class="m-read"><h4>Повестка на четверг и материалы</h4>
+            <div class="m-from"><span class="m-av">КК</span>Кредитный комитет · 10:42</div>
+            <div class="m-body"><p>Коллеги, добрый день. Направляем повестку заседания и пакет документов по трём заявкам.</p><p>Просьба до среды отметить вопросы, по которым нужен докладчик.</p></div>
+            <div class="m-actions"><span class="m-btn pri">Ответить</span><span class="m-btn">Переслать</span></div></div>
+        </div>
+        <div class="why">
+          <p>Для тех, у кого 200 писем в день. Монохром и один красный акцент Альфы <code>#C8261B</code>, затемнённый с <code>#EF3124</code>: у оригинала белый текст даёт всего 4.09. Строка списка 40 px в одну линию, в видимую область помещается в полтора раза больше писем.</p>
+          <ul><li>Непрочитанное = красная точка + жирный, а не заливка.</li><li>Активная папка = подчёркивание 2 px, радиусы 2 px, теней нет.</li><li>Тёмный вариант с чистым <code>#000</code>: на OLED-мониторах и в темноте.</li><li>Банк и Селлер различаются только маркой аккаунта. Если нужна цветовая привязка, вернуть Verde на пилюлю Селлера.</li></ul>
+          <div class="swatches"><span class="sw"><i style="background:#ffffff"></i>#FFFFFF</span><span class="sw"><i style="background:#0a0a0a"></i>#0A0A0A</span><span class="sw"><i style="background:#595959"></i>#595959</span><span class="sw"><i style="background:#c8261b"></i>#C8261B</span><span class="sw"><i style="background:#000000"></i>#000000</span><span class="sw"><i style="background:#ff5a4e"></i>#FF5A4E</span></div>
+          <div class="ratios">светлая: текст <b>19.8</b> · muted <b>7.0</b> · красный <b>5.6</b> — OLED: текст <b>16.5</b> · muted <b>6.9</b> · красный <b>6.3</b></div>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <section class="card theme impl">
+    <h2>Как встроить</h2>
+    <ol>
+      <li>Добавить ключи в whitelist тем: <code>index.html:19</code> и <code>:290</code>, кнопки в Настройках на <code>:1989</code>.</li>
+      <li>Цвета: блоки <code>:root[data-theme="paper"]</code>, <code>glass</code> / <code>glass-dark</code>, <code>swiss</code> / <code>swiss-oled</code> в <code>tokens.css</code> по образцу navy-orange.</li>
+      <li>Не только цвета: вынести в токены <code>--aas-font-read</code>, <code>--aas-row-h</code>, <code>--aas-r-*</code> и <code>--aas-dur</code>, чтобы тема могла их переопределять. Сейчас это литералы в app.css.</li>
+      <li>«Стекло»: <code>NSVisualEffectView</code> в main.swift + мост <code>window.aasSetVibrancy(on)</code>, чтобы Swift включал материал только в этой теме.</li>
+      <li>Сначала закрыть P0 по контрасту: новые темы наследуют те же компоненты.</li>
+    </ol>
+  </section>
+
+  <footer>
+    <span>Источник данных: ui-ux-pro-max 2.2.3 (<code>search.py --design-system</code>, <code>--domain style|color|typography</code>), контраст по формуле WCAG 2.2.</span>
+    <span>Файл: <code>docs/ux-audit/2026-09-25-uipro-audit.html</code></span>
+  </footer>
+</div>
+
+<script>
+function pair(a,b,el,cls){
+  const A=document.getElementById(a),B=document.getElementById(b),M=document.getElementById(el);
+  A.onclick=()=>{M.classList.remove(cls);A.setAttribute('aria-pressed','true');B.setAttribute('aria-pressed','false')};
+  B.onclick=()=>{M.classList.add(cls);B.setAttribute('aria-pressed','true');A.setAttribute('aria-pressed','false')};
+}
+pair('glass-l','glass-d','glass','dark');
+pair('swiss-l','swiss-d','swiss','dark');
+</script>

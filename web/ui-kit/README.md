@@ -15,7 +15,7 @@
 ## Подключение
 
 ```html
-<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/ui-kit/fonts.css" />  <!-- Golos Text из бандла (fonts/, OFL), без Google Fonts -->
 <link rel="stylesheet" href="./ui-kit/tokens.css" />
 <link rel="stylesheet" href="./ui-kit/components.css" />
 ```

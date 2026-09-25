@@ -83,6 +83,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                           styleMask: [.titled, .closable, .miniaturizable, .resizable],
                           backing: .buffered, defer: false)
         window.title = "AAS mail"
+        // Below this the three mail columns cannot fit even with the folder drawer.
+        window.minSize = NSSize(width: 640, height: 480)
         // AAS-24-06: closing the window only hides it. The default (released on
         // close) destroyed it, so neither the Dock nor the tray could bring it back
         // — only Quit + relaunch. Hidden, it also keeps the open tab and folder.
@@ -124,13 +126,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
-    /// With the window closed WebKit may hold back the page's timers; nudge its light
-    /// Inbox pass so counters, new-mail alerts and the Dock badge stay current.
+    /// WebKit holds back the page's timers whenever the window is closed, minimised,
+    /// behind other windows or the app is in the background — «каждые 2 минуты» then
+    /// slipped to 10+. Every minute ask the page whether a sync is due (it keeps the
+    /// interval from Settings and skips when one ran recently).
     func startHiddenSyncNudge() {
-        Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, !self.window.isVisible || self.window.isMiniaturized else { return }
-                self.web.evaluateJavaScript("typeof autoSyncTick==='function' && autoSyncTick()")
+                guard let self else { return }
+                self.web.evaluateJavaScript(
+                    "typeof autoSyncDue==='function' ? autoSyncDue() : (typeof autoSyncTick==='function' && autoSyncTick())")
             }
         }
     }

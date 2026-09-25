@@ -5,9 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="tok" content="__TOKEN__">
 <title>AAS mail</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/ui-kit/fonts.css" /><!-- Golos Text, bundled: no request leaves the Mac -->
 <link rel="stylesheet" href="/ui-kit/tokens.css" />
 <link rel="stylesheet" href="/ui-kit/components.css" />
 <link rel="stylesheet" href="/ui-kit/app.css" />
@@ -37,7 +35,7 @@ try {
   <input id="search" type="search" placeholder="Поиск по почте" aria-label="Поиск по почте">
   <span id="synctxt" class="aas-sync__txt"></span>
   <button class="aas-btn aas-sync" id="syncbtn" title="Принудительная синхронизация почты и календаря с сервером"><svg class="aas-sync__ic ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.6-4.5L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.5L20 16"/><path d="M20 21v-5h-5"/></svg><span class="lbl">Синхронизировать</span></button>
-  <button class="aas-btn aas-btn--primary" id="newbtn">Создать</button>
+  <button class="aas-btn aas-btn--primary" id="newbtn" title="Создать"><svg class="aas-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="lbl">Создать</span></button>
   <button class="aas-btn aas-btn--ghost aas-setbtn" id="setbtn" title="Настройки" aria-label="Настройки"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   <button type="button" class="aas-status-dot" id="dot" title="Нет связи с почтовым сервером (VPN, пароль или сбой сервера). Нажмите, чтобы повторить. Пока связь есть — этой плашки не видно.">Нет связи</button>
 </header>
@@ -47,6 +45,7 @@ try {
     <div class="aas-resizer" id="foldresize" role="separator" aria-orientation="vertical" aria-label="Ширина панели папок" tabindex="0" title="Потяните, чтобы изменить ширину"></div>
     <div id="list">
       <div id="listbar" class="aas-listbar">
+        <button type="button" class="aas-btn aas-btn--ghost aas-btn--icon" id="foldtoggle" title="Папки" aria-label="Показать папки" aria-expanded="false"><svg class="aas-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg></button>
         <label class="aas-bulkbar__all aas-listbar__all" title="Выбрать все письма на экране"><input type="checkbox" id="selall0" aria-label="Выбрать все"></label>
         <span class="aas-listbar__head"><span id="listtitle">Входящие</span><span id="listunread" class="aas-listbar__unread"></span></span>
         <span class="aas-viewwrap">
@@ -252,6 +251,7 @@ function avatar(p) {
 /** Stroke icons (one set, 1.8 px) instead of emoji and text glyphs. */
 const ICONS = {
   clip: '<path d="m21.4 11.6-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/>',
+  replyOne: '<path d="m9 17-5-5 5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>',
   replyAll: '<path d="m7 17-5-5 5-5"/><path d="m12 17-5-5 5-5"/><path d="M22 18v-2a4 4 0 0 0-4-4H7"/>',
   fwd: '<path d="m15 17 5-5-5-5"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/>',
   trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
@@ -466,7 +466,8 @@ function paintTabBadges() {
     badge.hidden = !n;
     badge.textContent = n > 99 ? '99+' : String(n);
     const auth = accounts.find(a => a.id === acct)?.auth_error;
-    b.title = auth || `Входящие: ${n} непрочитанных · всего в ящике: ${u.total || 0}${b.dataset.key ? ` (${b.dataset.key})` : ''}`;
+    const nm = b.querySelector('.aas-tab__name')?.textContent || '';
+    b.title = auth || `${nm}: во «Входящих» ${n} непрочитанных · всего в ящике: ${u.total || 0}${b.dataset.key ? ` (${b.dataset.key})` : ''}`;
   });
   // AAS-24-05: same rule on the Dock icon (sum of every account's Inbox).
   const total = accounts.reduce((sum, a) => sum + inboxUnread(a.id), 0);
@@ -570,7 +571,8 @@ function showView(v, acctId = 'main') {
   document.querySelectorAll('#sect [data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === v));
   document.querySelectorAll('.view').forEach(s => s.classList.toggle('on', s.id === v));
   $('#search').style.visibility = v === 'mail' ? '' : 'hidden';  // keep its slot: no header jump
-  $('#newbtn').textContent = v === 'cal' ? 'Новое событие' : 'Создать';
+  const nl = $('#newbtn .lbl'); if (nl) nl.textContent = v === 'cal' ? 'Новое событие' : 'Создать';
+  $('#newbtn').title = v === 'cal' ? 'Новое событие' : 'Новое письмо (C)';
   if (v === 'cal') { loadCal(); syncCalDelta(); }
   // Back on a mail tab from its saved state: pull what changed meanwhile (a fresh
   // account's first load is already a sync).
@@ -658,7 +660,7 @@ function noteIncoming(acct, items) {
     });
   } catch (_) {}
 }
-async function refreshInboxBadge(id) {
+async function refreshInboxBadge(id, tick = '') {
   if (!inboxIds[id]) {
     const f = await api('folders', {action: 'list'}, id);
     inboxIds[id] = (f.items || []).find(x => String(x.type) === '2')?.folder_id;
@@ -672,28 +674,29 @@ async function refreshInboxBadge(id) {
       noteIncoming(id, j.items || []);
     } catch (_) {}
   }
-  const j = await api('unread', {}, id);
+  const j = await api('unread', tick ? {tick} : {}, id);
   showNotices(j);
   setUnread(id, j);
   if (id === ACCT) renderFolders(folderItems);
   paintTabBadges();
 }
-let autoBusy = false;
+let autoBusy = false, lastTick = 0;
 async function autoSyncTick() {
   if (autoBusy || syncing) return;
-  autoBusy = true;
+  autoBusy = true; lastTick = Date.now();
   try {
     if (document.hidden) {
       // Window closed/minimised: keep Inbox counters, new-mail alerts and the Dock
       // badge alive (AAS-24-05) — but skip the open folder and the calendar grid.
-      await Promise.allSettled(accounts.map(a => refreshInboxBadge(a.id)));
+      await Promise.allSettled(accounts.map(a => refreshInboxBadge(a.id, 'hidden')));
       paintTabBadges();
+      lastSync = new Date(); setSyncText();
       return;
     }
     const jobs = [];
     if (view === 'mail' && !searchQ && curFolder) jobs.push(loadListQuiet());
     if (view === 'cal' && !modalOpen()) jobs.push(loadCal(true));
-    for (const a of accounts) jobs.push(refreshInboxBadge(a.id));
+    accounts.forEach((a, i) => jobs.push(refreshInboxBadge(a.id, i ? '' : 'visible')));
     await Promise.allSettled(jobs);
     accounts.forEach(a => sweepUnread(a.id));
     paintTabBadges();
@@ -766,9 +769,20 @@ function armUpdates(delay = 15000) {
   }, delay);
 }
 
+/** Called by the native shell every minute, whatever the window state: WebKit holds
+ *  back page timers of a window that is behind others or in a background app, so
+ *  setInterval alone let «каждые 2 минуты» slip to 10+. Runs a tick when one is due. */
+function autoSyncDue() {
+  if (!(prefs.auto_sync > 0)) return false;
+  if (Date.now() - lastTick < prefs.auto_sync * 60000 - 5000) return false;
+  autoSyncTick();
+  return true;
+}
 function armAutoSync() {
   clearInterval(autoTimer);
-  if (prefs.auto_sync > 0) autoTimer = setInterval(autoSyncTick, prefs.auto_sync * 60000);
+  // Checked often, run when due: the page timer and the native one share lastTick,
+  // so they never both fire a tick for the same slot.
+  if (prefs.auto_sync > 0) autoTimer = setInterval(autoSyncDue, 15000);
 }
 // Coming back to the window (it may have been hidden for a while): catch up at once.
 document.addEventListener('visibilitychange', () => {
@@ -842,9 +856,11 @@ function recountOpenFolder() {
 const acctStates = {};
 // View settings (threads, period, calendar week/mode) are shared by all accounts, so
 // Bank and Seller always show the same period and the same calendar week.
-const freshState = () => ({folderItems: [], curFolder: null, nextCursor: null, searchQ: '', allItems: [], curKey: null, curGroup: null, cards: [], events: [], lastSync: null});
-const snapshot = () => ({folderItems, curFolder, nextCursor, searchQ, allItems, curKey, curGroup, cards, events, lastSync});
-function restore(s) { ({folderItems, curFolder, nextCursor, searchQ, allItems, curKey, curGroup, cards, events, lastSync} = s); }
+// The last sync time is one for the app (a tick covers every account): not swapped
+// per account, or switching Bank ⇄ Seller showed the other one's stale «Обновлено».
+const freshState = () => ({folderItems: [], curFolder: null, nextCursor: null, searchQ: '', allItems: [], curKey: null, curGroup: null, cards: [], events: []});
+const snapshot = () => ({folderItems, curFolder, nextCursor, searchQ, allItems, curKey, curGroup, cards, events});
+function restore(s) { ({folderItems, curFolder, nextCursor, searchQ, allItems, curKey, curGroup, cards, events} = s); }
 function switchAccount(id) {
   if (id === ACCT) return;
   acctStates[ACCT] = snapshot(); ACCT = id; openToken++;
@@ -1266,7 +1282,7 @@ function openGroup(g) {
       <button class="aas-btn" data-a="${anyUnread ? 'read' : 'unread'}" title="${anyUnread ? 'Отметить прочитанным' : 'Отметить непрочитанным'}" aria-label="${anyUnread ? 'Отметить прочитанным' : 'Отметить непрочитанным'}"><span class="aas-readdot${anyUnread ? ' aas-readdot--read' : ''}"></span><span class="lbl">${anyUnread ? 'Прочитано' : 'Непрочитано'}</span></button>
       ${tb('all', 'expand', 'Развернуть все')}${tb('del', 'trash', 'Удалить', 'aas-btn--danger')}
     </div>
-    <div id="conv"><div id="chead"><h2>${esc(subject)}</h2><div class="meta" id="cmeta"></div></div><div id="cards"></div></div>`;
+    <div id="conv"><div class="aas-thread"><div id="chead"><h2>${esc(subject)}</h2><div class="meta" id="cmeta"></div></div><div id="cards"></div></div></div>`;
   g.items.forEach(m => addCard(m));
   layoutCards();
   const last = cards[cards.length - 1];
@@ -1289,10 +1305,19 @@ function openGroup(g) {
 function addCard(m) {
   const c = {m, j: null, open: false, el: document.createElement('div')};
   c.el.className = 'aas-mc' + (m.is_read ? '' : ' unread');
-  c.el.innerHTML = `<div class="aas-mc__head" role="button" tabindex="0" aria-expanded="false"><span class="aas-mc__who">${esc(who(m.from))}</span><span class="aas-mc__snip">${esc(cleanPreview(m.preview))}</span>${m.has_attachments ? `<span class="aas-mc__clip" title="Есть вложения">${icon('clip', 13)}</span>` : ''}<span class="aas-mc__when" title="${esc(m.received || '')}">${esc(fmtWhen(m.received, true))}</span></div><div class="aas-mc__body"></div>`;
+  // Closed: sender · date / preview. Open: avatar, sender, short recipients, time and
+  // the letter's own reply actions (the rest of the head is filled by renderCard).
+  c.el.innerHTML = `<div class="aas-mc__head" role="button" tabindex="0" aria-expanded="false">
+      <span class="aas-mc__av">${avatar(m.from)}</span>
+      <span class="aas-mc__who">${esc(who(m.from))}</span>
+      <span class="aas-mc__meta2">${m.has_attachments ? `<span class="aas-mc__clip" title="Есть вложения">${icon('clip', 13)}</span>` : ''}<span class="aas-mc__when" title="${esc(m.received || '')}">${esc(fmtWhen(m.received, true))}</span></span>
+      <span class="aas-mc__snip">${esc(cleanPreview(m.preview))}</span>
+      <span class="aas-mc__to"></span>
+      <span class="aas-mc__hacts"></span>
+    </div><div class="aas-mc__body"></div>`;
   const head = c.el.querySelector('.aas-mc__head');
-  head.onclick = () => toggleCard(c);
-  head.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCard(c); } };
+  head.onclick = e => { if (!e.target.closest('.aas-mc__hacts, .aas-mc__to button')) toggleCard(c); };
+  head.onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === head) { e.preventDefault(); toggleCard(c); } };
   cards.push(c);
 }
 /* Long conversations: the first letter, «ещё N писем», and the last two stay visible;
@@ -1305,11 +1330,11 @@ function layoutCards() {
   const mid = midOpen ? [] : cards.slice(1, -2).filter(c => !c.open);
   cards.forEach(c => c.el.classList.toggle('aas-mc--folded', mid.includes(c)));
   if (mid.length >= 2) {
-    const b = document.createElement('button');
-    b.type = 'button'; b.className = 'aas-mc-more';
+    const row = document.createElement('div'); row.className = 'aas-mc-more';
+    const b = document.createElement('button'); b.type = 'button';
     b.textContent = `ещё ${mid.length} ${plural(mid.length, 'письмо', 'письма', 'писем')}`;
     b.onclick = () => { midOpen = true; layoutCards(); };
-    host.insertBefore(b, mid[0].el);
+    row.appendChild(b); host.insertBefore(row, mid[0].el);
   } else mid.forEach(c => c.el.classList.remove('aas-mc--folded'));
   const people = new Set(cards.map(c => who(c.m.from)).filter(Boolean)).size;
   $('#cmeta').textContent = cards.length > 1 ? `${cards.length} ${plural(cards.length, 'письмо', 'письма', 'писем')}, ${people} ${plural(people, 'участник', 'участника', 'участников')}` : '';
@@ -1423,27 +1448,105 @@ function bindAttachments(box, m, atts) {
 }
 /** Native shell reports the outcome of a save/open. */
 function aasSaved(ok, text) { toast(text, !ok); }
+/** «мне, Шевчук А., Мухина В. и ещё 5» — who got the letter, in one short line. */
+function shortRecips(j) {
+  const me = ((accounts.find(a => a.id === ACCT) || {}).email || '').toLowerCase();
+  const all = [...(j.to || []), ...(j.cc || [])];
+  const short = p => {
+    if ((p.address || '').toLowerCase() === me) return 'мне';
+    const w = String(p.name || p.address || '').replace(/["']/g, '').split(/[\s,]+/).filter(Boolean);
+    return w.length >= 2 ? `${w[0]} ${w[1][0]}.` : (w[0] || '');
+  };
+  const names = [...new Set(all.map(short).filter(Boolean))];
+  names.sort((x, y) => (y === 'мне') - (x === 'мне'));
+  return names.length > 3 ? `${names.slice(0, 3).join(', ')} и ещё ${names.length - 3}` : names.join(', ');
+}
 function renderCard(c) {
   const j = c.j, m = c.m, mb = c.el.querySelector('.aas-mc__body');
-  mb.innerHTML = `<div class="aas-mc__meta"><div class="aas-mc__from"><b>${esc(j.from.map(whoFull).join(', '))}</b></div>${recipBlock('Кому', j.to)}${recipBlock('Копия', j.cc)}</div>
-    <div class="aas-mc__acts"><button class="aas-btn aas-btn--sm" data-a="reply">Ответить</button><button class="aas-btn aas-btn--sm" data-a="replyall">Ответить всем</button><button class="aas-btn aas-btn--sm" data-a="fwd">Переслать</button></div>
+  const to = c.el.querySelector('.aas-mc__to');
+  to.innerHTML = `<button type="button" class="aas-mc__tobtn" aria-expanded="false" title="Показать всех адресатов">${esc(shortRecips(j) || 'без адресатов')}</button>`;
+  const ha = c.el.querySelector('.aas-mc__hacts');
+  ha.innerHTML = [['reply', 'reply', 'Ответить'], ['replyall', 'replyAll', 'Ответить всем'], ['fwd', 'fwd', 'Переслать']]
+    .map(([a, ic, t]) => `<button type="button" class="aas-btn aas-btn--ghost aas-btn--icon" data-a="${a}" title="${t}" aria-label="${t}">${icon(ic === 'reply' ? 'replyOne' : ic)}</button>`).join('');
+  mb.innerHTML = `<div class="aas-mc__meta" hidden><div class="aas-mc__from">От: ${esc(j.from.map(whoFull).join(', '))}</div>${recipBlock('Кому', j.to)}${recipBlock('Копия', j.cc)}</div>
     ${attachmentsHtml(m, [...j.attachments, ...(j.images || [])])}
     ${j.invite ? inviteCard(j.invite) : ''}
     ${j.html ? '<div class="aas-imgbar">Внешние картинки заблокированы. <a href="#" class="showimg">Показать</a></div>' : ''}
     <iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" scrolling="no"></iframe>`;
+  to.querySelector('button').onclick = e => {
+    e.stopPropagation(); const meta = mb.querySelector('.aas-mc__meta'); meta.hidden = !meta.hidden;
+    e.currentTarget.setAttribute('aria-expanded', String(!meta.hidden));
+  };
   bindInviteCard(mb, c);
   bindAttachments(mb, m, [...j.attachments, ...(j.images || [])]);
   const fr = mb.querySelector('iframe'), bar = mb.querySelector('.aas-imgbar');
+  // A reply carries the whole conversation below it; that history is already on
+  // screen as the other letters, so it folds under «Показать историю переписки».
+  const fwd = /^\s*(fwd?|fw|пересл\w*)\s*:/i.test(j.subject || m.subject || '');
   const setFrame = allowImg => {
     const csp = `default-src 'none'; style-src 'unsafe-inline'; img-src data: ${allowImg ? 'https: http:' : ''}`;
-    const body = j.html || `<pre style="white-space:pre-wrap;font:14px/1.5 -apple-system,system-ui,sans-serif">${linkify(esc(j.text))}</pre>`;
-    fr.srcdoc = `<meta http-equiv="Content-Security-Policy" content="${csp}"><base target="_blank"><style>body{font:14px/1.5 -apple-system,system-ui,sans-serif;margin:8px 14px;color:#1f2328;background:#fff;overflow-y:hidden}img{max-width:100%;height:auto}</style>${body}`;
+    const body = fwd ? (j.html || textBody(j.text)) : (j.html ? foldQuoteHtml(j.html) : foldQuoteText(j.text));
+    fr.srcdoc = `<meta http-equiv="Content-Security-Policy" content="${csp}"><base target="_blank"><style>body{font:14px/1.5 -apple-system,system-ui,sans-serif;margin:8px 14px;color:#1f2328;background:#fff;overflow-y:hidden}img{max-width:100%;height:auto}
+      details.aas-q{margin-top:10px}details.aas-q>summary{cursor:pointer;color:#66707a;font-size:12px;list-style:none;display:inline-block;padding:2px 10px;border:1px solid #e3e6ea;border-radius:999px}
+      details.aas-q>summary::-webkit-details-marker{display:none}details.aas-q[open]>summary{margin-bottom:8px}</style>${body}`;
     if (j.html && !allowImg && bar && /<img[^>]+src=["']?https?:/i.test(j.html)) bar.style.display = 'block';
   };
-  fr.onload = () => { try { fr.style.height = (fr.contentDocument.documentElement.scrollHeight + 6) + 'px'; } catch (e) { fr.style.height = '480px'; } };
+  const fit = () => { try { fr.style.height = (fr.contentDocument.documentElement.scrollHeight + 6) + 'px'; } catch (e) { fr.style.height = '480px'; } };
+  fr.onload = () => { fit(); try { fr.contentDocument.addEventListener('toggle', fit, true); } catch (_) {} };
   setFrame(false);
   const show = mb.querySelector('.showimg'); if (show) show.onclick = e => { e.preventDefault(); bar.style.display = 'none'; setFrame(true); };
-  mb.querySelector('.aas-mc__acts').onclick = guard(e => { const a = e.target.dataset?.a; if (a) return act(a, c); });
+  ha.onclick = guard(e => { e.stopPropagation(); const a = e.target.closest('[data-a]')?.dataset.a; if (a) return act(a, c); });
+}
+const textBody = t => `<pre style="white-space:pre-wrap;font:14px/1.5 -apple-system,system-ui,sans-serif;margin:0">${linkify(esc(t || ''))}</pre>`;
+const QUOTE_SUMMARY = '<summary>Показать историю переписки</summary>';
+/** Plain text: the quoted tail starts at «-----Original Message-----» (and its
+ *  Russian / Appointment forms), a «From: … / Sent: …» block or «>»-quoted lines. */
+function foldQuoteText(text) {
+  const t = String(text || '');
+  const lines = t.split('\n');
+  let at = -1;
+  for (let i = 0; i < lines.length && at < 0; i++) {
+    const l = lines[i].trim();
+    if (/^-{2,}\s*(original (message|appointment)|исходное (сообщение|письмо|приглашение)|пересланное сообщение)/i.test(l)) at = i;
+    else if (/^(from|от):\s/i.test(l) && lines.slice(i + 1, i + 5).some(x => /^(sent|date|отправлено|дата):\s/i.test(x.trim()))) at = i;
+    else if (/^>/.test(l) && /^>/.test((lines[i + 1] || '').trim())) at = i;
+  }
+  const head = at < 0 ? t : lines.slice(0, at).join('\n');
+  if (at < 0 || !head.trim()) return textBody(t);
+  return textBody(head.replace(/\s+$/, '')) + `<details class="aas-q">${QUOTE_SUMMARY}${textBody(lines.slice(at).join('\n'))}</details>`;
+}
+/** HTML: Outlook's reply header (#divRplyFwdMsg, the border-top div, «-----Original»),
+ *  Gmail / Apple quotes — that element and everything after it goes into <details>. */
+function foldQuoteHtml(html) {
+  let doc;
+  try { doc = new DOMParser().parseFromString(String(html || ''), 'text/html'); } catch (_) { return html; }
+  const body = doc.body; if (!body) return html;
+  const sel = ['#divRplyFwdMsg', '#appendonsend', 'div.gmail_quote', 'blockquote[type="cite"]', 'div[id*="OLK_SRC_BODY_SECTION"]',
+    'div[style*="border-top:solid #E1E1E1"]', 'div[style*="border-top: solid #E1E1E1"]', 'div[style*="border-top:solid #B5C4DF"]', 'div[style*="border-top: solid #B5C4DF"]'];
+  // Every kind of quote header, and the earliest one in the letter wins: an old
+  // OWA-style header deep in the history must not leave the first quote on screen.
+  const cands = sel.map(q => body.querySelector(q)).filter(Boolean);
+  const re = /^\s*(-{2,}\s*(original (message|appointment)|исходное (сообщение|письмо|приглашение))|(from|от):\s[^\n]*\n?[\s\S]{0,300}?(sent|отправлено):)/i;
+  let txt = [...body.querySelectorAll('p, div, span, font')].find(el => re.test(el.textContent || '')) || null;
+  // the smallest element that starts the header, not an outer wrapper holding the whole letter
+  while (txt && [...txt.children].some(ch => re.test(ch.textContent || ''))) txt = [...txt.children].find(ch => re.test(ch.textContent || ''));
+  if (txt) cands.push(txt);
+  const mark = cands.sort((x, y) => (x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))[0];
+  if (!mark) return html;
+  // Climb wrappers the header opens (Outlook nests it in its first child), then fold it
+  // with all its following siblings.
+  let a = mark;
+  while (a.parentElement && a.parentElement !== body && !a.previousElementSibling && !(a.previousSibling?.textContent || '').trim()) a = a.parentElement;
+  const parent = a.parentElement; if (!parent) return html;
+  // Anything new above the quote (text or a picture)? Otherwise show the letter as is.
+  const r = doc.createRange(); r.setStart(body, 0); r.setEndBefore(a);
+  const above = r.cloneContents();
+  if (!(above.textContent || '').trim() && !(above.querySelector && above.querySelector('img'))) return html;
+  const det = doc.createElement('details'); det.className = 'aas-q';
+  det.innerHTML = QUOTE_SUMMARY;
+  parent.insertBefore(det, a);
+  for (let n = a; n; ) { const next = n.nextSibling; det.appendChild(n); n = next; }
+  return (doc.head ? doc.head.innerHTML : '') + body.innerHTML;
 }
 function act(a, c) {
   const send = c => composeForm({mode: a === 'fwd' ? 'fwd' : 'reply', all: a === 'replyall', m: c.m, j: c.j, inline: true});
@@ -2508,6 +2611,19 @@ function eventForm(e, opts = {}) {
     closeModal(); if (!mimeFailed) toast(editing ? 'Сохранено' : 'Событие создано'); loadCal();
   });
 }
+
+/* Narrow window: the folder column becomes a drawer over the list (☰ in the list
+   header); choosing a folder or clicking outside closes it. */
+(() => {
+  const btn = $('#foldtoggle'); if (!btn) return;
+  const set = open => { document.body.classList.toggle('aas-folders-open', open); btn.setAttribute('aria-expanded', String(open)); };
+  btn.onclick = e => { e.stopPropagation(); set(!document.body.classList.contains('aas-folders-open')); };
+  document.addEventListener('mousedown', e => {
+    if (document.body.classList.contains('aas-folders-open') && !e.target.closest('#folders, #foldtoggle')) set(false);
+  });
+  $('#folders').addEventListener('click', e => { if (e.target.closest('.aas-folder[data-id]') && !e.target.closest('[data-pin],[data-del]')) set(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('aas-folders-open')) set(false); });
+})();
 
 /* Folder column width: drag the divider (or ←/→ on it); remembered on this Mac. */
 (() => {

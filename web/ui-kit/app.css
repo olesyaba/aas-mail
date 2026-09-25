@@ -1443,3 +1443,173 @@ body.aas-resizing { cursor: col-resize; user-select: none; }
 .aas-rsvpnote { margin-top: -2px; }
 .aas-rsvpnote textarea { margin-top: 6px; }
 .aas-invite .aas-rsvpnote { margin: 8px 0 0; }
+
+/* ═══ Narrow windows: nothing leaves the screen, empty space goes first ═══════
+   Header: sync / create / settings stay pinned right; the gap in the middle
+   absorbs width, then search and labels shrink. Columns: the list narrows in
+   steps and below 860 px the folders become a drawer (☰ in the list header). */
+.aas-topnav > .aas-spacer { flex: 1 1 0; min-width: 8px; }
+.aas-topnav { overflow: hidden; }
+#search { flex: 0 1 300px; min-width: 120px; max-width: 300px; }
+#newbtn .aas-ic { display: none; }
+main, .view, #list, #reader { min-width: 0; }
+#foldtoggle { display: none; flex: none; width: 30px; height: 30px; padding: 0; }
+.aas-accts .aas-tab__name { overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+
+@media (max-width: 1180px) {
+  #list { width: 340px; }
+}
+@media (max-width: 1060px) {
+  #newbtn .lbl { display: none; }
+  #newbtn .aas-ic { display: inline-block; }
+  #newbtn { padding: 5px 10px; }
+  .aas-accts .aas-tab__name { max-width: 90px; }
+  .aas-sect button { padding: 5px 10px; }
+}
+@media (max-width: 960px) {
+  #list { width: 300px; }
+  /* Search folds into a magnifier and opens on focus. */
+  #search {
+    flex: 0 0 38px; width: 38px; min-width: 38px; padding-left: 30px; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2366707a' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: 10px 50%; background-size: 16px;
+    transition: flex-basis var(--aas-dur) var(--aas-ease), width var(--aas-dur) var(--aas-ease);
+  }
+  #search::placeholder { color: transparent; }
+  #search:focus, #search:not(:placeholder-shown) { flex-basis: 200px; width: 200px; cursor: text; }
+  #search:focus::placeholder { color: var(--aas-muted); }
+}
+@media (max-width: 860px) {
+  #foldtoggle { display: inline-flex; }
+  #foldresize { display: none; }
+  #mail { position: relative; }
+  #folders.aas-folders, #folders {
+    position: absolute; top: 0; bottom: 0; left: 0; z-index: 30;
+    width: 250px !important; max-width: 80vw;
+    transform: translateX(-102%); transition: transform var(--aas-dur) var(--aas-ease);
+    box-shadow: var(--aas-shadow);
+  }
+  body.aas-folders-open #folders { transform: none; }
+  #list { width: 300px; }
+}
+@media (max-width: 720px) {
+  #list { width: 270px; }
+  .aas-accts .aas-tab__name { max-width: 64px; }
+  .aas-sect button { padding: 5px 8px; }
+}
+@media (prefers-reduced-motion: reduce) { #folders, #search { transition: none; } }
+@media (max-width: 680px) {
+  .aas-accts .aas-tab__name { display: none; }  /* colour dot + count; the name is in the tooltip */
+  .aas-accts .aas-tab { padding: 4px 8px; }
+  .aas-topnav { gap: 6px; padding-left: 10px; padding-right: 10px; }
+}
+.aas-seg--soft button { white-space: nowrap; }
+@media (max-width: 960px) {
+  .aas-listfilter { padding: 6px 10px; }
+  .aas-seg--soft button { padding: 3px 7px; font-size: var(--aas-t-xs); }
+}
+
+/* ═══ Conversation as one card (taste audit mock) ═══════════════════════════
+   Subject + count on top; closed letters are two-line rows (sender · date /
+   preview); «ещё N писем» is a row of its own; the open letter shows avatar,
+   sender, short recipients, time and its own reply icons. */
+.aas-thread {
+  margin: 14px 16px 24px;
+  border: 1px solid var(--aas-line);
+  border-radius: var(--aas-r-lg);
+  background: var(--aas-panel);
+  overflow: hidden;
+}
+.aas-thread #chead { padding: 16px 20px 12px; border-bottom: 1px solid var(--aas-line); }
+#cards .aas-mc,
+#cards .aas-mc.open {
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--aas-line);
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+#cards > .aas-mc:last-child { border-bottom: 0; }
+#cards .aas-mc.open { background: var(--aas-panel-2); }
+#cards .aas-mc__head,
+#cards .aas-mc.open .aas-mc__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "who meta" "snip snip";
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: baseline;
+  padding: 11px 20px;
+  border-radius: 0;
+  background: transparent;
+}
+#cards .aas-mc__head:hover { background: var(--aas-panel-2); }
+#cards .aas-mc__who { grid-area: who; max-width: none; font-weight: 500; font-size: var(--aas-t-lg); }
+#cards .aas-mc.unread .aas-mc__who { font-weight: 700; color: var(--aas-unread); }
+.aas-mc__meta2 { grid-area: meta; display: inline-flex; align-items: center; gap: 6px; }
+#cards .aas-mc__snip { grid-area: snip; display: block; font-size: var(--aas-t-md); }
+.aas-mc__av, .aas-mc__to, .aas-mc__hacts { display: none; }
+#cards .aas-mc.open .aas-mc__head {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "av who meta" "av to hacts";
+  padding: 14px 20px 8px;
+  align-items: center;
+}
+#cards .aas-mc.open .aas-mc__snip { display: none; }
+#cards .aas-mc.open .aas-mc__av { grid-area: av; display: block; }
+#cards .aas-mc.open .aas-mc__av .aas-av { width: 36px; height: 36px; border-radius: 11px; font-size: 13px; }
+#cards .aas-mc.open .aas-mc__to { grid-area: to; display: block; min-width: 0; }
+#cards .aas-mc.open .aas-mc__hacts { grid-area: hacts; display: inline-flex; gap: 2px; justify-self: end; }
+.aas-mc__hacts .aas-btn { width: 30px; height: 28px; padding: 0; border-radius: 8px; }
+.aas-mc__tobtn {
+  max-width: 100%;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--aas-t-sm);
+  color: var(--aas-muted);
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aas-mc__tobtn:hover { color: var(--aas-accent-text); }
+.aas-mc__tobtn::after { content: " ▾"; font-size: 10px; }
+.aas-mc__tobtn[aria-expanded="true"]::after { content: " ▴"; }
+#cards .aas-mc__body { padding: 0 20px 14px; }
+#cards .aas-mc__meta {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--aas-line);
+  border-radius: var(--aas-r-sm);
+  background: var(--aas-panel);
+  font-size: var(--aas-t-sm);
+}
+#cards .aas-mc__meta[hidden] { display: none; }
+#cards .aas-atts { padding: 0 0 10px; }
+#cards .aas-imgbar { margin: 0 0 8px; }
+#cards .aas-mc iframe { border-radius: var(--aas-r-sm); }
+.aas-mc-more {
+  display: flex;
+  justify-content: center;
+  padding: 8px;
+  border-bottom: 1px solid var(--aas-line);
+}
+.aas-mc-more button {
+  padding: 4px 14px;
+  border: 0;
+  border-radius: var(--aas-r-pill);
+  background: var(--aas-panel-2);
+  color: var(--aas-muted);
+  font: inherit;
+  font-size: var(--aas-t-sm);
+  cursor: pointer;
+}
+.aas-mc-more button:hover { color: var(--aas-accent-text); background: var(--aas-accent-bg); }
+.aas-mc-more button:focus-visible { outline: 2px solid var(--aas-accent-text); outline-offset: 2px; }
+.aas-thread + .aas-inline-compose { margin-top: 0; }
+/* «ещё N писем»: the row is a plain divider band, the pill is the button inside. */
+div.aas-mc-more { margin: 0; border: 0; border-bottom: 1px solid var(--aas-line); border-radius: 0; background: transparent; padding: 8px; }
