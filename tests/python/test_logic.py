@@ -1405,43 +1405,77 @@ class OutlookReplyHeaderTest(unittest.TestCase):
 
 
 class SelfUpdateTest(unittest.TestCase):
+    """Public repo: releases are found and fetched over plain HTTPS, no gh, no login."""
+
     def setUp(self):
         webapp._update_cache.clear()
 
-    def _gh(self, stdout="", code=0, stderr=""):
+    def _gh(self, api=None, status=200, location=""):
         from unittest import mock
-        run = mock.Mock(return_value=mock.Mock(returncode=code, stdout=stdout, stderr=stderr))
-        return mock.patch.multiple(webapp, _gh_path=mock.Mock(return_value="/x/gh")), mock.patch.object(webapp.subprocess, "run", run)
+        import requests
+        resp = mock.Mock(status_code=status, json=mock.Mock(return_value=api or {}))
+        head = mock.Mock(status_code=302, headers={"location": location})
+        return (mock.patch.object(requests, "get", return_value=resp),
+                mock.patch.object(requests, "head", return_value=head))
+
+    @staticmethod
+    def _rel(tag, assets):
+        return {"tag_name": tag, "body": "notes", "assets": assets}
 
     def test_version_compare(self):
         self.assertGreater(webapp._ver_tuple("1.2.12"), webapp._ver_tuple("1.2.11"))
         self.assertGreater(webapp._ver_tuple("v1.10.0"), webapp._ver_tuple("1.9.9"))
 
-    def test_newer_release_with_zip_is_offered(self):
-        body = json.dumps({"tagName": "v99.0.0", "body": "notes", "assets": [{"name": "AAS-mail-99.0.0-mac.zip"}]})
-        a, b = self._gh(body)
+    def test_newer_release_with_zip_is_offered_with_its_checksum(self):
+        url = "https://github.com/olesyaba/aas-mail/releases/download/v99.0.0/AAS-mail-99.0.0-mac.zip"
+        a, b = self._gh(self._rel("v99.0.0", [{"name": "AAS-mail-99.0.0-mac.zip", "browser_download_url": url,
+                                                "digest": "sha256:abc123"}]))
         with a, b:
             u = webapp.update_check(force=True)
         self.assertTrue(u["available"]); self.assertEqual(u["latest"], "99.0.0")
+        self.assertEqual((u["url"], u["sha256"]), (url, "abc123"))
         self.assertFalse(u["can_install"], "a dev checkout is never replaced")
         self.assertIn("git pull", u["reason"])
 
     def test_same_version_or_no_zip_is_not_offered(self):
         cur = webapp.APP_META["version"]
-        for rel in ({"tagName": "v" + cur, "assets": [{"name": "x-mac.zip"}]},
-                    {"tagName": "v99.0.0", "assets": [{"name": "icon.png"}]}):
-            a, b = self._gh(json.dumps(rel))
+        for rel in (self._rel("v" + cur, [{"name": "x-mac.zip", "browser_download_url": "https://github.com/x"}]),
+                    self._rel("v99.0.0", [{"name": "icon.png", "browser_download_url": "https://github.com/i"}])):
+            a, b = self._gh(rel)
             with a, b:
                 self.assertFalse(webapp.update_check(force=True)["available"], rel)
 
-    def test_no_access_explains_gh_login(self):
-        a, b = self._gh(code=1, stderr="HTTP 404: Not Found")
+    def test_rate_limited_api_falls_back_to_the_latest_redirect(self):
+        a, b = self._gh(status=403, location="https://github.com/olesyaba/aas-mail/releases/tag/v99.1.0")
         with a, b:
             u = webapp.update_check(force=True)
-        self.assertFalse(u["available"]); self.assertIn("gh auth login", u["reason"])
+        self.assertTrue(u["available"])
+        self.assertEqual(u["url"], "https://github.com/olesyaba/aas-mail/releases/download/v99.1.0/AAS-mail-99.1.0-mac.zip")
+        self.assertEqual(u["sha256"], "")
+
+    def test_offline_says_so_without_any_gh_advice(self):
+        from unittest import mock
+        import requests
+        with mock.patch.object(requests, "get", side_effect=OSError("no route")):
+            u = webapp.update_check(force=True)
+        self.assertFalse(u["available"])
+        self.assertIn("github.com", u["reason"])
+        self.assertNotIn("gh ", u["reason"])
+
+    def test_install_passes_url_and_checksum_to_the_script(self):
+        from unittest import mock
+        url = "https://github.com/olesyaba/aas-mail/releases/download/v99.0.0/AAS-mail-99.0.0-mac.zip"
+        a, b = self._gh(self._rel("v99.0.0", [{"name": "AAS-mail-99.0.0-mac.zip", "browser_download_url": url,
+                                                "digest": "sha256:abc"}]))
+        with a, b, mock.patch.object(webapp, "_app_bundle", return_value=webapp.Path("/Applications/AAS mail.app")), \
+                mock.patch.object(webapp.subprocess, "Popen") as popen:
+            self.assertTrue(webapp.update_install()["ok"])
+        args = popen.call_args.args[0]
+        self.assertEqual(args[2:4], [url, "abc"])
+        self.assertEqual(args[-1], "99.0.0")
 
     def test_install_refused_without_update(self):
-        a, b = self._gh(code=1, stderr="HTTP 404: Not Found")
+        a, b = self._gh(status=404, location="")
         with a, b:
             self.assertFalse(webapp.update_install()["ok"])
 

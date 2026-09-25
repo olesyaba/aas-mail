@@ -701,7 +701,7 @@ async function autoSyncTick() {
     lastSync = new Date(); setSyncText();
   } finally { autoBusy = false; }
 }
-/* ---------- self-update (GitHub Releases via the user's gh login) ----------
+/* ---------- self-update (public GitHub Releases over HTTPS, no login) ----------
    Settings → «Обновления»: «auto» checks every 6 h and installs by itself (not while a
    dialog such as a letter being written is open); «manual» only checks on request. */
 let updateInfo = null, updateBusy = false;
@@ -1351,6 +1351,18 @@ function inviteWhen(inv) {
   if (!inv.start) return '';
   return fmtRange(localDate(inv.start), inv.end ? localDate(inv.end) : null, inv.all_day);
 }
+/** «Добавить комментарий» under the answer buttons: the text goes to the organizer
+ *  with the answer (Outlook's «Изменить ответ перед отправкой»). */
+function rsvpNoteHtml() {
+  return `<div class="f aas-rsvpnote"><button type="button" class="aas-linkbtn" data-note-show>Добавить комментарий к ответу</button>
+    <textarea rows="3" hidden placeholder="Например: подключусь на 10 минут позже" aria-label="Комментарий организатору"></textarea>
+    <div class="hint" hidden>Уйдёт организатору вместе с ответом: нажмите «Принять», «Под вопросом» или «Отклонить».</div></div>`;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest?.('[data-note-show]'); if (!b) return;
+  const ta = b.parentElement.querySelector('textarea'); ta.hidden = false; b.hidden = true; ta.focus();
+  const hint = b.parentElement.querySelector('.hint'); if (hint) hint.hidden = false;
+});
 function inviteCard(inv) {
   const cancelled = inv.method === 'cancel';
   const link = joinURL(inv.location, '');
@@ -1364,7 +1376,7 @@ function inviteCard(inv) {
     ${cancelled ? '' : `<div class="aas-invite__acts">
       ${link ? `<a class="aas-btn aas-btn--primary" href="${esc(link)}" target="_blank" rel="noopener noreferrer" title="Открыть ссылку встречи в браузере: ${esc(link)}">Подключиться</a><span class="aas-invite__sep"></span>` : ''}
       <span class="aas-rsvpseg"><button type="button" class="aas-btn" data-rsvp="accept">Принять</button><button type="button" class="aas-btn" data-rsvp="tentative">Под вопросом</button><button type="button" class="aas-btn" data-rsvp="decline">Отклонить</button></span>
-    </div><div class="aas-invite__status" hidden></div>`}
+    </div>${rsvpNoteHtml()}<div class="aas-invite__status" hidden></div>`}
   </div>`;
 }
 function bindInviteCard(mb, c) {
@@ -1380,7 +1392,8 @@ function bindInviteCard(mb, c) {
     const resp = b.dataset.rsvp;
     box.querySelectorAll('[data-rsvp]').forEach(x => x.disabled = true);
     try {
-      const r = await api('invite', {item_id: c.m.item_id, response: resp});
+      const note = (box.querySelector('.aas-rsvpnote textarea')?.value || '').trim();
+      const r = await api('invite', {item_id: c.m.item_id, response: resp, ...(note ? {note} : {})});
       c.rsvp = {resp, via: r.via}; show(resp, r.via);
       toast(RSVP_DONE[resp]);
       if (view === 'cal') loadCal();
@@ -1647,15 +1660,20 @@ function bindPeopleInput(inp) {
     inp.parentNode.insertBefore(wrap, inp);
     wrap.appendChild(inp);
   }
-  // Portal to #ov so a scrollable modal does not clip the list.
+  // Portal out of the form so a scrolling container does not clip the list: into #ov
+  // for a dialog, into <body> for a form under the letter (#ov is hidden then, and a
+  // list left inside it never shows).
+  const host = (inp.closest('#modal') && document.getElementById('ov')) || document.body;
   let dd = document.querySelector('.aas-people__dd[data-for="' + CSS.escape(inp.id || '') + '"]');
   if (!dd || !inp.id) {
     dd = document.createElement('div');
     dd.className = 'aas-people__dd';
     if (inp.id) dd.dataset.for = inp.id;
     dd.hidden = true;
-    (document.getElementById('ov') || document.body).appendChild(dd);
   }
+  if (dd.parentNode !== host) host.appendChild(dd);
+  // Under the letter the page scrolls, and a fixed list would stay behind: close it.
+  inp.closest('#conv')?.addEventListener('scroll', () => { if (!dd.hidden) { dd.hidden = true; dd.innerHTML = ''; } }, {passive: true});
 
   let timer = null, tok = 0, items = [], idx = -1, lastQ = '';
 
@@ -1717,7 +1735,7 @@ function bindPeopleInput(inp) {
     const {pre} = prefixAndToken();
     const formatted = formatPerson(p);
     const needsSep = pre.length && !/[,;\s]$/.test(pre);
-    inp.value = pre + (needsSep ? ', ' : '') + formatted + ', ';
+    inp.value = pre + (needsSep ? ', ' : /[,;]$/.test(pre) ? ' ' : '') + formatted + ', ';
     rememberPeople([p]);
     hide();
     inp.focus();
@@ -1819,17 +1837,25 @@ function composeForm(ctx) {
   files = [];
   const mode = ctx?.mode || 'new';
   const title = {new: 'Новое письмо', reply: ctx?.all ? 'Ответить всем' : 'Ответить', fwd: 'Переслать'}[mode];
+  // Reply: the sender in «Кому»; reply-all adds the other «Кому» and keeps «Копия» —
+  // all editable, as in Outlook. Our own address never goes back to us.
+  const me = ((accounts.find(a => a.id === ACCT) || {}).email || '').toLowerCase();
+  const uniq = list => { const seen = new Set(); return list.filter(p => { const k = (p?.address || '').toLowerCase();
+    if (!k || k === me || seen.has(k)) return false; seen.add(k); return true; }); };
+  const replyTo = mode === 'reply' ? uniq([...(ctx.j.from || []), ...(ctx.all ? ctx.j.to || [] : [])]).map(formatPerson) : [];
+  const replyCc = mode === 'reply' && ctx.all ? uniq((ctx.j.cc || []).filter(p => !replyTo.some(t => t.toLowerCase().includes((p.address || '').toLowerCase())))).map(formatPerson) : [];
   const html = (`<h3>${title}</h3>
     <div class="acts2"><button class="aas-btn" id="ccancel">Отмена</button><button class="aas-btn aas-btn--primary" id="csend">Отправить</button></div>
     <div class="aas-modal__scroll">
-    ${mode === 'reply' ? `<div class="f"><label>Кому</label><div>${esc(ctx.j.from.map(whoFull).join(', '))}${ctx.all ? ' и остальные адресаты' : ''}</div></div>
-      <div class="f"><label>Тема</label><div>Re: ${esc(ctx.j.subject)}</div></div>` : `
+    ${mode === 'reply' ? `<div class="f"><label for="cto">Кому</label><div class="aas-people"><input type="text" id="cto" value="${esc(replyTo.length ? replyTo.join(', ') + ', ' : '')}"></div></div>
+      <div class="f"><label for="ccc">Копия</label><div class="aas-people"><input type="text" id="ccc" value="${esc(replyCc.length ? replyCc.join(', ') + ', ' : '')}" placeholder="фамилия или email"></div></div>
+      <div class="f"><label>Тема</label><div>${esc(/^re:/i.test(ctx.j.subject || '') ? ctx.j.subject : 'Re: ' + (ctx.j.subject || ''))}</div></div>` : `
     <div class="f"><div class="aas-flabel"><label for="cto">Кому</label>${mode === 'new' ? '<button type="button" class="aas-linkbtn" id="ccshow">Копия</button>' : ''}</div><div class="aas-people"><input type="text" id="cto" placeholder="фамилия или email"></div>
       <div class="hint">Начните вводить: подсказки из недавних и каталога. Enter или Tab подставляют выбранного.</div></div>
     <div class="f" id="ccrow" ${mode === 'new' ? 'hidden' : ''}><label for="ccc">Копия</label><div class="aas-people"><input type="text" id="ccc" placeholder="фамилия или email"></div></div>
     ${mode === 'fwd' ? `<div class="f"><label>Тема</label><div>Fwd: ${esc(ctx.j.subject)}</div></div>` : '<div class="f"><label>Тема</label><input type="text" id="csub"></div>'}`}
     <div class="f"><label>Текст</label><textarea id="cbody" rows="10"></textarea></div>
-    ${mode === 'reply' ? '' : `<div class="f aas-attrow"><label class="aas-btn aas-btn--sm aas-attbtn">${icon('clip', 14)}Прикрепить<input type="file" id="cfile" multiple hidden></label>
+    ${`<div class="f aas-attrow"><label class="aas-btn aas-btn--sm aas-attbtn">${icon('clip', 14)}Прикрепить<input type="file" id="cfile" multiple hidden></label>
       <span class="hint">или перетащите файлы в окно</span><div id="cfiles"></div></div>`}
     ${mode !== 'new' && ctx?.j ? quotedOriginal(ctx.j) : ''}
     </div>`);
@@ -1872,13 +1898,19 @@ function composeForm(ctx) {
         if (!to.length) throw new Error('Укажите получателя');
         await api('mail', {action: 'forward', item_id: ctx.m.item_id, to, body, attachments: atts});
         rememberAddrsFromFields($('#cto').value);
-      } else await api('mail', {action: 'reply', item_id: ctx.m.item_id, body, reply_all: !!ctx.all});
+      } else {
+        const to = splitAddrs($('#cto').value).map(addrOnly).filter(Boolean), cc = splitAddrs($('#ccc').value).map(addrOnly).filter(Boolean);
+        if (!to.length) throw new Error('Укажите получателя');
+        await api('mail', {action: 'reply', item_id: ctx.m.item_id, body, reply_all: !!ctx.all, to, cc, attachments: atts});
+        rememberAddrsFromFields($('#cto').value, $('#ccc').value);
+      }
       close(); toast('Отправлено');
     } finally { btn.disabled = false; btn.textContent = 'Отправить'; }
   });
   const ta = $('#cbody'); ta.setSelectionRange(0, 0);
   if (inline) root.scrollIntoView({block: 'start', behavior: 'smooth'});
   (mode === 'reply' ? ta : $('#cto')).focus({preventScroll: inline});
+  if (mode === 'reply') ta.setSelectionRange(0, 0);
 }
 function drawFiles() {
   $('#cfiles').innerHTML = files.map((f, i) => `<span class="aas-attendee">${esc(f.name)} <small>${fmtSize(f.size)}</small><button type="button" data-i="${i}" aria-label="Убрать ${esc(f.name)}">${icon('x', 12)}</button></span>`).join('');
@@ -2307,6 +2339,7 @@ function eventView(e) {
     ${canRespond || link ? `<div class="f aas-evtop">${canRespond ? `<span class="aas-rsvpseg" role="group" aria-label="Ваш ответ">${rsvpBtn('accept', 'Принять') + rsvpBtn('tentative', 'Под вопросом') + rsvpBtn('decline', 'Отклонить')}</span>` : ''}
       ${link ? `<a class="aas-btn aas-btn--primary" id="evjoin" href="${esc(link)}" target="_blank" rel="noopener noreferrer" title="Открыть ссылку встречи в браузере: ${esc(link)}">Подключиться</a>` : ''}</div>` : ''}
     ${canRespond && !['accepted', 'tentative', 'declined'].includes(my) ? '<div class="hint aas-hint-tight">Вы ещё не ответили организатору</div>' : ''}
+    ${canRespond ? rsvpNoteHtml() : ''}
     <dl class="f aas-evfacts">
       ${e.location ? `<dt>Где</dt><dd>${linkify(esc(e.location))}</dd>` : ''}
       ${e.organizer ? `<dt>Организатор</dt><dd>${esc(whoFull(e.organizer))}</dd>` : ''}
@@ -2321,10 +2354,11 @@ function eventView(e) {
     {label: iAmOrg && isMeeting ? 'Отменить встречу' : 'Удалить', danger: true, run: removeEvent},
   ]);
   el.querySelectorAll('[data-r]').forEach(b => b.onclick = guard(async () => {
-    if (b.getAttribute('aria-pressed') === 'true') return;  // already the answer
-    const r = await api('events', {action: 'respond', item_id: e.item_id, response: b.dataset.r, notify: true}, e._acct || ACCT);
+    const note = (el.querySelector('.aas-rsvpnote textarea')?.value || '').trim();
+    if (b.getAttribute('aria-pressed') === 'true' && !note) return;  // already the answer, nothing to add
+    const r = await api('events', {action: 'respond', item_id: e.item_id, response: b.dataset.r, notify: true, ...(note ? {note} : {})}, e._acct || ACCT);
     if (r.via === 'mail') { closeModal(); toast('Сервер не принял ответ напрямую — отправили его организатору письмом'); loadCal(); return; }
-    closeModal(); toast('Ответ отправлен организатору'); loadCal();
+    closeModal(); toast(note ? 'Ответ с комментарием отправлен организатору' : 'Ответ отправлен организатору'); loadCal();
   }));
   const removeEvent = guard(async () => {
     if (!confirm(e.is_recurring ? 'Отменить это событие серии?' : (iAmOrg && isMeeting ? 'Отменить событие? Участникам уйдёт уведомление.' : 'Удалить событие?'))) return;

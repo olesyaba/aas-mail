@@ -276,7 +276,7 @@ class UiContractTest(unittest.TestCase):
             self.assertIsNotNone(fn, f"{domain}/{action} has no upstream handler")
             named = {n for n, p in inspect.signature(fn).parameters.items()
                      if p.kind is p.KEYWORD_ONLY or (p.kind is p.POSITIONAL_OR_KEYWORD and n != "client")}
-            unknown = keys - named - {"mime_invite", "cache_only"}  # app-level, handled in webapp.call
+            unknown = keys - named - {"mime_invite", "cache_only", "note", "to", "cc"}  # app-level, handled in webapp
             self.assertFalse(unknown, f"{domain}/{action}: UI sends {sorted(unknown)} not accepted by upstream")
             checked += 1
         self.assertGreater(checked, 15)

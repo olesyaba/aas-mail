@@ -1439,3 +1439,7 @@ body.aas-resizing { cursor: col-resize; user-select: none; }
   color: var(--aas-text);
   font-size: var(--aas-t-xs);
 }
+/* Comment to the organizer, under the answer buttons */
+.aas-rsvpnote { margin-top: -2px; }
+.aas-rsvpnote textarea { margin-top: 6px; }
+.aas-invite .aas-rsvpnote { margin: 8px 0 0; }

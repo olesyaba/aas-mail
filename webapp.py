@@ -41,7 +41,7 @@ MAX_BODY = 40 * 1024 * 1024
 # Product identity (About page + UI chrome).
 APP_META = {
     "name": "AAS mail",
-    "version": "1.2.16",
+    "version": "1.2.17",
     "description": "Локальный клиент почты и календаря Alfa / Alfa-Seller поверх Exchange ActiveSync.",
     "contact_mm": "@olesya_ba",
     "thanks_intro": "Спасибо за тест-рейды и светлые идеи:",
@@ -682,7 +682,10 @@ def _call_locked(a: Acct, backend, mod, domain: str, action: str, params: dict) 
                     recount_unread_from_items(a, str(fid), res.get("items") or [])
             return res
         backend._pace()
-        res = mod.handle(backend.client, action, **params)
+        if domain == "mail" and action == "reply" and params.get("to"):
+            res = _reply_to(backend.client, **params)  # the UI chose the recipients
+        else:
+            res = mod.handle(backend.client, action, **params)
         if domain == "people" and action == "find" and res.get("ok", True):
             _people_find_store(a, params, res)
         # Local mail-box patches after writes so the next delta refresh is coherent.
@@ -2060,9 +2063,12 @@ def retry_login(a: Acct) -> dict:
 
 
 # -- self-update from GitHub Releases ------------------------------------------
-# Colleagues with access to the private repo install `gh` once (`gh auth login`);
-# the app then finds newer releases and replaces itself (app/self_update.sh).
-# Dev builds (a project checkout, not a bundle) only report — they update via git.
+# The repo is public, so any colleague's app finds and downloads new releases over
+# plain HTTPS — no GitHub CLI, no login. The latest release comes from the REST API
+# (with the asset's SHA-256); if that is rate-limited (60 calls/hour per IP — a whole
+# office behind one address), from the /releases/latest redirect and the fixed asset
+# name. app/self_update.sh downloads, checks the checksum and the version inside,
+# swaps the bundle and relaunches. Dev builds (a checkout, not a bundle) only report.
 
 UPDATE_REPO = "olesyaba/aas-mail"
 UPDATE_CHECK_S = 6 * 3600
@@ -2082,13 +2088,28 @@ def _app_bundle() -> Path | None:
     return None
 
 
-def _gh_path() -> str | None:
-    import shutil
-    for c in (shutil.which("gh"), "/opt/homebrew/bin/gh", "/usr/local/bin/gh",
-              str(Path.home() / ".local/bin/gh")):
-        if c and os.access(c, os.X_OK):
-            return c
-    return None
+def _latest_release() -> dict:
+    """{tag, notes, url, sha256} of the newest release; raises when GitHub is unreachable."""
+    import requests
+    ua = {"User-Agent": f"AAS-mail/{APP_META['version']}"}
+    r = requests.get(f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest", timeout=20,
+                     headers={**ua, "Accept": "application/vnd.github+json"})
+    if r.status_code == 200:
+        j = r.json()
+        asset = next((a for a in j.get("assets") or [] if str(a.get("name", "")).endswith("-mac.zip")), None)
+        digest = str((asset or {}).get("digest") or "")
+        return {"tag": str(j.get("tag_name") or ""), "notes": str(j.get("body") or "")[:3000],
+                "url": (asset or {}).get("browser_download_url") or "",
+                "sha256": digest.split(":", 1)[1] if digest.startswith("sha256:") else ""}
+    # Rate-limited or the API is blocked: the web redirect names the latest tag.
+    h = requests.head(f"https://github.com/{UPDATE_REPO}/releases/latest", allow_redirects=False,
+                      timeout=20, headers=ua)
+    tag = (h.headers.get("location") or "").rstrip("/").rsplit("/", 1)[-1]
+    if not tag.startswith("v"):
+        raise RuntimeError(f"GitHub ответил {r.status_code}")
+    ver = tag.lstrip("v")
+    return {"tag": tag, "notes": "", "sha256": "",
+            "url": f"https://github.com/{UPDATE_REPO}/releases/download/{tag}/AAS-mail-{ver}-mac.zip"}
 
 
 def update_check(force: bool = False) -> dict:
@@ -2098,30 +2119,17 @@ def update_check(force: bool = False) -> dict:
             return dict(_update_cache)
     cur = APP_META["version"]
     out = {"ok": True, "current": cur, "latest": None, "tag": None, "available": False, "notes": "",
-           "can_install": False, "reason": "", "ts": time.time()}
-    gh = _gh_path()
-    if not gh:
-        out["reason"] = "Для обновлений установите GitHub CLI: brew install gh, затем gh auth login"
-    else:
-        try:
-            r = subprocess.run([gh, "release", "view", "--repo", UPDATE_REPO, "--json", "tagName,body,assets"],
-                               capture_output=True, text=True, timeout=25)
-            if r.returncode != 0:
-                last = ((r.stderr or "").strip().splitlines() or ["?"])[-1]
-                low = last.lower()
-                out["reason"] = ("Нет доступа к репозиторию — выполните в Терминале: gh auth login"
-                                 if "auth" in low or "404" in low or "not found" in low
-                                 else "Не удалось проверить обновления: " + last[:200])
-            else:
-                j = json.loads(r.stdout or "{}")
-                tag = str(j.get("tagName") or "")
-                has_zip = any(str(a.get("name", "")).endswith("-mac.zip") for a in j.get("assets") or [])
-                out.update(latest=tag.lstrip("v"), tag=tag, notes=str(j.get("body") or "")[:3000])
-                out["available"] = has_zip and _ver_tuple(out["latest"]) > _ver_tuple(cur)
-        except Exception as e:  # noqa: BLE001 — offline, timeout, bad JSON
-            out["reason"] = f"Не удалось проверить обновления: {type(e).__name__}"
+           "can_install": False, "reason": "", "ts": time.time(), "url": "", "sha256": ""}
+    try:
+        rel = _latest_release()
+        out.update(latest=rel["tag"].lstrip("v"), tag=rel["tag"], notes=rel["notes"],
+                   url=rel["url"], sha256=rel["sha256"])
+        out["available"] = bool(rel["url"]) and _ver_tuple(out["latest"]) > _ver_tuple(cur)
+    except Exception as e:  # noqa: BLE001 — offline, proxy, timeout, bad JSON
+        log.info("update check failed: %s", e)
+        out["reason"] = "Не удалось проверить обновления: нет связи с github.com"
     bundle = _app_bundle()
-    out["can_install"] = bool(out["available"] and gh and bundle)
+    out["can_install"] = bool(out["available"] and bundle)
     if out["available"] and not bundle:
         out["reason"] = "Сборка из исходников: обновите через git pull и app/build_app.sh"
     with _update_lock:
@@ -2141,7 +2149,7 @@ def update_install() -> dict:
     if not script:
         return {"ok": False, "error": "bad_request", "message": "В сборке нет self_update.sh"}
     with open(bridge.DATA_DIR / "update.log", "a") as logf:
-        subprocess.Popen(["/bin/bash", str(script), _gh_path(), UPDATE_REPO, info["tag"],
+        subprocess.Popen(["/bin/bash", str(script), info["url"], info.get("sha256") or "-",
                           str(_app_bundle()), info["latest"]],
                          stdout=logf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                          start_new_session=True)
@@ -2535,7 +2543,7 @@ _RSVP_PARTSTAT = {"accept": "ACCEPTED", "tentative": "TENTATIVE", "decline": "DE
 
 
 def _mail_itip_reply(a: Acct, *, organizer: str, uid: str, subject: str, when: str,
-                     event_lines: list[str], response: str) -> str:
+                     event_lines: list[str], response: str, note: str = "") -> str:
     """Send an iTIP METHOD:REPLY — how Outlook/Gmail answer when the server cannot
     record a MeetingResponse. `event_lines` carry DTSTART/DTEND/… of the meeting."""
     from datetime import datetime, timezone
@@ -2552,13 +2560,13 @@ def _mail_itip_reply(a: Acct, *, organizer: str, uid: str, subject: str, when: s
     m["From"], m["To"] = a.email, organizer
     m["Subject"] = f"{word}: {subject or '(без темы)'}"
     m["Date"], m["Message-ID"] = formatdate(localtime=True), make_msgid(domain="eas-mail")
-    m.set_content(f"{word}: {subject}\n{when}\n")
+    m.set_content((note.strip() + "\n\n" if note.strip() else "") + f"{word}: {subject}\n{when}\n")
     m.add_alternative("\r\n".join(lines) + "\r\n", subtype="calendar", params={"method": "REPLY", "charset": "UTF-8"})
     _send_mime(a, m.as_bytes())
     return organizer
 
 
-def _send_imip_reply(a: Acct, item_id: str, response: str) -> str:
+def _send_imip_reply(a: Acct, item_id: str, response: str, note: str = "") -> str:
     """Answer the invitation contained in mail `item_id` by iTIP reply. Returns organizer."""
     invite, _part, props = _find_invite(parse_raw(get_mime(a, item_id)))
     if not invite or invite["method"] != "request":
@@ -2566,7 +2574,7 @@ def _send_imip_reply(a: Acct, item_id: str, response: str) -> str:
     raw = lambda n: f"{n}{';' + props[n][0] if props[n][0] else ''}:{props[n][1]}"  # noqa: E731
     return _mail_itip_reply(
         a, organizer=invite["organizer"]["address"], uid=invite["uid"], subject=invite["subject"],
-        when=f"{invite['start']} – {invite['end']}", response=response,
+        when=f"{invite['start']} – {invite['end']}", response=response, note=note,
         event_lines=[raw(n) for n in ("DTSTART", "DTEND", "SEQUENCE", "RECURRENCE-ID", "ORGANIZER", "SUMMARY") if n in props])
 
 
@@ -2579,7 +2587,7 @@ def _cal_item(a: Acct, *, item_id: str | None = None, uid: str | None = None) ->
     return None
 
 
-def _reply_from_calendar(a: Acct, item_id: str, response: str) -> str:
+def _reply_from_calendar(a: Acct, item_id: str, response: str, note: str = "") -> str:
     """iTIP reply built from a cached calendar item (answer from the calendar view)."""
     from datetime import datetime, timezone
     from outlook_activesync_mcp.models import instance_of
@@ -2597,7 +2605,99 @@ def _reply_from_calendar(a: Acct, item_id: str, response: str) -> str:
     org = (ev.get("organizer") or {}).get("address") or ""
     lines.append(f"ORGANIZER:mailto:{org}")
     return _mail_itip_reply(a, organizer=org, uid=ev.get("uid") or "", subject=ev.get("subject") or "",
-                            when=f"{ev.get('start', '')} – {ev.get('end', '')}", event_lines=lines, response=response)
+                            when=f"{ev.get('start', '')} – {ev.get('end', '')}", event_lines=lines, response=response,
+                            note=note)
+
+
+def _meeting_response(a: Acct, client, item_id: str, response: str, note: str, notify: bool = True) -> bool:
+    """MeetingResponse; with a note, the text rides in SendResponse>Body (EAS 16.x) so the
+    organizer gets one answer with it, like from Outlook. A server that refuses the body
+    gets the plain answer instead — returns False then, and the caller mails the note."""
+    from outlook_activesync_mcp.commands import calendar
+    if note and notify:
+        try:
+            _respond_with_note(client, item_id, response, note)
+            return True
+        except Exception as e:  # noqa: BLE001
+            if _is_unreachable(e) or _is_backoff(e):
+                raise
+            log.info("[%s] MeetingResponse with a note refused (%s) — plain answer + note by mail", a.id, e)
+    calendar.handle(client, "respond", item_id=item_id, response=response, notify=notify)
+    return not note
+
+
+def _respond_with_note(client, item_id: str, response: str, note: str) -> None:
+    """Upstream `calendar._respond` plus the answer text (MS-ASCMD SendResponse>Body)."""
+    from outlook_activesync_mcp.commands import calendar
+    from outlook_activesync_mcp.errors import EasStatusError
+    from outlook_activesync_mcp.models import instance_of, unpack_item_id
+    from outlook_activesync_mcp.utils import format_datetime, from_compact
+    from outlook_activesync_mcp.wbxml import el, find, text_of
+    collection_id, server_id = unpack_item_id(item_id)
+    instance = instance_of(item_id)
+    client.ensure_provisioned()
+    req = el("MeetingResponse", "Request",
+             el("MeetingResponse", "UserResponse", text=calendar._RESPONSE_CODES[response]),
+             el("MeetingResponse", "CollectionId", text=collection_id),
+             el("MeetingResponse", "RequestId", text=server_id))
+    if instance:
+        req.add(el("MeetingResponse", "InstanceId", text=format_datetime(from_compact(instance), millis=0)))
+    req.add(el("MeetingResponse", "SendResponse",
+               el("AirSyncBase", "Body", el("AirSyncBase", "Type", text="1"), el("AirSyncBase", "Data", text=note))))
+    tree = client.command("MeetingResponse", el("MeetingResponse", "MeetingResponse", req))
+    result = find(tree, "MeetingResponse", "Result") or tree
+    status = text_of(find(result, "MeetingResponse", "Status"))
+    if status and status != "1":
+        raise EasStatusError("MeetingResponse", int(status), f"ответ на встречу отвергнут (status {status})")
+
+
+def _send_rsvp_note(a: Acct, organizer: str, subject: str, response: str, note: str) -> None:
+    """The answer went without its text: send the text to the organizer as a letter."""
+    from email.message import EmailMessage
+    from email.utils import formatdate, make_msgid
+    if "@" not in (organizer or ""):
+        log.info("[%s] RSVP note not sent: no organizer address", a.id)
+        return
+    m = EmailMessage()
+    m["From"], m["To"] = a.email, organizer
+    m["Subject"] = f"{_RSVP_WORD[response]}: {subject or '(без темы)'}"
+    m["Date"], m["Message-ID"] = formatdate(localtime=True), make_msgid(domain="eas-mail")
+    m.set_content(note.strip() + "\n")
+    _send_mime(a, m.as_bytes())
+
+
+def _reply_to(client, *, item_id=None, body="", to=None, cc=None, reply_all=False, attachments=None, **_) -> dict:
+    """Reply / reply-all to recipients the user edited (upstream `_reply` computes its own
+    list and puts everyone in To). SmartReply, so the server still quotes the original."""
+    from outlook_activesync_mcp.commands import mail_write as mw, people
+    from outlook_activesync_mcp.errors import BadRequest
+    from outlook_activesync_mcp.models import envelope, unpack_item_id
+    from outlook_activesync_mcp.wbxml import el
+    to_l, cc_l = mw._as_list(to), mw._as_list(cc)
+    if not to_l:
+        raise BadRequest("укажите получателя ответа")
+    collection_id, server_id = unpack_item_id(item_id)
+    parts = mw._load_attachments(client, attachments)
+    client.ensure_provisioned()
+    resolved = people.resolve_for_send(client, to_l + cc_l)
+    to_a, cc_a = resolved[:len(to_l)], resolved[len(to_l):]
+    subject = mw._fetch_headers(client, collection_id, server_id)["subject"] or ""
+    if not subject.lower().startswith("re:"):
+        subject = f"Re: {subject}"
+    mime = mw.build_message(from_addr=mw._self_address(client), to=to_a, cc=cc_a,
+                            subject=subject, body=body, attachments=parts)
+    client.command("SmartReply", el("ComposeMail", "SmartReply",
+                                    el("ComposeMail", "ClientId", text=mw._client_id()),
+                                    el("ComposeMail", "Source",
+                                       el("ComposeMail", "FolderId", text=collection_id),
+                                       el("ComposeMail", "ItemId", text=server_id)),
+                                    el("ComposeMail", "SaveInSentItems"),
+                                    el("ComposeMail", "Mime", data=mime)), allow_empty=True)
+    item = {"sent": True, "to": to_a, "cc": cc_a, "subject": subject, "source_item_id": item_id,
+            "reply_all": bool(reply_all)}
+    if parts:
+        item["attachments"] = mw._attachment_rows(parts)
+    return envelope("reply", [item])
 
 
 def respond_event(a: Acct, params: dict) -> dict:
@@ -2609,20 +2709,25 @@ def respond_event(a: Acct, params: dict) -> dict:
     if response not in _RSVP_WORD:
         return {"ok": False, "action": "respond", "count": 0, "items": [], "error": "bad_request",
                 "message": "ответ: accept, tentative или decline"}
+    note = str(params.get("note") or "").strip()
     backend = a.get()
     try:
         with backend.lock:
             backend._pace()
-            res = calendar.handle(backend.client, "respond", item_id=item_id, response=response,
-                                  notify=params.get("notify", True))
+            noted = _meeting_response(a, backend.client, item_id, response, note,
+                                      notify=params.get("notify", True))
+        if note and not noted:
+            ev = _cal_item(a, item_id=item_id) or {}
+            _send_rsvp_note(a, (ev.get("organizer") or {}).get("address") or "", ev.get("subject") or "", response, note)
         if item_id in _rsvp_answers(a):  # the server has the answer now: an older mail one must not mask it
             _rsvp_remember(a, item_id, response)
-        return res
+        return {"ok": True, "action": "respond", "count": 1,
+                "items": [{"responded": response, "item_id": item_id, "note": bool(note)}]}
     except Exception as e:  # noqa: BLE001
         log.warning("[%s] MeetingResponse failed (%s) — answering by mail", a.id, e)
         first = e
     try:
-        org = _reply_from_calendar(a, item_id, response)
+        org = _reply_from_calendar(a, item_id, response, note)
         _rsvp_remember(a, item_id, response)
     except Exception as e2:  # noqa: BLE001
         log.warning("[%s] mail reply fallback failed: %s", a.id, e2)
@@ -2633,7 +2738,7 @@ def respond_event(a: Acct, params: dict) -> dict:
             "items": [{"responded": response, "item_id": item_id, "organizer": org}]}
 
 
-def invite_respond(a: Acct, item_id: str, response: str) -> dict:
+def invite_respond(a: Acct, item_id: str, response: str, note: str = "") -> dict:
     """Accept / tentative / decline an invitation right from the mail. Exchange's
     MeetingResponse (updates your calendar and notifies the organizer) first; if the
     server can't do it, fall back to a standard iTIP reply by mail."""
@@ -2643,11 +2748,21 @@ def invite_respond(a: Acct, item_id: str, response: str) -> dict:
     from outlook_activesync_mcp.commands import calendar
     backend = a.get()
 
+    note = str(note or "").strip()
+
     def meeting_response(target: str) -> bool:
         try:
             with backend.lock:
                 backend._pace()
-                calendar.handle(backend.client, "respond", item_id=target, response=response, notify=True)
+                noted = _meeting_response(a, backend.client, target, response, note)
+            if note and not noted:
+                inv = None
+                try:
+                    inv, _p, _props = _find_invite(parse_raw(get_mime(a, item_id)))
+                except Exception:  # noqa: BLE001
+                    pass
+                _send_rsvp_note(a, ((inv or {}).get("organizer") or {}).get("address") or "",
+                                (inv or {}).get("subject") or "", response, note)
             return True
         except Exception as e:  # noqa: BLE001
             log.info("[%s] MeetingResponse on %s failed: %s", a.id, target[:12], e)
@@ -2668,7 +2783,7 @@ def invite_respond(a: Acct, item_id: str, response: str) -> dict:
         return {"ok": True, "via": "server"}
     res = {"message": "сервер не принял ответ"}
     try:
-        org = _send_imip_reply(a, item_id, response)
+        org = _send_imip_reply(a, item_id, response, note)
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": "respond_failed", "message": res.get("message") or str(e)}
     if ev:
@@ -2876,7 +2991,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/warm":
                 return self._json(warm_folders(a, params.get("folders") or [], params.get("filter"), params.get("fields")))
             if path == "/api/invite":
-                return self._json(invite_respond(a, params.get("item_id") or "", params.get("response")))
+                return self._json(invite_respond(a, params.get("item_id") or "", params.get("response"),
+                                                 note=params.get("note") or ""))
             if path == "/api/retry":
                 r = retry_login(a)
                 return self._json({"ok": True, "result": r.get("items")})
