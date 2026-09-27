@@ -1,6 +1,14 @@
 package ru.olesyaba.aasmail
 
 import android.annotation.SuppressLint
+import android.app.AlertDialog
+import android.content.ActivityNotFoundException
+import android.webkit.JsResult
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import java.io.IOException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -24,6 +32,10 @@ import kotlin.concurrent.thread
 class MainActivity : ComponentActivity() {
     companion object { const val EXTRA_OPEN = "open" }
     lateinit var web: WebView
+    private var fileCb: ValueCallback<Array<Uri>>? = null
+    private val pickFiles = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        fileCb?.onReceiveValue(uris.toTypedArray()); fileCb = null
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,20 +46,42 @@ class MainActivity : ComponentActivity() {
         web.settings.domStorageEnabled = true
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(v: WebView, r: WebResourceRequest): Boolean {
-                if (r.url.host == "127.0.0.1") return false
-                startActivity(Intent(Intent.ACTION_VIEW, r.url))   // mail links, meeting links → other apps
+                if (Links.isOurs(r.url.toString())) return false
+                try { startActivity(Intent(Intent.ACTION_VIEW, r.url)) }   // mail links, meeting links → other apps
+                catch (e: ActivityNotFoundException) { Toast.makeText(this@MainActivity, "Нет приложения для этой ссылки", Toast.LENGTH_SHORT).show() }
                 return true
             }
             // The page embeds X-Tok: fetch it ourselves with the page key (see webapp.PAGE_KEY).
             override fun shouldInterceptRequest(v: WebView, r: WebResourceRequest): WebResourceResponse? {
                 val u = r.url
-                if (u.host != "127.0.0.1" || (u.path ?: "/") !in setOf("/", "/index.html")) return null
-                val c = URL(u.toString()).openConnection() as HttpURLConnection
-                c.setRequestProperty("X-Page-Key", PyServer.pageKey)
-                val code = c.responseCode
-                return WebResourceResponse("text/html", "utf-8", code, c.responseMessage ?: "OK",
-                    c.headerFields.filterKeys { it != null }.mapValues { it.value.joinToString(",") },
-                    if (code >= 400) c.errorStream else c.inputStream)
+                if (!Links.isOurs(u.toString()) || (u.path ?: "/") !in setOf("/", "/index.html")) return null
+                return try {
+                    val c = URL(u.toString()).openConnection() as HttpURLConnection
+                    c.setRequestProperty("X-Page-Key", PyServer.pageKey)
+                    val code = c.responseCode
+                    WebResourceResponse("text/html", "utf-8", code, c.responseMessage ?: "OK",
+                        c.headerFields.filterKeys { it != null }.mapValues { it.value.joinToString(",") },
+                        if (code >= 400) c.errorStream else c.inputStream)
+                } catch (e: IOException) {
+                    WebResourceResponse("text/plain", "utf-8", 503, "Unavailable", emptyMap(),
+                        "Почтовый сервер не отвечает — перезапустите приложение".byteInputStream())
+                }
+            }
+        }
+        web.webChromeClient = object : WebChromeClient() {
+            // Without these Android WebView cancels confirm()/alert() and ignores <input type=file>.
+            override fun onJsAlert(v: WebView, url: String, msg: String, r: JsResult): Boolean {
+                AlertDialog.Builder(this@MainActivity).setMessage(msg).setPositiveButton("OK") { _, _ -> r.confirm() }
+                    .setOnCancelListener { r.cancel() }.show(); return true
+            }
+            override fun onJsConfirm(v: WebView, url: String, msg: String, r: JsResult): Boolean {
+                AlertDialog.Builder(this@MainActivity).setMessage(msg)
+                    .setPositiveButton("OK") { _, _ -> r.confirm() }.setNegativeButton("Отмена") { _, _ -> r.cancel() }
+                    .setOnCancelListener { r.cancel() }.show(); return true
+            }
+            override fun onShowFileChooser(v: WebView, cb: ValueCallback<Array<Uri>>, p: FileChooserParams): Boolean {
+                fileCb?.onReceiveValue(null); fileCb = cb
+                pickFiles.launch(arrayOf("*/*")); return true
             }
         }
         val attachments = Attachments(this)

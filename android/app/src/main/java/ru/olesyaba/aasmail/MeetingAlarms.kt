@@ -16,18 +16,24 @@ object MeetingAlarms {
             r?.let { putExtra("title", it.title); putExtra("body", it.body); putExtra("join", it.joinUrl); putExtra("at", it.fireAt) }
         }, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
-    fun reschedule(ctx: Context, reminders: List<Reminder>) {
+    /** Keys to cancel: gone or moved meetings of accounts that synced. A failed account
+     *  (no VPN, calendar still loading) keeps its reminders instead of silently losing them. */
+    fun stale(old: Set<String>, want: Set<String>, synced: Set<String>): Set<String> =
+        old.filter { k -> k !in want && synced.any { k.startsWith("$it-") } }.toSet()
+
+    fun reschedule(ctx: Context, reminders: List<Reminder>, synced: Set<String>) {
         val am = ctx.getSystemService(AlarmManager::class.java)
         val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val old = p.getStringSet("keys", emptySet())!!
         val want = reminders.associateBy { it.key }
-        (old - want.keys).forEach { am.cancel(pi(ctx, null, it)) }
+        val gone = stale(old, want.keys, synced)
+        gone.forEach { am.cancel(pi(ctx, null, it)) }
         want.values.forEach { r ->
             val op = pi(ctx, r, r.key)
             if (am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, r.fireAt, op)
             else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, r.fireAt, op)  // no permission: a few minutes late
         }
-        p.edit().putStringSet("keys", want.keys).apply()
+        p.edit().putStringSet("keys", old - gone + want.keys).apply()
     }
 }
 

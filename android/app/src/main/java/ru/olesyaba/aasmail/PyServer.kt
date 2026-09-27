@@ -2,6 +2,7 @@ package ru.olesyaba.aasmail
 
 import android.content.Context
 import android.util.Base64
+import android.util.Log
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import java.io.File
@@ -23,22 +24,30 @@ object PyServer {
             copyWeb(app)
             if (!Python.isStarted()) Python.start(AndroidPlatform(app))
             Thread({
-                Python.getInstance().getModule("android_entry")
-                    .callAttr("run", app.filesDir.path, app.cacheDir.path, pageKey)
+                try {
+                    Python.getInstance().getModule("android_entry")
+                        .callAttr("run", app.filesDir.path, app.cacheDir.path, pageKey)
+                } catch (e: Throwable) {  // port busy, broken config, import error: show the error screen, don't crash
+                    Log.e("AASMail", "webapp stopped", e)
+                    runCatching { File(app.filesDir, "eas-bridge/eas-mail.log").appendText("\nwebapp stopped: $e\n") }
+                }
             }, "webapp").apply { isDaemon = true }.start()
             started = true
         }
-        repeat(150) { if (alive()) return; Thread.sleep(200) }
+        repeat(150) { if (alive(app)) return; Thread.sleep(200) }
         throw IllegalStateException("webapp did not start")
     }
 
     fun token(ctx: Context): String =
         File(ctx.filesDir, "eas-bridge/runtime_token").readText().trim()
 
-    private fun alive() = try {
+    /** Up = answers with OUR token: another app squatting on 8780 cannot know it (webapp writes it before binding). */
+    private fun alive(ctx: Context) = try {
         (URL("$BASE/api/about").openConnection() as HttpURLConnection).run {
-            connectTimeout = 300; readTimeout = 300; requestMethod = "POST"; doOutput = true
-            outputStream.close(); responseCode; disconnect(); true   // 403 without a token is still "up"
+            connectTimeout = 300; readTimeout = 1000; requestMethod = "POST"; doOutput = true
+            setRequestProperty("X-Tok", token(ctx))
+            outputStream.use { it.write("{}".toByteArray()) }
+            (responseCode == 200).also { disconnect() }
         }
     } catch (e: Exception) { false }
 

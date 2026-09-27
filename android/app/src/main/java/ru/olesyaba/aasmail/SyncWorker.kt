@@ -33,6 +33,7 @@ class SyncWorker(ctx: Context, p: WorkerParameters) : Worker(ctx, p) {
         val accounts = try { Api.post(ctx, "/api/accounts", JSONObject()).getJSONArray("accounts") } catch (e: IOException) { return Result.retry() }
         val lead = runCatching { Api.post(ctx, "/api/prefs", JSONObject()).getJSONObject("prefs").optInt("reminder_minutes", 5) }.getOrDefault(5)
         val meetings = mutableListOf<Meeting>()
+        val synced = mutableSetOf<String>()
         val today = LocalDate.now()
         for (i in 0 until accounts.length()) {
             val a = accounts.getJSONObject(i)
@@ -47,7 +48,7 @@ class SyncWorker(ctx: Context, p: WorkerParameters) : Worker(ctx, p) {
                 Notifier.newMail(ctx, id, name, fresh)
                 val ev = Api.post(ctx, "/api/events", JSONObject().put("action", "list").put("acct", id)
                     .put("start", today.toString()).put("end", today.plusDays(2).toString()).put("limit", 300))
-                if (ev.optBoolean("ok")) meetings += MeetingPlan.parse(id, name, ev.getJSONArray("items"))
+                if (ev.optBoolean("ok")) { meetings += MeetingPlan.parse(id, name, ev.getJSONArray("items")); synced += id }
             } catch (e: Exception) {
                 if (e !is IOException && e !is JSONException) throw e
                 val n = st.getInt("fail-$id", 0) + 1
@@ -55,7 +56,7 @@ class SyncWorker(ctx: Context, p: WorkerParameters) : Worker(ctx, p) {
                 if (n == 3) Notifier.unreachable(ctx, name)
             }
         }
-        MeetingAlarms.reschedule(ctx, MeetingPlan.plan(meetings, System.currentTimeMillis(), lead))
+        MeetingAlarms.reschedule(ctx, MeetingPlan.plan(meetings, System.currentTimeMillis(), lead), synced)
         return Result.success()
     }
 }
