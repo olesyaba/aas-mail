@@ -1227,6 +1227,7 @@ function renderList(hasMore) {
   if (!box.querySelector('.aas-row[tabindex="0"]')) { const f = box.querySelector('.aas-row'); if (f) f.tabIndex = 0; }
   syncBulkBar(groups.length);
   paintListHead();
+  paintPane();
 }
 /** «Входящие  7»: the open folder's unread count next to its name. */
 function paintListHead() {
@@ -1377,7 +1378,44 @@ function openGroup(g) {
     j.items.forEach(m => { if (!cardOf(m.item_id)) { addCard(m); added++; } });
     if (added) layoutCards();
   }).catch(() => {});
+  paintPane();
 }
+/* Phone / Fold cover screen: one pane at a time. The list until a letter is
+   opened, then the letter full-screen; Android «back» pops to the list. */
+const ONE_PANE = 600;
+const paneFor = (w, open) => w >= ONE_PANE ? 'both' : open ? 'reader' : 'list';
+const needsBackEntry = (pane, state) => pane === 'reader' && !state?.reading;
+function paintPane() {
+  const p = paneFor(innerWidth, !!curKey);
+  document.body.classList.toggle('one-pane', p !== 'both');
+  document.body.classList.toggle('reading', p === 'reader');
+  if (needsBackEntry(p, history.state)) history.pushState({reading: 1}, '');
+  // The week grid does not fit the cover screen: day view there, the saved mode when unfolded.
+  const want = p === 'both' ? prefs.cal_view : 'day';
+  if (calMode !== want) { calMode = want; if (view === 'cal') loadCal(); }
+}
+addEventListener('resize', paintPane);
+addEventListener('popstate', () => {
+  if (!document.body.classList.contains('reading')) return;
+  curKey = null; curGroup = null;
+  document.querySelectorAll('.aas-row.on').forEach(r => r.classList.remove('on'));
+  paintPane();
+});
+const parseOpenHash = h => {
+  const m = /^#open=(.+)$/.exec(h || ''); if (!m) return null;
+  const s = decodeURIComponent(m[1]), i = s.indexOf(':');
+  return i > 0 ? {acct: s.slice(0, i), id: s.slice(i + 1)} : null;
+};
+/** Open a letter from a notification: switch account, wait for the list, open its group. */
+window.aasOpen = async (acct, id) => {
+  if (view !== 'mail' || ACCT !== acct) showView('mail', acct);
+  for (let t = 0; t < 40; t++) {
+    const g = groupsOnScreen().find(x => x.items.some(m => m.item_id === id));
+    if (g) { openGroup(g); return true; }
+    await new Promise(r => setTimeout(r, 300));
+  }
+  return false;
+};
 function addCard(m) {
   const c = {m, j: null, open: false, el: document.createElement('div')};
   c.el.className = 'aas-mc' + (m.is_read ? '' : ' unread');
@@ -2820,6 +2858,9 @@ $('#bulkunread')?.addEventListener('click', bulkMark(false));
     Promise.allSettled(accounts.map(a => refreshInboxBadge(a.id))).then(() => paintTabBadges());
   }
   if (location.hash === '#cal') showView('cal');
+  const deep = parseOpenHash(location.hash);
+  if (deep) { history.replaceState(null, '', '/'); aasOpen(deep.acct, deep.id); }
+  paintPane();
   lastSync = new Date(); setSyncText();
 })();
 </script>

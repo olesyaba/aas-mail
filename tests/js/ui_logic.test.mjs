@@ -42,9 +42,11 @@ function load(names, extra = {}) {
     URL, Map, Set, Promise, JSON, Date, Math, RegExp, Error, Array, Object, String, Number,
     console, setTimeout: () => 0, clearTimeout: () => {}, setInterval: () => 0, clearInterval: () => {},
     document, location: {hash: '', reload() {}}, CSS: {escape: s => s},
+    addEventListener: () => {}, innerWidth: 1200, history: {state: null, pushState() {}, replaceState() {}},
     localStorage: {getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v))},
     fetch: (url, opts) => { fetches.push({url, opts, body: JSON.parse(opts.body)}); return new Promise(() => {}); },
   });
+  ctx.window = ctx;
   vm.runInContext(script + `\n;globalThis.__x = {${names.join(',')}};`, ctx);
   for (const [k, v] of Object.entries(extra)) vm.runInContext(`${k} = ${JSON.stringify(v)}`, ctx);
   return Object.assign(ctx.__x, {ctx, fetches});
@@ -595,4 +597,27 @@ test('plain-text reply: the quoted history folds, a letter that is only a quote 
   assert.doesNotMatch(onlyQuote, /<details/);
   assert.doesNotMatch(foldQuoteText('Просто письмо'), /<details/);
   assert.match(foldQuoteText('Да.\nОт: Иван Петров\nОтправлено: пн\nКому: мне'), /<details/);
+});
+
+test('one pane below 600px: list until a letter is open, then the letter', () => {
+  const {paneFor} = load(['paneFor']);
+  assert.equal(paneFor(900, false), 'both');
+  assert.equal(paneFor(900, true), 'both');
+  assert.equal(paneFor(599, false), 'list');
+  assert.equal(paneFor(412, true), 'reader');
+});
+
+test('back needs one history entry per opened letter on the narrow screen', () => {
+  const {needsBackEntry} = load(['needsBackEntry']);
+  assert.equal(needsBackEntry('reader', null), true);          // folded with a letter open
+  assert.equal(needsBackEntry('reader', {reading: 1}), false); // already pushed
+  assert.equal(needsBackEntry('list', null), false);
+  assert.equal(needsBackEntry('both', null), false);
+});
+
+test('notification deep link #open=acct:item_id (the id may contain colons)', () => {
+  const {parseOpenHash} = load(['parseOpenHash']);
+  assert.deepEqual(plain(parseOpenHash('#open=seller%3AaS8%3A1')), {acct: 'seller', id: 'aS8:1'});
+  assert.equal(parseOpenHash('#cal'), null);
+  assert.equal(parseOpenHash('#open=nocolon'), null);
 });

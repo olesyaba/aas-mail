@@ -1638,3 +1638,23 @@ main, .view, #list, #reader { min-width: 0; }
 .aas-thread + .aas-inline-compose { margin-top: 0; }
 /* «ещё N писем»: the row is a plain divider band, the pill is the button inside. */
 div.aas-mc-more { margin: 0; border: 0; border-bottom: 1px solid var(--aas-line); border-radius: 0; background: transparent; padding: 8px; }
+
+/* ═══ Phone / Fold cover screen (< 600px): one pane ════════════════════════ */
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+@media (max-width: 599px) {
+  body.one-pane #list { width: 100%; flex: 1 1 auto; border-right: 0; }
+  body.one-pane #reader { display: none; }
+  body.one-pane.reading #list { display: none; }
+  body.one-pane.reading #reader { display: flex; }
+  #foldresize { display: none; }
+  #newbtn {
+    position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 40;
+    width: 56px; height: 56px; padding: 0; border-radius: 999px; box-shadow: var(--aas-shadow);
+  }
+  body.reading #newbtn { display: none; }
+}
+/* Touch: 44px targets (the Mac's pointer is fine, so this never applies there). */
+@media (pointer: coarse) {
+  .aas-btn, .aas-tab, .aas-sect button, .aas-seg button, #foldtoggle { min-height: 44px; min-width: 44px; }
+  .aas-row { min-height: 56px; }
+}
