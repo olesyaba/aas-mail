@@ -55,6 +55,23 @@ curl -fsSL https://raw.githubusercontent.com/olesyaba/aas-mail/main/install.sh |
 app/release.sh             # тесты → dist zip → privacy scan → gh release create vX.Y.Z
 ```
 
+## Android (Galaxy Z Fold)
+
+Тот же `webapp.py` и `web/` внутри Kotlin-оболочки (`android/`, Chaquopy). Внешний экран — одна
+панель (список ↔ письмо), внутренний — список + письмо; уведомления о письмах раз в ~15 мин и
+точные напоминания о встречах.
+
+```bash
+bash android/build_apk.sh debug    # dist/AAS-mail-<v>-android-debug.apk — для проверки
+bash android/build_apk.sh          # release: ключ ~/.config/aas-mail/android-release.jks + AAS_KEYSTORE_PASS
+(cd android && ./gradlew testDebugUnitTest)   # Kotlin-логика уведомлений
+```
+
+Установка: скопировать APK на телефон и открыть (разрешить установку из этого источника), либо
+`adb install -r dist/AAS-mail-<v>-android.apk`. При первом запуске разрешить уведомления, точные
+будильники и работу в фоне — без них уведомления опаздывают. Обновление — вручную, новым APK
+со страницы релиза (`app/release.sh` прикладывает его, если он собран).
+
 ## Тесты
 
 ```bash
@@ -75,6 +92,7 @@ aas-mail/
   bridge.py      # ActiveSync backend wrapper
   web/           # index.html UI
   app/           # Swift shell, tray, build_*.sh
+  android/       # Kotlin shell for Android (Chaquopy + WebView), build_apk.sh
   docs/          # specs / plans
 ```
 

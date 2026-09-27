@@ -8,6 +8,7 @@ REPO="olesyaba/aas-mail"
 VERSION="$(sed -n 's/^ *"version": "\([^"]*\)".*/\1/p' webapp.py | head -1)"
 TAG="v$VERSION"
 ZIP="dist/AAS-mail-$VERSION-mac.zip"
+APK="dist/AAS-mail-$VERSION-android.apk"   # optional: android/build_apk.sh
 
 gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 && { echo "$TAG уже опубликован — поднимите версию в webapp.py"; exit 1; }
 [ -z "$(git status --porcelain)" ] || { echo "Есть незакоммиченные изменения — сначала commit/push"; exit 1; }
@@ -23,7 +24,8 @@ awk -v v="$VERSION" '
   on && !/^=+$/ {print}' RELEASE_NOTES.txt > "$NOTES"
 
 git push origin HEAD
-gh release create "$TAG" "$ZIP" --repo "$REPO" --target "$(git rev-parse HEAD)" \
+ASSETS=("$ZIP"); [ -f "$APK" ] && ASSETS+=("$APK")
+gh release create "$TAG" "${ASSETS[@]}" --repo "$REPO" --target "$(git rev-parse HEAD)" \
   --title "AAS mail $VERSION" --notes-file "$NOTES"
 rm -f "$NOTES"
 echo "Опубликовано: $TAG — в режиме «Автоматически» приложения обновятся сами в течение 6 часов; вручную — Настройки → Обновления → «Проверить сейчас»."
