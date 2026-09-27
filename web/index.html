@@ -717,6 +717,8 @@ function noteIncoming(acct, items) {
       subject: top.subject || '(без темы)',
       preview: String(top.preview || '').replace(/\s+/g, ' ').slice(0, 160),
       account: a.name || '',
+      acct,                // Android: which account's Inbox to open from the notification
+      item_id: top.item_id,
     });
   } catch (_) {}
 }

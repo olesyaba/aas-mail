@@ -621,3 +621,15 @@ test('notification deep link #open=acct:item_id (the id may contain colons)', ()
   assert.equal(parseOpenHash('#cal'), null);
   assert.equal(parseOpenHash('#open=nocolon'), null);
 });
+
+test('new-mail bridge names the account id and the letter, so Android can open it', () => {
+  const sent = [];
+  const {noteIncoming, ctx} = load(['noteIncoming']);
+  ctx.window = {webkit: {messageHandlers: {aasNewMail: {postMessage: v => sent.push(v)}}}};
+  vm.runInContext(`accounts = [{id: 'main', name: 'Alfa-Bank'}, {id: 'seller', name: 'Seller'}];`, ctx);
+  noteIncoming('seller', [{item_id: 'old', is_read: false}]);
+  noteIncoming('seller', [{item_id: 'new1', is_read: false, subject: 'Счёт', from: {name: 'Бухгалтерия'}}, {item_id: 'old'}]);
+  assert.equal(sent.length, 1);
+  assert.deepEqual(plain(sent[0]), {count: 1, from: 'Бухгалтерия', subject: 'Счёт', preview: '', account: 'Seller',
+    acct: 'seller', item_id: 'new1'});
+});

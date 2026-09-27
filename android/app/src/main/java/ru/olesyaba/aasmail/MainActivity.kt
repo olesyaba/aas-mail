@@ -11,7 +11,11 @@ import android.webkit.WebViewClient
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
+import org.json.JSONArray
 import org.json.JSONObject
+import java.net.URLDecoder
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -45,6 +49,18 @@ class MainActivity : ComponentActivity() {
                     if (code >= 400) c.errorStream else c.inputStream)
             }
         }
+        val attachments = Attachments(this)
+        web.addJavascriptInterface(NativeBridge(this, attachments), "AASNative")
+        // The web UI talks to the Mac shell through window.webkit.messageHandlers: route that to AASNative.
+        val shim = "window.webkit={messageHandlers:new Proxy({},{get:(_,n)=>({postMessage:v=>AASNative.post(String(n),JSON.stringify(v===undefined?null:v))})})};"
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT))
+            WebViewCompat.addDocumentStartJavaScript(web, shim, setOf("http://127.0.0.1:8780"))
+        web.setDownloadListener { url, _, disposition, _, _ ->
+            val name = Regex("filename\\*=UTF-8''([^;]+)").find(disposition ?: "")?.groupValues?.get(1)
+                ?.let { URLDecoder.decode(it, "UTF-8") } ?: Uri.parse(url).lastPathSegment ?: "attachment"
+            attachments.handle("as", JSONArray().put(JSONObject().put("url", url).put("name", name)))
+        }
+        Notifier.channels(this)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() { if (web.canGoBack()) web.goBack() else finish() }
         })
