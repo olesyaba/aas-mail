@@ -33,6 +33,9 @@ import bridge
 log = logging.getLogger("eas-mail")
 WEB = Path(__file__).parent / "web"
 TOKEN = secrets.token_urlsafe(24)
+# Android: any app on the phone can reach 127.0.0.1, and the page embeds TOKEN.
+# The shell sends this key with the page request; unset on the Mac (no change).
+PAGE_KEY = os.environ.get("EAS_MAIL_PAGE_KEY", "")
 bridge.DATA_DIR.mkdir(parents=True, exist_ok=True)
 PORT = int(os.environ.get("EAS_MAIL_PORT", "8780"))
 ALLOWED_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
@@ -2904,6 +2907,8 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = parse_qs(u.query)
         if u.path in ("/", "/index.html"):
+            if PAGE_KEY and not secrets.compare_digest(self.headers.get("X-Page-Key", ""), PAGE_KEY):
+                return self.send_error(403)
             page = (WEB / "index.html").read_text(encoding="utf-8").replace("__TOKEN__", TOKEN)
             csp = (
                 "default-src 'self'; script-src 'self' 'unsafe-inline'; "

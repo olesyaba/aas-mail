@@ -9,6 +9,7 @@ import re
 import threading
 import time
 import unittest
+import unittest.mock
 from email.message import EmailMessage
 
 from harness import ROOT, FakeBackend, make_acct, webapp
@@ -50,6 +51,21 @@ class ServerTest(unittest.TestCase):
     def setUp(self):
         webapp.ACCTS.clear()
         webapp.ACCTS["main"] = make_acct()
+
+
+class PageKeyTest(ServerTest):
+    """Android: any app on the phone can reach 127.0.0.1 and the page embeds X-Tok,
+    so the shell must present EAS_MAIL_PAGE_KEY to get it. Unset on the Mac."""
+
+    def test_page_key_unset_serves_page(self):
+        with unittest.mock.patch.object(webapp, "PAGE_KEY", ""):
+            self.assertEqual(self.c.request("GET", "/")[0].status, 200)
+
+    def test_page_key_required_when_set(self):
+        with unittest.mock.patch.object(webapp, "PAGE_KEY", "k1"):
+            self.assertEqual(self.c.request("GET", "/")[0].status, 403)
+            self.assertEqual(self.c.request("GET", "/index.html", headers={"X-Page-Key": "bad"})[0].status, 403)
+            self.assertEqual(self.c.request("GET", "/", headers={"X-Page-Key": "k1"})[0].status, 200)
 
 
 class GuardTest(ServerTest):
