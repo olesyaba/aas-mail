@@ -28,6 +28,7 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Permissions.ask(this)
         web = WebView(this)
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
@@ -68,6 +69,7 @@ class MainActivity : ComponentActivity() {
         thread {
             try {
                 PyServer.ensureStarted(this)
+                SyncWorker.schedule(this); SyncWorker.runNow(this)
                 runOnUiThread { setContentView(web); web.loadUrl(startUrl(intent)) }
             } catch (e: Exception) {
                 runOnUiThread { showStartError() }
