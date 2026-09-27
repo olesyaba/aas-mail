@@ -41,7 +41,7 @@ MAX_BODY = 40 * 1024 * 1024
 # Product identity (About page + UI chrome).
 APP_META = {
     "name": "AAS mail",
-    "version": "1.2.18",
+    "version": "1.2.19",
     "description": "Локальный клиент почты и календаря Alfa / Alfa-Seller поверх Exchange ActiveSync.",
     "contact_mm": "@olesya_ba",
     "thanks_intro": "Спасибо за тест-рейды и светлые идеи:",
@@ -1141,7 +1141,13 @@ def folder_delete(a: Acct, folder_id: str) -> dict:
                        "9": "список папок устарел — обновите его и повторите"}.get(status, f"код {status}")
                 return {"ok": False, "error": "eas_status", "message": f"Папка не удалена: {why}",
                         "action": "delete", "count": 0, "items": []}
-            backend.client.foldersync(force=True, full=True)
+            # The folder is gone; the follow-up resync is best-effort. A slow or failing
+            # foldersync here must not turn a successful delete into an error (the UI would
+            # freeze on a phantom failure while the folder is actually already deleted).
+            try:
+                backend.client.foldersync(force=True, full=True)
+            except Exception as e:  # noqa: BLE001
+                log.warning("[%s] post-delete foldersync failed (folder already gone): %s", a.id, e)
             return {"ok": True, "action": "delete", "count": 1, "items": [{"folder_id": folder_id}]}
         except Exception as e:  # noqa: BLE001
             log.warning("[%s] folder delete failed: %s", a.id, e)
@@ -1370,6 +1376,10 @@ def send_invites(a: Acct, p: dict, attendees: list[str]) -> list[str]:
 CAL_FIELDS = ["subject", "start", "end", "location", "is_all_day", "is_recurring", "organizer",
               "busy_status", "attendees", "response_type", "meeting_status", "body", "reminder",
               "categories", "uid"]
+# Event body: keep plain text (safe to render), but a small cap dropped long
+# descriptions and the join link that vendors (Yandex, Teams) put near the end —
+# so read enough of it to keep both. (#13/#14)
+CAL_BODY_TRUNCATION = 20000
 CAL_TTL = 180
 _last_activity = [time.time()]  # last UI request; the refresher idles when the app is not in use
 
@@ -1732,7 +1742,7 @@ def _cal_full_sync(a: Acct, backend, start, end) -> None:
     t0 = time.time()
     calendar_id = cal_mod._calendar_id(backend.client)
     opts = [el("AirSync", "FilterType", text=cal_mod._filter_type(days)),
-            body_preference(type_code="1", truncation=1024)]
+            body_preference(type_code="1", truncation=CAL_BODY_TRUNCATION)]
     masters: dict = {}
     truncated = False
     backend._pace()
@@ -1777,7 +1787,7 @@ def _cal_delta_sync(a: Acct, backend, start, end) -> None:
     calendar_id = c["cal_id"]
     days = max(1, (end - start).days)
     opts = [el("AirSync", "FilterType", text=cal_mod._filter_type(days)),
-            body_preference(type_code="1", truncation=1024)]
+            body_preference(type_code="1", truncation=CAL_BODY_TRUNCATION)]
     masters = dict(c.get("masters") or {})
     gen = c["gen"]
     pages = changed = 0
@@ -2162,7 +2172,7 @@ def update_install() -> dict:
 PREFS_PATH = bridge.DATA_DIR / "prefs.json"
 DEFAULT_PREFS = {
     "signature": "", "signature2": "", "sig_replies": True, "threads": True,
-    "auto_sync": 2, "cal_view": "week", "links": [],
+    "auto_sync": 1, "cal_view": "week", "links": [],
     # Pinned mail folders as "acct:folderId" strings (e.g. "main:42").
     "favorite_folders": [],
     # Category name → "#RRGGBB". ActiveSync carries category names but not
@@ -2176,10 +2186,13 @@ DEFAULT_PREFS = {
     "reminder_minutes": 5,
     # New-mail alert sound: bundled CAF name, or "none" for a silent banner.
     "mail_sound": "notice14",
-    # Mail period filter (EAS FilterType) shared by all accounts: 3=1 wk, 4=2 wk, 5=1 mo, 0=all.
+    # Mail period filter (EAS FilterType), per account: 3=1 wk, 4=2 wk, 5=1 mo, 0=all.
+    # main uses mail_window; the Seller mailbox keeps its own mail_window_seller.
     "mail_window": 5,
-    # Mail list order (AAS-24-10): date_desc (default) | date_asc | from | subject.
+    "mail_window_seller": 5,
+    # Mail list order (AAS-24-10), per account: date_desc (default) | date_asc | from | subject.
     "mail_sort": "date_desc",
+    "mail_sort_seller": "date_desc",
     # Self-update: "auto" (check every 6 h and install) or "manual" (only on request).
     "update_mode": "auto",
     # Working day for «Свободно у всех» suggestions (local hours).
@@ -2227,11 +2240,11 @@ def update_prefs(patch: dict) -> dict:
                 v = v[:5000]
             if k == "cal_view" and v not in ("day", "work", "week"):
                 continue
-            if k == "auto_sync" and v not in (0, 1, 2, 5, 10):
+            if k == "auto_sync" and v not in (0, 0.5, 1, 2, 5, 10):
                 continue
-            if k == "mail_window" and v not in (0, 3, 4, 5):
+            if k in ("mail_window", "mail_window_seller") and v not in (0, 3, 4, 5):
                 continue
-            if k == "mail_sort" and v not in MAIL_SORTS:
+            if k in ("mail_sort", "mail_sort_seller") and v not in MAIL_SORTS:
                 continue
             if k == "update_mode" and v not in ("auto", "manual"):
                 continue
@@ -2241,6 +2254,11 @@ def update_prefs(patch: dict) -> dict:
                 "navy-orange", "navy-orange-light",
                 "royal-velvet", "royal-velvet-light",
                 "eclipse-almond", "eclipse-almond-light",
+                "mist", "mist-light", "forest", "forest-light",
+                "coral-mint", "coral-mint-light",
+                # *-auto: palette that follows macOS light/dark (resolved in the web UI)
+                "navy-orange-auto", "royal-velvet-auto", "eclipse-almond-auto",
+                "mist-auto", "forest-auto", "coral-mint-auto",
             ):
                 continue
             if k == "reminder_minutes" and v not in (0, 1, 2, 5, 10, 15, 30):

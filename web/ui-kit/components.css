@@ -1052,16 +1052,36 @@
 }
 
 /* ——— Settings ——— */
+/* Section tabs are navigation, not an action — a segmented control on a track,
+   so they don't read as the footer's «Сохранить» (solid) / «Отмена» (outlined)
+   pill buttons. The magenta fill stays reserved for the primary action. */
 .aas-settings-tabs {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   margin: 0 0 12px;
+  padding: 3px;
+  background: var(--aas-panel-2);
+  border: 1px solid var(--aas-line);
+  border-radius: var(--aas-r-pill);
+}
+
+.aas-settings-tabs .aas-btn {
+  border-color: transparent;
+  background: transparent;
+  color: var(--aas-muted);
+}
+
+.aas-settings-tabs .aas-btn:hover:not(:disabled) {
+  background: var(--aas-panel);
+  border-color: transparent;
+  color: var(--aas-text);
 }
 
 .aas-settings-tabs .aas-btn.on {
-  background: var(--aas-accent);
-  color: var(--aas-on-accent);
-  border-color: var(--aas-accent-text);
+  background: var(--aas-panel);
+  color: var(--aas-accent-text);
+  border-color: transparent;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 10%);
 }
 
 .aas-about {

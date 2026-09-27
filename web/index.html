@@ -13,10 +13,9 @@
 /* Theme before first paint (no light flash): last choice cached locally, the
    server copy in prefs wins once loaded. "system" = follow macOS. */
 try {
-  const t = localStorage.getItem('aas-theme');
-  const ok = ['light', 'dark', 'navy-orange', 'navy-orange-light',
-    'royal-velvet', 'royal-velvet-light', 'eclipse-almond', 'eclipse-almond-light'];
-  if (ok.includes(t)) document.documentElement.dataset.theme = t;
+  let t = localStorage.getItem('aas-theme');
+  if (t && /-auto$/.test(t)) t = t.slice(0, -5) + (matchMedia('(prefers-color-scheme: dark)').matches ? '' : '-light');
+  if (t && /^[a-z-]+$/.test(t) && t !== 'system') document.documentElement.dataset.theme = t;
 } catch (_) {}
 </script>
 </head>
@@ -283,19 +282,79 @@ function fmtRange(s, e, allDay = false, now = new Date()) {
 const icon = (name, size = 16) => `<svg class="aas-ic" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
 /* ---------- preferences (kept on the server) ---------- */
-let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 2, cal_view: 'week', links: [], favorite_folders: [], theme: 'system', mail_sound: 'notice14', mail_sort: 'date_desc', update_mode: 'auto'};
-/** Default light/dark/system + StylesBA (dark where readable, plus light variants). */
-const THEME_IDS = ['light', 'dark',
-  'navy-orange', 'navy-orange-light',
-  'royal-velvet', 'royal-velvet-light',
-  'eclipse-almond', 'eclipse-almond-light'];
-/** Apply a theme choice to the page and to the native shell (window chrome, tray, reminders). */
+let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 1, cal_view: 'week', links: [], favorite_folders: [], theme: 'system', mail_sound: 'notice14', mail_window: 5, mail_window_seller: 5, mail_sort: 'date_desc', mail_sort_seller: 'date_desc', update_mode: 'auto'};
+/* Period and order are per-account (Bank ⇄ Seller keep their own): main on the base
+   key, the Seller mailbox on the *_seller key — same split as signature/signature2. */
+const winKeyFor = a => a === 'main' ? 'mail_window' : 'mail_window_seller';
+const sortKeyFor = a => a === 'main' ? 'mail_sort' : 'mail_sort_seller';
+const winFor = (a = ACCT) => prefs[winKeyFor(a)] ?? 5;
+const sortFor = (a = ACCT) => prefs[sortKeyFor(a)] || 'date_desc';
+/** Settings → Оформление: a palette × a mode. `id` '' = the default look (light/dark/system);
+ *  others follow StylesBA naming: `x` = dark, `x-light` = light, `x-auto` = follows macOS.
+ *  `sw` = swatch for the picker: light canvas, Bank, Seller, dark canvas. */
+const THEME_PALETTES = [
+  {id: '', name: 'Стандартная', sw: ['#f5f6f8', '#501820', '#003830', '#181a1d']},
+  {id: 'mist', name: 'Туман', sw: ['#f0f5f7', '#501820', '#295255', '#162623']},
+  {id: 'forest', name: 'Лес', sw: ['#eaf3e7', '#e76f51', '#a7f432', '#0f1f16']},
+  {id: 'coral-mint', name: 'Коралл + мята', sw: ['#f7fff7', '#ff6b6b', '#4ecdc4', '#1a1a2e']},
+  {id: 'navy-orange', name: 'Терракота · Navy', sw: ['#f4ede4', '#e76f51', '#1f7a70', '#092634']},
+  {id: 'royal-velvet', name: 'Royal Velvet', sw: ['#f8f8f2', '#b8387e', '#5cb85c', '#1d1e26']},
+  {id: 'eclipse-almond', name: 'Eclipse + Almond', sw: ['#f4ebe0', '#c4a878', '#40534c', '#1a3636']},
+];
+const THEME_MODES = [['auto', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']];
+/** Palette + mode → stored theme id. */
+function themeId(pal, mode) {
+  if (!pal) return mode === 'auto' ? 'system' : mode;
+  return mode === 'dark' ? pal : `${pal}-${mode}`;
+}
+/** Stored theme id → {pal, mode} (unknown ids read as the default, following macOS). */
+function themeParts(t) {
+  if (t === 'light' || t === 'dark') return {pal: '', mode: t};
+  const m = /^(.+?)(?:-(light|auto))?$/.exec(t || '');
+  if (m && THEME_PALETTES.some(p => p.id && p.id === m[1])) return {pal: m[1], mode: m[2] || 'dark'};
+  return {pal: '', mode: 'auto'};
+}
+const THEME_IDS = THEME_PALETTES.flatMap(p => THEME_MODES.map(([m]) => themeId(p.id, m))).filter(t => t !== 'system');
+const darkScheme = (() => { try { return matchMedia('(prefers-color-scheme: dark)'); } catch (_) { return null; } })();
+let themeChoice = 'system';
+/** Apply a theme choice to the page and to the native shell (window chrome, tray, reminders).
+ *  `x-auto` resolves here to `x` / `x-light` from the macOS appearance. */
 function applyTheme(t) {
   t = THEME_IDS.includes(t) ? t : 'system';
-  if (t === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  themeChoice = t;
+  const resolved = t.endsWith('-auto') ? (darkScheme?.matches ? t.slice(0, -5) : t.slice(0, -5) + '-light') : t;
+  if (resolved === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = resolved;
   try { localStorage.setItem('aas-theme', t); } catch (_) {}
-  try { window.webkit?.messageHandlers?.aasTheme?.postMessage(t); } catch (_) {}
+  try { window.webkit?.messageHandlers?.aasTheme?.postMessage(resolved); } catch (_) {}
+  postPalette();
 }
+/** Hand the tray popover and reminder banners the resolved colours of the current
+ *  theme (straight from tokens.css), so native windows match the main window. */
+function themePalette() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = n => cs.getPropertyValue(`--aas-${n}`).trim().toLowerCase();
+  const lum = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255)
+    .map(x => x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)
+    .reduce((s, x, i) => s + x * [0.2126, 0.7152, 0.0722][i], 0);
+  const cr = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const p = {bg: v('bg'), panel: v('panel'), line: v('line'), text: v('text'), muted: v('muted'),
+    danger: v('danger'), ok: v('ok'), warn: v('warning-text'),
+    bankFill: v('bank-fill'), bankInk: v('bank-ink'), bankBg: v('bank-bg'),
+    sellerFill: v('seller-fill'), sellerInk: v('seller-ink'), sellerBg: v('seller-bg')};
+  if (!Object.values(p).every(c => /^#[0-9a-f]{6}$/.test(c))) return null;
+  // On-fill text: white unless the fill is light (lime, coral, mint) — then the darkest ink.
+  const dark = lum(p.text) < lum(p.bg) ? p.text : p.bg;
+  const on = fill => cr('#ffffff', fill) >= cr(dark, fill) ? '#ffffff' : dark;
+  return {...p, dark: lum(p.bg) < 0.2, bankOn: on(p.bankFill), sellerOn: on(p.sellerFill)};
+}
+function postPalette() {
+  try {
+    const p = themePalette();
+    if (p) window.webkit?.messageHandlers?.aasPalette?.postMessage(JSON.stringify(p));
+  } catch (_) {}
+}
+// «Как в системе»: macOS appearance flips the look (x-auto) or at least the palette.
+try { darkScheme.addEventListener('change', () => applyTheme(themeChoice)); } catch (_) {}
 /** Settings the native shell acts on (tray reminders, new-mail sound). */
 function syncNativePrefs() {
   try {
@@ -522,7 +581,7 @@ async function sweepUnread(acct = ACCT, force = false) {
   if (sweeping[acct]) return;
   sweeping[acct] = true;
   try {
-    let j = await api('unread', {sweep: true, force, filter: +$('#window').value, fields: LIST_FIELDS}, acct);
+    let j = await api('unread', {sweep: true, force, filter: winFor(acct), fields: LIST_FIELDS}, acct);
     for (let i = 0; i < 90; i++) {
       setUnread(acct, j);
       if (acct === ACCT) renderFolders(folderItems);
@@ -597,7 +656,8 @@ $('#newbtn').onclick = () => view === 'cal' ? eventForm() : composeForm();
 let syncing = false, lastSync = null, autoTimer = null;
 function setSyncText() {
   $('#synctxt').textContent = syncing ? 'Синхронизация…' : lastSync ? 'Обновлено ' + pad(lastSync.getHours()) + ':' + pad(lastSync.getMinutes()) : '';
-  const auto = prefs.auto_sync > 0 ? `Автоматически каждые ${prefs.auto_sync} мин: открытая папка или календарь и счётчики всех ящиков.` : 'Автосинхронизация выключена.';
+  const every = prefs.auto_sync === 0.5 ? '30 секунд' : `${prefs.auto_sync} мин`;
+  const auto = prefs.auto_sync > 0 ? `Автоматически каждые ${every}: открытая папка или календарь и счётчики всех ящиков.` : 'Автосинхронизация выключена.';
   const hint = `${auto} Интервал — в Настройки → Почта.`;
   $('#synctxt').title = hint;
   // The time lives in the button's tooltip, not as a line of text in the header.
@@ -670,7 +730,7 @@ async function refreshInboxBadge(id, tick = '') {
   // Always Sync the Inbox so new mail is known; use the list payload to detect fresh unread.
   if (!openHere) {
     try {
-      const j = await api('mail', {action: 'list', folder: inboxIds[id], limit: 40, filter: +$('#window').value, fields: LIST_FIELDS}, id);
+      const j = await api('mail', {action: 'list', folder: inboxIds[id], limit: 40, filter: winFor(id), fields: LIST_FIELDS}, id);
       noteIncoming(id, j.items || []);
     } catch (_) {}
   }
@@ -813,8 +873,9 @@ function syncBulkBar(total) {
   // The selection bar takes the list header's place only while something is chosen;
   // the header keeps a «select all» box so mass actions stay discoverable.
   bar.hidden = n === 0;
+  // Swap only the title row for the selection bar (equal height); keep the filter
+  // row in place so the header doesn't lose a row and the list below stays put.
   $('#listbar')?.classList.toggle('aas-listbar--hidden', n > 0);
-  $('#listfilter')?.classList.toggle('aas-listbar--hidden', n > 0);
   $('#rows')?.classList.toggle('selecting', n > 0);
   const all0 = $('#selall0'); if (all0) all0.checked = false;
   const cnt = $('#selcount'); if (cnt) cnt.textContent = n ? `Выбрано: ${n}` : '';
@@ -854,8 +915,8 @@ function recountOpenFolder() {
 
 // Each account keeps its own folders, list, calendar window and position; switching swaps them.
 const acctStates = {};
-// View settings (threads, period, calendar week/mode) are shared by all accounts, so
-// Bank and Seller always show the same period and the same calendar week.
+// Threads and the calendar week/mode are shared by all accounts; the list period and
+// order are per-account (see winFor/sortFor), so Bank and Seller keep their own.
 // The last sync time is one for the app (a tick covers every account): not swapped
 // per account, or switching Bank ⇄ Seller showed the other one's stale «Обновлено».
 const freshState = () => ({folderItems: [], curFolder: null, nextCursor: null, searchQ: '', allItems: [], curKey: null, curGroup: null, cards: [], events: []});
@@ -879,6 +940,9 @@ function switchAccount(id) {
   restore(saved || freshState());
   selectedKeys = new Set(); curKey = null; curGroup = null;  // the reader shows the summary, so no row stays «open»
   $('#search').value = searchQ; showReaderEmpty();
+  // Period and order are per-account: show this account's own choice (and let a fresh
+  // load below read the right period from the select).
+  $('#window').value = String(winFor()); $('#sort').value = sortFor(); paintViewBtn();
   if (saved) {
     renderFolders(folderItems); $('#listtitle').textContent = folders.find(f => f.folder_id === curFolder)?.name || ''; renderList(!!nextCursor);
   } else {
@@ -901,6 +965,9 @@ function showAcctError(e) {
   }
 }
 function renderFolders(items) {
+  // A transient Exchange hiccup can return an empty folder set; don't wipe a
+  // sidebar we already have — keep the last good tree until a real list arrives.
+  if ((!items || !items.length) && folderItems.length) return;
   folderItems = items;
   folders = items.filter(f => MAIL_TYPES.has(String(f.type)));
   const u = unreadByAcct[ACCT] || {}, counts = u.folders || {}, partial = u.partial || new Set();
@@ -930,7 +997,10 @@ function renderFolders(items) {
   };
   let html = '';
   const total = u.total || 0;
-  html += `<div class="aas-folder-total" title="Входящие и свои папки, за выбранный период (без Отправленных, Черновиков и Удалённых)">Непрочитанные<span class="aas-badge"${total ? '' : ' hidden'}>${total > 999 ? '999+' : total}${partial.size && total <= 999 ? '+' : ''}</span></div>`;
+  // «+» only when a folder that actually holds unread is still loading — a fully
+  // counted total (e.g. one unread) reads «1», not a misleading «1+».
+  const totalMore = total > 0 && [...partial].some(f => (counts[f] || 0) > 0);
+  html += `<div class="aas-folder-total" title="Входящие и свои папки, за выбранный период (без Отправленных, Черновиков и Удалённых)">Непрочитанные<span class="aas-badge"${total ? '' : ' hidden'}>${total > 999 ? '999+' : total}${totalMore && total <= 999 ? '+' : ''}</span></div>`;
   if (favs.length) html += `<div class="aas-folder-sec">Избранные</div>` + favs.map(([f]) => row([f, 0])).join('');
   if (sys.length) html += `<div class="aas-folder-sec">Почта</div>` + sys.map(([f]) => row([f, 0])).join('');
   if (mine.length) html += `<div class="aas-folder-sec">Папки</div>` + mine.map(row).join('');
@@ -1022,6 +1092,9 @@ function openFolder(id) {
   rememberFolder(id);
   clearTimeout(listRetry.t); clearInterval(listRetry.tick); listRetry.n = 0; listStale = '';
   curFolder = id; searchQ = ''; $('#search').value = '';
+  // Drop the previous folder's letters at once, so a background render (auto-sync)
+  // can't paint them under the new folder's title before its own list loads.
+  allItems = []; nextCursor = null;
   selectedKeys = new Set(); fillBulkMove();
   document.querySelectorAll('.aas-folder').forEach(el => { el.classList.toggle('on', el.dataset.id === id);
     if (el.dataset.id === id) el.setAttribute('aria-current', 'true'); else el.removeAttribute('aria-current'); });
@@ -1078,6 +1151,9 @@ async function loadList(reset) {
   // already-visible mail as "new".
   if (!searchQ && inboxIds[acct] && curFolder === inboxIds[acct] && (j.items || []).length)
     noteIncoming(acct, j.items);
+  // The list just arrived with its unread mail — recount the header now, so the
+  // folder badge / total match the list without waiting for the next «unread» tick.
+  recountOpenFolder();
 }
 const loadListGuarded = guard(loadList);
 /* Server unreachable: the list says so, counts down and reloads by itself. A cached
@@ -1142,7 +1218,7 @@ function renderList(hasMore) {
     n.textContent = `${listStale.replace(/\s*Повторю[^.]*\.?\s*$/, '')} Показаны сохранённые письма, обновлю сам.`;
     frag.appendChild(n);
   }
-  sortGroups(groups, prefs.mail_sort).forEach(g => frag.appendChild(rowEl(g)));
+  sortGroups(groups, sortFor(ACCT)).forEach(g => frag.appendChild(rowEl(g)));
   if (hasMore) {
     const more = document.createElement('div'); more.className = 'more';
     more.innerHTML = '<button class="aas-btn">Ещё</button>'; more.firstChild.onclick = () => loadListGuarded(false); frag.appendChild(more);
@@ -1603,15 +1679,18 @@ function afterRemove(g) {
   renderList(!!nextCursor); showReaderEmpty();
 }
 
-$('#sort').onchange = e => { savePrefs({mail_sort: e.target.value}); paintViewBtn(); if (allItems.length) renderList(!!nextCursor); };
-$('#window').onchange = () => { savePrefs({mail_window: +$('#window').value}); paintViewBtn(); loadListGuarded(true); };
-/** «Вид» shows what is in force when it differs from the default (1 месяц, новые сверху). */
+$('#sort').onchange = e => { savePrefs({[sortKeyFor(ACCT)]: e.target.value}); paintViewBtn(); if (allItems.length) renderList(!!nextCursor); };
+$('#window').onchange = () => { savePrefs({[winKeyFor(ACCT)]: +$('#window').value}); paintViewBtn(); loadListGuarded(true); };
+/** «Вид» always names the period in force (so it never flips between a period and
+ *  the bare «Вид»); the sort is appended only when it isn't the default. */
 function paintViewBtn() {
   const b = $('#viewbtn'); if (!b) return;
   const w = $('#window'), so = $('#sort');
-  const parts = [w.value !== '5' ? w.selectedOptions[0]?.textContent : '', so.value !== 'date_desc' ? so.selectedOptions[0]?.textContent.toLowerCase() : ''].filter(Boolean);
+  const period = w.selectedOptions[0]?.textContent || '';
+  const sort = so.value !== 'date_desc' ? so.selectedOptions[0]?.textContent.toLowerCase() : '';
+  const parts = [period, sort].filter(Boolean);
   b.textContent = parts.length ? parts.join(', ').replace(/^./, c => c.toLowerCase()) : 'Вид';
-  b.title = `Период: ${w.selectedOptions[0]?.textContent}. Порядок: ${so.selectedOptions[0]?.textContent.toLowerCase()}`;
+  b.title = `Период: ${period}. Порядок: ${so.selectedOptions[0]?.textContent.toLowerCase()}`;
 }
 $('#viewbtn').onclick = e => {
   e.stopPropagation();
@@ -2070,14 +2149,14 @@ $('#setbtn').onclick = async () => {
     </div>
     <div data-pane="mail" hidden>
     <div class="f"><label>Оформление</label>
-      <div class="aas-themepick" id="stheme">${[
-        ['system', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная'],
-        ['navy-orange', 'Navy + Orange'], ['navy-orange-light', 'Navy · светлая'],
-        ['royal-velvet', 'Royal Velvet'], ['royal-velvet-light', 'Velvet · светлая'],
-        ['eclipse-almond', 'Eclipse + Almond'], ['eclipse-almond-light', 'Eclipse · светлая']
-      ].map(([v, t]) =>
-        `<button type="button" data-theme-v="${v}" class="${(prefs.theme || 'system') === v ? 'on' : ''}">${t}</button>`).join('')}</div>
-      <div class="hint">Светлая / тёмная — по умолчанию. StylesBA: основная — тёмная (где хорошо читается), рядом светлый вариант. Сразу на окно, трей и напоминания.</div></div>
+      ${(() => { const cur = themeParts(prefs.theme || 'system'); return `
+      <div class="aas-themegrid" id="stheme" role="radiogroup" aria-label="Палитра">${THEME_PALETTES.map(p =>
+        `<button type="button" role="radio" aria-checked="${p.id === cur.pal}" data-theme-pal="${p.id}" class="aas-themecard${p.id === cur.pal ? ' on' : ''}">
+          <span class="aas-themecard__sw">${p.sw.map(c => `<i style="background:${c}"></i>`).join('')}</span>
+          <span class="aas-themecard__name">${p.name}</span></button>`).join('')}</div>
+      <div class="aas-seg aas-thememode" id="sthememode" role="radiogroup" aria-label="Режим">${THEME_MODES.map(([m, t]) =>
+        `<button type="button" role="radio" aria-checked="${m === cur.mode}" data-theme-mode="${m}" class="${m === cur.mode ? 'on' : ''}">${t}</button>`).join('')}</div>`; })()}
+      <div class="hint">Сразу на окно, трей и напоминания.</div></div>
     <div class="f"><label>Напоминать о встрече за</label>
       <select id="sremind">${[[1, '1 минуту'], [2, '2 минуты'], [5, '5 минут'], [10, '10 минут'], [15, '15 минут'], [30, '30 минут'], [0, 'Не напоминать']].map(([v, t]) =>
         `<option value="${v}" ${(prefs.reminder_minutes ?? 5) === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
@@ -2089,13 +2168,13 @@ $('#setbtn').onclick = async () => {
         <button type="button" class="aas-btn aas-btn--icon" id="smailsound_preview" title="Прослушать" aria-label="Прослушать">${icon('play', 14)}</button>
       </div>
       <div class="hint">Уведомление macOS, когда во «Входящих» появляется новое непрочитанное. «Без звука» — только баннер.</div></div>
-    <div class="f"><label>Подпись (добавляется в новые письма, ответы и пересылки)</label>
+    <div class="f"><label>Подпись для «${esc(accounts.find(a => a.id === 'main')?.name || 'Alfa-Bank')}» (в новые письма, ответы и пересылки)</label>
       <textarea id="ssig" rows="5" placeholder="С уважением,&#10;Имя Фамилия&#10;Должность, телефон">${esc(prefs.signature)}</textarea></div>
     ${accounts.filter(a => a.green).map(a => `<div class="f"><label>Подпись для «${esc(a.name)}»</label><textarea id="ssig2" rows="4">${esc(prefs.signature2)}</textarea></div>`).join('')}
     <div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="sthr" ${prefs.threads ? 'checked' : ''}> Группировать письма в цепочки</label></div>
     <div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="ssigr" ${prefs.sig_replies ? 'checked' : ''}> Подпись в ответах и пересылках</label></div>
     <div class="frow">
-      <div class="f"><label>Автосинхронизация (почта, календарь, счётчики)</label><select id="sauto">${[[0, 'Выключена'], [1, 'Каждую минуту'], [2, 'Каждые 2 минуты'], [5, 'Каждые 5 минут'], [10, 'Каждые 10 минут']].map(([v, t]) => `<option value="${v}" ${prefs.auto_sync === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+      <div class="f"><label>Автосинхронизация (почта, календарь, счётчики)</label><select id="sauto">${[[0, 'Выключена'], [0.5, 'Каждые 30 секунд'], [1, 'Каждую минуту'], [2, 'Каждые 2 минуты'], [5, 'Каждые 5 минут'], [10, 'Каждые 10 минут']].map(([v, t]) => `<option value="${v}" ${prefs.auto_sync === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
       <div class="f"><label>Вид календаря по умолчанию</label><select id="scal">${[['day', 'День'], ['work', 'Рабочая неделя'], ['week', 'Неделя']].map(([v, t]) => `<option value="${v}" ${prefs.cal_view === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
     </div>
     <div class="frow">
@@ -2134,10 +2213,15 @@ $('#setbtn').onclick = async () => {
     $('#ssave').style.display = b.dataset.sp === 'about' || b.dataset.sp === 'upd' ? 'none' : '';
     if (b.dataset.sp === 'upd') paintUpdate();
   });
-  document.querySelectorAll('[data-theme-v]').forEach(b => b.onclick = () => {
-    document.querySelectorAll('[data-theme-v]').forEach(x => x.classList.toggle('on', x === b));
-    applyTheme(b.dataset.themeV); savePrefs({theme: b.dataset.themeV});  // instant, like macOS settings
-  });
+  const pickTheme = (attr, b) => {
+    document.querySelectorAll(`[${attr}]`).forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); });
+    const pal = document.querySelector('[data-theme-pal].on')?.dataset.themePal ?? '';
+    const mode = document.querySelector('[data-theme-mode].on')?.dataset.themeMode || 'auto';
+    const t = themeId(pal, mode);
+    applyTheme(t); savePrefs({theme: t});  // instant, like macOS settings
+  };
+  document.querySelectorAll('[data-theme-pal]').forEach(b => b.onclick = () => pickTheme('data-theme-pal', b));
+  document.querySelectorAll('[data-theme-mode]').forEach(b => b.onclick = () => pickTheme('data-theme-mode', b));
   document.querySelectorAll('[data-fillurl]').forEach(a => a.onclick = e => {
     e.preventDefault(); const inp = document.getElementById(a.dataset.fillurl); if (inp) inp.value = a.dataset.url;
   });
@@ -2545,10 +2629,21 @@ function eventForm(e, opts = {}) {
   let avTok = 0;
   const runAvailability = guard(async () => {
     if (!$('#avres')) return;
-    const st = new Date($('#est').value), en = new Date($('#een').value);
-    const att = splitAddrs($('#eatt').value).map(addrOnly).filter(Boolean);
     const box = $('#avres');
-    if (isNaN(st) || isNaN(en) || en <= st) { box.textContent = ''; return; }
+    const allDay = !!$('#eall')?.checked;
+    let st = new Date($('#est').value), en = new Date($('#een').value);
+    // All-day: a point-time window is meaningless — check the working day itself,
+    // so the button keeps working after the «Весь день» toggle.
+    if (allDay && !isNaN(st)) {
+      const ws = prefs.work_start ?? 9, we = prefs.work_end ?? 18, d = isNaN(en) ? st : en;
+      st = new Date(st.getFullYear(), st.getMonth(), st.getDate(), ws, 0);
+      en = new Date(d.getFullYear(), d.getMonth(), d.getDate(), we, 0);
+      if (en <= st) en = new Date(st.getTime() + 60 * 6e4);
+    }
+    const att = splitAddrs($('#eatt').value).map(addrOnly).filter(Boolean);
+    if (isNaN(st) || isNaN(en)) { box.textContent = ''; return; }
+    // Don't fail silently on a backwards range — say why the check can't run.
+    if (en <= st) { box.innerHTML = `<div class="aas-avline">${avDot('warn')}Конец раньше начала — поправьте время, тогда проверю занятость.</div>`; return; }
     if (!att.length) { box.textContent = ''; return; }
     const tok = ++avTok; box.textContent = 'Проверяю…';
     let j;
@@ -2569,11 +2664,14 @@ function eventForm(e, opts = {}) {
       return `<div class="aas-avline">${avDot(c)}${esc(x.name || x.address)}: ${t}</div>`; });
     (j.unresolved || []).forEach(u => rows.push(`<div class="aas-avline">${avDot('')}${esc(u.query)}: не найден или неоднозначен, занятость неизвестна</div>`));
     box.innerHTML = rows.join('') || 'Нет данных';
-    if ((j.items || []).some(x => /[23]/.test(x.freebusy || ''))) {
+    // Offer «free for everyone» slots whenever attendees resolved — not only on a
+    // conflict — so the suggestions actually show (a busy check alone left them hidden).
+    const anyBusy = (j.items || []).some(x => /[23]/.test(x.freebusy || ''));
+    if (!allDay && (j.items || []).length) {
       try { const f = await api('people', {action: 'find_free_slots', who: att, duration_minutes: Math.max(15, Math.round((en - st) / 6e4)), start: isoLocal(st), count: 3});
         if (tok !== avTok) return;
         const slotLabel = x => fmtRange(new Date(x.start_iso), new Date(x.end_iso));
-        if ((f.items || []).length) box.innerHTML += `<div style="margin-top:6px">Свободно у всех (рабочий день ${pad(f.work_start ?? prefs.work_start)}:00–${pad(f.work_end ?? prefs.work_end)}:00):</div>`
+        if ((f.items || []).length) box.innerHTML += `<div style="margin-top:6px">${anyBusy ? 'Свободно у всех' : 'Другие свободные слоты'} (рабочий день ${pad(f.work_start ?? prefs.work_start)}:00–${pad(f.work_end ?? prefs.work_end)}:00):</div>`
           + '<div class="aas-slots">' + f.items.map(x => `<button class="aas-btn aas-btn--sm" type="button" data-s="${esc(x.start_iso)}" data-e="${esc(x.end_iso)}">${esc(slotLabel(x))}</button>`).join('') + '</div>';
         box.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { $('#est').value = isoLocal(new Date(b.dataset.s)); $('#een').value = isoLocal(new Date(b.dataset.e)); runAvailability(); });
       } catch (x) { /* slots are a nicety */ } }
@@ -2583,7 +2681,13 @@ function eventForm(e, opts = {}) {
     // OWA-like: auto-check after attendee/time edits (debounced).
     let avT;
     const arm = () => { clearTimeout(avT); avT = setTimeout(() => runAvailability(), 450); };
-    ['eatt', 'est', 'een'].forEach(id => { const el = $('#' + id); if (el) el.addEventListener('change', arm); });
+    ['eatt', 'est', 'een', 'eall'].forEach(id => { const el = $('#' + id); if (el) el.addEventListener('change', arm); });
+    // If the start is pushed past the end, carry the end along (keep a 30-min meeting)
+    // so the range never goes backwards and the availability check keeps working.
+    $('#est')?.addEventListener('change', () => {
+      const st = new Date($('#est').value), en = new Date($('#een').value);
+      if (!isNaN(st) && (isNaN(en) || en <= st)) $('#een').value = isoLocal(new Date(st.getTime() + 30 * 6e4));
+    });
     $('#eatt')?.addEventListener('input', arm);
   }
   $('#ecancel').onclick = closeModal;
@@ -2702,7 +2806,7 @@ $('#bulkunread')?.addEventListener('click', bulkMark(false));
   if (acc.status === 'fulfilled') accounts = acc.value.accounts;
   setTimeout(() => applyAuthState(accounts), 0);  // tabs exist after buildAccountTabs
   buildAccountTabs(); setBrand(); showReaderEmpty();
-  calMode = prefs.cal_view; $('#window').value = String(prefs.mail_window ?? 5); $('#sort').value = prefs.mail_sort || 'date_desc'; paintViewBtn(); armAutoSync();
+  calMode = prefs.cal_view; $('#window').value = String(winFor()); $('#sort').value = sortFor(); paintViewBtn(); armAutoSync();
   armUpdates();
   if (aboutMeta.needs_setup) {
     toast('Первый запуск: укажите логин и пароль. Адреса серверов уже подставлены.');

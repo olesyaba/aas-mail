@@ -26,7 +26,14 @@
 В dark mode акценты светлеют (`#c47a84` / `#3d8f7a`).
 
 Оформление (`html[data-theme]`): `light` / `dark` / `system` + StylesBA
-(`navy-orange`, `royal-velvet`, `eclipse-almond` и `*-light`). У StylesBA основная —
+(`navy-orange`, `royal-velvet`, `eclipse-almond` и `*-light`) + палитры 2026-09: `mist` (Туман —
+серо-бирюзовый, Банк остаётся Vinho), `forest` (Лес — лайм `#A7F432` только как заливка Селлера,
+терракотовый Банк), `coral-mint` (коралл = Банк, мята = Селлер; «ошибка» уведена в янтарь /
+малиновый, чтобы не путаться с непрочитанным). `navy-orange-light` = «Терракота»: песочный холст
+`#F4EDE4`, бирюзовый Селлер `#1F7A70`. Светлые заливки (`#E76F51`, `#A7F432`, `#FF6B6B`, `#4ECDC4`,
+`#7FB5B0`) несут тёмный `--aas-on-accent`.
+Трей и баннеры напоминаний берут ту же палитру: `themePalette()` в index.html шлёт
+резолвленные токены в `aasPalette` → `TrayTheme` (Swift), без собственных цветов. У StylesBA основная —
 тёмная (modeHint), светлая — отдельный вариант.
 
 ## Typography

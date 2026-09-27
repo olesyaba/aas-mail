@@ -40,10 +40,12 @@ func portOpen() -> Bool {
 enum AppTheme {
     static let key = "appTheme"
     static let lightLooks: Set<String> = [
-        "light", "navy-orange-light", "royal-velvet-light", "eclipse-almond-light"
+        "light", "navy-orange-light", "royal-velvet-light", "eclipse-almond-light",
+        "mist-light", "forest-light", "coral-mint-light"
     ]
     static let darkLooks: Set<String> = [
-        "dark", "navy-orange", "royal-velvet", "eclipse-almond"
+        "dark", "navy-orange", "royal-velvet", "eclipse-almond",
+        "mist", "forest", "coral-mint"
     ]
     static func apply(_ value: String) {
         if lightLooks.contains(value) {
@@ -70,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         AppTheme.apply(UserDefaults.standard.string(forKey: AppTheme.key) ?? "system")  // before any window shows
         let cfg = WKWebViewConfiguration()
         cfg.userContentController.add(self, name: "aasTheme")
+        cfg.userContentController.add(self, name: "aasPalette")
         cfg.userContentController.add(self, name: "aasPrefs")
         cfg.userContentController.add(self, name: "aasNewMail")
         cfg.userContentController.add(self, name: "aasPlaySound")
@@ -365,6 +368,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {
         if message.name == "aasTheme", let value = message.body as? String { AppTheme.apply(value) }
+        if message.name == "aasPalette", let json = message.body as? String { TrayTheme.shared.update(json: json) }
         if message.name == "aasPrefs", let p = message.body as? [String: Any] {
             if let m = (p["reminder_minutes"] as? NSNumber)?.intValue, ReminderLead.allowed.contains(m),
                m != ReminderLead.minutes {

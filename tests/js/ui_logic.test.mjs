@@ -201,9 +201,81 @@ test('theme: applied to <html>, remembered, forwarded to the native shell', () =
   assert.equal(html.dataset.theme, 'navy-orange');
   applyTheme('eclipse-almond-light');
   assert.equal(html.dataset.theme, 'eclipse-almond-light');
+  applyTheme('mist-auto');  // no dark scheme in the sandbox → the light variant
+  assert.equal(html.dataset.theme, 'mist-light');
   applyTheme('bogus');
   assert.equal(html.dataset.theme, undefined, 'unknown → follow the system');
-  assert.deepEqual(posted, ['dark', 'navy-orange', 'eclipse-almond-light', 'system']);
+  assert.deepEqual(posted, ['dark', 'navy-orange', 'eclipse-almond-light', 'mist-light', 'system']);
+});
+
+test('theme picker: palette × mode ↔ stored id', () => {
+  const {themeId, themeParts, THEME_IDS, THEME_PALETTES} = load(['themeId', 'themeParts', 'THEME_IDS', 'THEME_PALETTES']);
+  assert.equal(themeId('', 'auto'), 'system');
+  assert.equal(themeId('', 'light'), 'light');
+  assert.equal(themeId('mist', 'dark'), 'mist');
+  assert.equal(themeId('mist', 'light'), 'mist-light');
+  assert.equal(themeId('coral-mint', 'auto'), 'coral-mint-auto');
+  for (const p of THEME_PALETTES) for (const m of ['auto', 'light', 'dark'])
+    assert.deepEqual(plain(themeParts(themeId(p.id, m))), {pal: p.id, mode: m}, `${p.id || 'default'}/${m} round-trips`);
+  assert.deepEqual(plain(themeParts('bogus')), {pal: '', mode: 'auto'});
+  assert.equal(THEME_IDS.length, THEME_PALETTES.length * 3 - 1, 'every palette × mode, minus «system»');
+});
+
+test('themes: every palette is registered everywhere and readable (≥ 4.5:1)', () => {
+  const read = p => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
+  const tokens = read('web/ui-kit/tokens.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const all = plain(load(['THEME_IDS']).THEME_IDS);
+  for (const id of all.filter(t => t.endsWith('-auto'))) assert.ok(read('webapp.py').includes(`"${id}"`), `${id} accepted by webapp.py`);
+  const ids = all.filter(t => !t.endsWith('-auto'));  // auto resolves to one of these
+  const py = read('webapp.py'), swift = read('app/main.swift');
+  const vars = sel => {
+    const out = {};
+    for (const m of tokens.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+      if (!m[1].split(',').some(s => s.trim() === sel)) continue;
+      for (const d of m[2].matchAll(/(--aas-[\w-]+):\s*(#[0-9a-f]{6})/gi)) out[d[1]] = d[2];
+    }
+    return out;
+  };
+  const lum = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255)
+    .map(x => x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)
+    .reduce((s, x, i) => s + x * [0.2126, 0.7152, 0.0722][i], 0);
+  const cr = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const weak = [];
+  for (const id of ids.filter(t => t !== 'light' && t !== 'dark')) {
+    assert.ok(py.includes(`"${id}"`), `${id} accepted by webapp.py`);
+    assert.ok(swift.includes(`"${id}"`), `${id} mapped in main.swift`);
+    const root = vars(`:root[data-theme="${id}"]`);
+    assert.ok(root['--aas-bg'], `${id} has a tokens.css block`);
+    for (const [acct, sel] of [['bank', 'body.theme-bank'], ['seller', 'body.theme-seller']]) {
+      const v = {...root, ...vars(`:root[data-theme="${id}"] ${sel}`)};
+      const pairs = [['text', v['--aas-text'], v['--aas-bg']], ['muted', v['--aas-muted'], v['--aas-panel']],
+        ['on-accent', v['--aas-on-accent'], v[`--aas-${acct}-fill`]], ['ink', v[`--aas-${acct}-ink`], v['--aas-panel']],
+        ['danger', v['--aas-danger'], v['--aas-panel']]];
+      for (const [n, f, b] of pairs) if (cr(f, b) < 4.5) weak.push(`${id}/${acct} ${n} ${f} on ${b} = ${cr(f, b).toFixed(2)}`);
+    }
+  }
+  assert.deepEqual(weak, [], 'text/fill pairs below WCAG AA');
+});
+
+test('themePalette: tray gets the theme colours, dark text on light fills', () => {
+  const {themePalette, ctx} = load(['themePalette']);
+  const css = vars => { ctx.getComputedStyle = () => ({getPropertyValue: n => vars[n.slice(6)] ?? ''}); };
+  const forestLight = {bg: '#eaf3e7', panel: '#ffffff', line: '#d3e0cf', text: '#0f1f16', muted: '#55705f',
+    danger: '#c4314b', ok: '#107c41', 'warning-text': '#8a5a00',
+    'bank-fill': '#e76f51', 'bank-ink': '#b4492f', 'bank-bg': '#fbe9e3',
+    'seller-fill': '#a7f432', 'seller-ink': '#2e6b3a', 'seller-bg': '#e3f5cf'};
+  css(forestLight);
+  let p = plain(themePalette());
+  assert.equal(p.sellerOn, '#0f1f16', 'lime needs dark text');
+  assert.equal(p.bankOn, '#0f1f16', 'terracotta needs dark text');
+  assert.equal(p.dark, false);
+  css({...forestLight, bg: ' #181A1D', text: '#e6e8ea', 'bank-fill': '#8c2f3d', 'seller-fill': '#1e6b57'});
+  p = plain(themePalette());
+  assert.equal(p.bg, '#181a1d', 'trimmed + lower-cased');
+  assert.equal(p.dark, true);
+  assert.deepEqual([p.bankOn, p.sellerOn], ['#ffffff', '#ffffff']);
+  css({...forestLight, muted: 'var(--x)'});
+  assert.equal(themePalette(), null, 'unresolved token → keep the tray as it is');
 });
 
 test('layoutLanes: width comes from the conflict group, not the whole day', () => {

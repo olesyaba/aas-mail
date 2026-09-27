@@ -11,9 +11,12 @@ struct TrayPopoverView: View {
     @State private var scrollNonce = 0
     private let tick = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
 
-    private let bank = AccountTint.of(TrayDataStore.mainColor)
-    private let seller = AccountTint.of(TrayDataStore.sellerColor)
-    private let nowStrip = Color(red: 0.35, green: 0.48, blue: 0.62)
+    @ObservedObject private var theme = TrayTheme.shared
+
+    private var bank: AccountTint { theme.bank }
+    private var seller: AccountTint { theme.seller }
+    /// Same as the web calendar's now-line (--aas-danger).
+    private var nowStrip: Color { theme.palette == nil ? Color(red: 0.35, green: 0.48, blue: 0.62) : theme.danger }
 
     var body: some View {
         Group {
@@ -33,7 +36,8 @@ struct TrayPopoverView: View {
         .frame(width: 360, height: 520)
         // Soft, theme-aware backing over the frosted panel material: calm enough
         // not to glare, opaque enough that busy wallpapers don't bleed into text.
-        .background(Color(nsColor: .windowBackgroundColor).opacity(0.72))
+        .background(theme.canvas.opacity(theme.canvasOpacity))
+        .foregroundColor(theme.text)
         .onReceive(tick) { now = $0 }
     }
 
@@ -55,7 +59,7 @@ struct TrayPopoverView: View {
                         .padding(.bottom, 6)
                 }
             }
-            Divider().opacity(0.35)
+            Rectangle().fill(theme.line).frame(height: 1)
             timeline
             footer
         }
@@ -95,7 +99,7 @@ struct TrayPopoverView: View {
                     scrollNonce += 1
                 }
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(theme.link)
                     .padding(.horizontal, 4)
                 Button { store.shiftDay(1) } label: {
                     Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).frame(width: 20, height: 20)
@@ -118,7 +122,7 @@ struct TrayPopoverView: View {
             .help("Обновить")
             .disabled(store.isRefreshing)
         }
-        .foregroundColor(.primary)
+        .foregroundColor(theme.text)
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 4)
@@ -154,10 +158,10 @@ struct TrayPopoverView: View {
                     VStack(spacing: 2) {
                         Text(TrayFormatters.weekdayLetter.string(from: day).uppercased())
                             .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(selected ? .white.opacity(0.85) : .secondary)
+                            .foregroundColor(selected ? bank.on.opacity(0.85) : theme.muted)
                         Text(TrayFormatters.dayNumber.string(from: day))
                             .font(.system(size: 12, weight: selected || isToday ? .semibold : .regular))
-                            .foregroundColor(selected ? .white : .primary)
+                            .foregroundColor(selected ? bank.on : theme.text)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 5)
@@ -195,11 +199,11 @@ struct TrayPopoverView: View {
                             Text(event.subject).strikethrough(event.isCancelled)
                                 .font(.system(size: 11, weight: .medium))
                                 .lineLimit(1)
-                                .foregroundColor(.primary)
+                                .foregroundColor(theme.text)
                             Spacer(minLength: 0)
                             Text("весь день")
                                 .font(.system(size: 9))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(theme.muted)
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
@@ -238,7 +242,7 @@ struct TrayPopoverView: View {
     }
 
     private func tint(for event: TrayEvent) -> AccountTint {
-        AccountTint.of(event.accountTintHex)
+        theme.tint(account: event.accountId, fallbackHex: event.accountTintHex)
     }
 
     // MARK: - Timeline
@@ -260,12 +264,12 @@ struct TrayPopoverView: View {
                             HStack(alignment: .top, spacing: 0) {
                                 Text(String(format: "%02d:00", hour))
                                     .font(.system(size: 10, weight: .regular).monospacedDigit())
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(theme.muted)
                                     .frame(width: TimelineLayout.timeColWidth, alignment: .trailing)
                                     .padding(.trailing, 6)
                                 VStack(spacing: 0) {
                                     Rectangle()
-                                        .fill(Color.secondary.opacity(0.22))
+                                        .fill(theme.line)
                                         .frame(height: 1)
                                     Spacer(minLength: 0)
                                 }
@@ -284,7 +288,7 @@ struct TrayPopoverView: View {
                     if emptyTimed {
                         Text(allDayEvents.isEmpty ? "Свободный день — нажмите на слот" : "Нет встреч по часам — нажмите на слот")
                             .font(.system(size: 12))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(theme.muted)
                             .frame(maxWidth: .infinity)
                             .padding(.top, 48)
                             .padding(.leading, TimelineLayout.timeColWidth + 8)
@@ -356,10 +360,10 @@ struct TrayPopoverView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 10))
-                        .foregroundColor(.orange)
+                        .foregroundColor(theme.warn)
                     Text(err)
                         .font(.system(size: 10))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(theme.muted)
                         .lineLimit(1)
                         .help(err)
                     Button("Повторить") {
@@ -367,7 +371,7 @@ struct TrayPopoverView: View {
                     }
                     .font(.system(size: 10, weight: .medium))
                     .buttonStyle(.plain)
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(theme.link)
                     Spacer(minLength: 0)
                 }
             }
@@ -378,7 +382,7 @@ struct TrayPopoverView: View {
                 if let t = store.lastRefreshed, store.lastError == nil {
                     Text(refreshedLabel(t))
                         .font(.system(size: 9))
-                        .foregroundColor(.secondary.opacity(0.8))
+                        .foregroundColor(theme.muted)
                         .lineLimit(1)
                         .fixedSize()
                 }
@@ -387,27 +391,27 @@ struct TrayPopoverView: View {
                 }
                 .font(.system(size: 11, weight: .medium))
                 .buttonStyle(.plain)
-                .foregroundColor(.accentColor)
+                .foregroundColor(theme.link)
                 .lineLimit(1).fixedSize()
                 .help("Открыть окно почты (если оно было закрыто)")
                 Button("Создать") { createInMainWindow() }
                     .font(.system(size: 11, weight: .medium))
                     .buttonStyle(.plain)
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(theme.link)
                     .lineLimit(1).fixedSize()
                 Button("Календарь") {
                     NotificationCenter.default.post(name: .easShowCalendar, object: nil)
                 }
                 .font(.system(size: 11, weight: .medium))
                 .buttonStyle(.plain)
-                .foregroundColor(.accentColor)
+                .foregroundColor(theme.link)
                 .lineLimit(1).fixedSize()
                 .help("Открыть полный календарь")
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+        .background(theme.card.opacity(theme.palette == nil ? 0.5 : 0.7))
     }
 
     /// Legend doubles as the calendar switch: click Bank / Seller to hide or show it.
@@ -432,8 +436,8 @@ struct TrayPopoverView: View {
                     .frame(width: 9, height: 9)
                 Text(title)
                     .font(.system(size: 11, weight: on ? .medium : .regular))
-                    .foregroundColor(on ? .primary : .secondary)
-                    .strikethrough(!on, color: .secondary)
+                    .foregroundColor(on ? theme.text : theme.muted)
+                    .strikethrough(!on, color: theme.muted)
                     .lineLimit(1)
                     .fixedSize()
             }
@@ -453,6 +457,7 @@ struct TrayPopoverView: View {
 // MARK: - Compact hero (next meeting > 30 min away)
 
 private struct CompactHeroRow: View {
+    @ObservedObject private var theme = TrayTheme.shared
     let event: TrayEvent
     let now: Date
     let tint: AccountTint
@@ -466,7 +471,7 @@ private struct CompactHeroRow: View {
                     .lineLimit(1)
                 Text(statusText)
                     .font(.system(size: 11).monospacedDigit())
-                    .foregroundColor(.secondary)
+                    .foregroundColor(theme.muted)
             }
             Spacer(minLength: 4)
             if let url = event.joinURL {
@@ -480,7 +485,7 @@ private struct CompactHeroRow: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                         .background(tint.base)
-                        .foregroundColor(.white)
+                        .foregroundColor(tint.on)
                         .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
@@ -489,7 +494,7 @@ private struct CompactHeroRow: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 7).fill(Color(nsColor: .controlBackgroundColor)))
+        .background(RoundedRectangle(cornerRadius: 7).fill(theme.card))
     }
 
     private var statusText: String {
@@ -510,6 +515,7 @@ private struct CompactHeroRow: View {
 // MARK: - Full hero (now or ≤30 min)
 
 private struct HeroCard: View {
+    @ObservedObject private var theme = TrayTheme.shared
     let event: TrayEvent
     let now: Date
     let tint: AccountTint
@@ -548,7 +554,7 @@ private struct HeroCard: View {
                     .foregroundColor(tint.ink)
                 Text(event.subject).strikethrough(event.isCancelled)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.primary)
+                    .foregroundColor(theme.text)
                     .lineLimit(2)
                 HStack(spacing: 6) {
                     Text(timeRange)
@@ -559,11 +565,11 @@ private struct HeroCard: View {
                             .lineLimit(1)
                     }
                 }
-                .foregroundColor(.secondary)
+                .foregroundColor(theme.muted)
                 if isNow {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
-                            Capsule().fill(Color.secondary.opacity(0.2)).frame(height: 3)
+                            Capsule().fill(theme.line).frame(height: 3)
                             Capsule().fill(tint.ink).frame(width: max(3, geo.size.width * progress), height: 3)
                         }
                     }
@@ -581,7 +587,7 @@ private struct HeroCard: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                         .background(tint.base)
-                        .foregroundColor(.white)
+                        .foregroundColor(tint.on)
                         .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
@@ -590,7 +596,7 @@ private struct HeroCard: View {
         }
         .fixedSize(horizontal: false, vertical: true)
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
+        .background(RoundedRectangle(cornerRadius: 8).fill(theme.card))
     }
 
     private var timeRange: String {
@@ -601,6 +607,7 @@ private struct HeroCard: View {
 // MARK: - Detail pane (replaces popover content — no clip)
 
 private struct EventDetailPane: View {
+    @ObservedObject private var theme = TrayTheme.shared
     let event: TrayEvent
     let now: Date
     var onClose: () -> Void
@@ -610,7 +617,8 @@ private struct EventDetailPane: View {
     @State private var localResponse: String?
     @State private var errorText: String?
 
-    private var accent: Color { Color(hex: event.accountTintHex) }
+    private var tint: AccountTint { theme.tint(account: event.accountId, fallbackHex: event.accountTintHex) }
+    private var accent: Color { tint.base }
 
     private var currentResponse: String {
         (localResponse ?? event.responseType ?? "").lowercased()
@@ -622,6 +630,7 @@ private struct EventDetailPane: View {
                 Button(action: onClose) {
                     Label("Назад", systemImage: "chevron.left")
                         .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(theme.link)
                 }
                 .buttonStyle(.plain)
                 Spacer()
@@ -634,7 +643,7 @@ private struct EventDetailPane: View {
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
                             .background(accent)
-                            .foregroundColor(.white)
+                            .foregroundColor(tint.on)
                             .cornerRadius(6)
                     }
                     .buttonStyle(.plain)
@@ -651,7 +660,7 @@ private struct EventDetailPane: View {
                         .font(.system(size: 16, weight: .semibold))
                     Text(event.isAllDay ? "Весь день" : timeRange)
                         .font(.system(size: 12).monospacedDigit())
-                        .foregroundColor(.secondary)
+                        .foregroundColor(theme.muted)
 
                     if let org = event.organizer {
                         Label {
@@ -659,7 +668,7 @@ private struct EventDetailPane: View {
                         } icon: {
                             Image(systemName: "person.crop.circle")
                         }
-                        .foregroundColor(.secondary)
+                        .foregroundColor(theme.muted)
                     }
 
                     if let location = event.location, !location.isEmpty {
@@ -670,14 +679,14 @@ private struct EventDetailPane: View {
                         } else {
                             Label(location, systemImage: "mappin")
                                 .font(.system(size: 11))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(theme.muted)
                         }
                     }
 
                     if let attendees = event.attendees, !attendees.isEmpty {
                         Text("Участники · \(attendees.count)")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(theme.muted)
                             .padding(.top, 4)
                         ForEach(Array(attendees.enumerated()), id: \.offset) { _, a in
                             HStack(spacing: 4) {
@@ -687,24 +696,24 @@ private struct EventDetailPane: View {
                                 if let st = a.status, !st.isEmpty {
                                     Text("· \(statusRu(st))")
                                         .font(.system(size: 11))
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(theme.muted)
                                 }
                             }
                         }
                     }
 
                     if event.canRespond {
-                        Divider().padding(.vertical, 4)
+                        Rectangle().fill(theme.line).frame(height: 1).padding(.vertical, 4)
                         Text("Ваш ответ")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(theme.muted)
                         HStack(spacing: 6) {
-                            rsvpButton(title: "Принять", response: "accept", activeKey: "accepted", color: .green)
-                            rsvpButton(title: "Возможно", response: "tentative", activeKey: "tentative", color: .orange)
-                            rsvpButton(title: "Отклонить", response: "decline", activeKey: "declined", color: .red)
+                            rsvpButton(title: "Принять", response: "accept", activeKey: "accepted", color: theme.ok)
+                            rsvpButton(title: "Возможно", response: "tentative", activeKey: "tentative", color: theme.warn)
+                            rsvpButton(title: "Отклонить", response: "decline", activeKey: "declined", color: theme.danger)
                         }
                         if let errorText {
-                            Text(errorText).font(.system(size: 11)).foregroundColor(.red)
+                            Text(errorText).font(.system(size: 11)).foregroundColor(theme.danger)
                         }
                     }
                 }
@@ -730,9 +739,9 @@ private struct EventDetailPane: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
-            .background(active ? color.opacity(0.18) : Color(nsColor: .controlBackgroundColor))
-            .foregroundColor(active ? color : .primary)
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(active ? color : Color.secondary.opacity(0.25)))
+            .background(active ? color.opacity(0.18) : theme.card)
+            .foregroundColor(active ? color : theme.text)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(active ? color : theme.line))
             .cornerRadius(6)
         }
         .buttonStyle(.plain)
@@ -883,6 +892,7 @@ private struct TimelineLayout {
 // MARK: - Event block on the timeline (tap → detail pane)
 
 private struct TimelineEventBlock: View {
+    @ObservedObject private var theme = TrayTheme.shared
     let event: TrayEvent
     let tint: AccountTint
     let now: Date
@@ -922,7 +932,7 @@ private struct TimelineEventBlock: View {
         .background(
             // Opaque base so nothing underneath ever shows through the text.
             RoundedRectangle(cornerRadius: 4)
-                .fill(Color(nsColor: .windowBackgroundColor))
+                .fill(theme.card)
                 .overlay(RoundedRectangle(cornerRadius: 4).fill(tint.wash))
         )
         .overlay(
@@ -972,7 +982,7 @@ private struct TimelineEventBlock: View {
     private var title: some View {
         Text(event.subject.isEmpty ? "(без темы)" : event.subject).strikethrough(event.isCancelled)
             .font(.system(size: 11, weight: .medium))
-            .foregroundColor(.primary)
+            .foregroundColor(theme.text)
             .strikethrough(declined)
             .multilineTextAlignment(.leading)
     }
@@ -980,7 +990,7 @@ private struct TimelineEventBlock: View {
     private var time: some View {
         Text(timeRange)
             .font(.system(size: 10).monospacedDigit())
-            .foregroundColor(.secondary)
+            .foregroundColor(theme.muted)
             .lineLimit(1)
     }
 
@@ -996,7 +1006,7 @@ private struct TimelineEventBlock: View {
     private var pendingLabel: some View {
         Text(response == "tentative" || event.busyStatus == "tentative" ? "под вопросом" : "без ответа")
             .font(.system(size: 9, weight: .medium))
-            .foregroundColor(.orange)
+            .foregroundColor(theme.warn)
             .lineLimit(1)
     }
 
@@ -1013,8 +1023,18 @@ private struct TimelineEventBlock: View {
 /// `wash` for soft block backgrounds.
 struct AccountTint {
     let base: Color
+    /// Text/icons on `base` (white, or dark ink on light fills like lime/coral).
+    let on: Color
     let ink: Color
     let wash: Color
+
+    /// Straight from the theme palette (TrayTheme), no derivation.
+    init(base: String, on: String, ink: String, wash: String) {
+        self.base = Color(hex: base)
+        self.on = Color(hex: on)
+        self.ink = Color(hex: ink)
+        self.wash = Color(hex: wash)
+    }
 
     private static var cache: [String: AccountTint] = [:]
 
@@ -1029,6 +1049,7 @@ struct AccountTint {
         let b = NSColor(trayHex: hex) ?? .systemGray
         func dark(_ ap: NSAppearance) -> Bool { ap.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua }
         base = Color(nsColor: b)
+        on = .white
         // Dark mode: same hue, brighter and still saturated, so Bank (rose) and
         // Seller (teal) stay distinguishable instead of both fading to grey.
         let hsb = b.usingColorSpace(.sRGB) ?? b

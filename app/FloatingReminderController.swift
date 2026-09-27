@@ -56,7 +56,7 @@ final class FloatingReminderController {
         guard shown.insert(TrayNotificationPlan.bannerKey(event)).inserted else { return }
         scheduleAutoDismiss(for: event)
 
-        let tint = AccountTint.of(event.accountTintHex)
+        let tint = TrayTheme.shared.tint(account: event.accountId, fallbackHex: event.accountTintHex)
         let accent = tint.base
         let subtitle: String = {
             guard let start = event.startDate else { return event.accountName }
@@ -73,6 +73,7 @@ final class FloatingReminderController {
             joinURL: joinURL,
             accent: accent,
             ink: tint.ink,
+            onAccent: tint.on,
             onJoin: { [weak self] in
                 if let url = joinURL { NSWorkspace.shared.open(url) }
                 self?.dismiss()

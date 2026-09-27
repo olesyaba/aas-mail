@@ -10,6 +10,9 @@ struct MeetingReminderBannerView: View {
     /// Brand colour for icons/text on the card background — lighter in dark mode
     /// (the raw wine/emerald `accent` is near-black there). Fills keep `accent`.
     var ink: Color? = nil
+    /// Text on the `accent` fill (dark on light fills like lime/coral).
+    var onAccent: Color = .white
+    @ObservedObject private var theme = TrayTheme.shared
     let onJoin: () -> Void
     let onDismiss: () -> Void
     let onOpenCalendar: () -> Void
@@ -25,10 +28,11 @@ struct MeetingReminderBannerView: View {
                     Text(title)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(2)
+                        .foregroundStyle(theme.text)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(subtitle)
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(theme.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -36,19 +40,19 @@ struct MeetingReminderBannerView: View {
             .padding(.top, 12)
             .padding(.bottom, 10)
 
-            Divider().opacity(0.7)
+            Rectangle().fill(theme.line).frame(height: 1)
 
             HStack(spacing: 8) {
                 Button("Скрыть", action: onDismiss)
                     .buttonStyle(.plain)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.muted)
                     .keyboardShortcut(.cancelAction)
 
                 Button("Календарь", action: onOpenCalendar)
                     .buttonStyle(.plain)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.muted)
 
                 Spacer()
 
@@ -59,7 +63,7 @@ struct MeetingReminderBannerView: View {
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
                             .background(accent)
-                            .foregroundColor(.white)
+                            .foregroundColor(onAccent)
                             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
                     .buttonStyle(.plain)
@@ -73,7 +77,7 @@ struct MeetingReminderBannerView: View {
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .fill(theme.card)
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(accent.opacity(0.12))
             }
