@@ -33,6 +33,9 @@ class EasBackend:
             "EAS_URL": cfg["url"], "EAS_DEVICE_ID": cfg["device_id"],
             "EAS_STATE_FILE": str(DATA_DIR / cfg.get("state_name", "state.json")),
             "EAS_MAX_RESPONSE_TOKENS": "1000000",
+            # Android has no /tmp: the shell points these into the app's private storage.
+            "EAS_ATTACHMENT_DIR": os.environ.get("EAS_ATTACHMENT_DIR", "/tmp/attachments"),
+            "EAS_OVERFLOW_DIR": os.environ.get("EAS_OVERFLOW_DIR", "/tmp/outlook-activesync-overflow"),
         }
         self.client = EasClient(load_settings(env))
         self.lock = threading.RLock()

@@ -1493,3 +1493,25 @@ class InlineImagesTest(unittest.TestCase):
         self.assertEqual([p.get_content_type() for p in imgs], ["image/png"])
         self.assertEqual(webapp._img_name(imgs[0], 0), "картинка-1.png")
         self.assertEqual(webapp._part_bytes(imgs[0])[:4], b"\x89PNG")
+
+
+class BridgePathsTest(unittest.TestCase):
+    """Android has no /tmp: the attachment/overflow dirs come from the environment."""
+
+    def _settings(self):
+        import bridge
+        with mock.patch("outlook_activesync_mcp.client.EasClient") as ctor:
+            bridge.EasBackend({"username": "u", "password": "p", "url": "https://x/", "device_id": "D"})
+        return ctor.call_args.args[0]
+
+    def test_defaults_stay_in_tmp_on_mac(self):
+        env = {k: v for k, v in os.environ.items() if k not in ("EAS_ATTACHMENT_DIR", "EAS_OVERFLOW_DIR")}
+        with mock.patch.dict(os.environ, env, clear=True):
+            s = self._settings()
+        self.assertEqual(s.attachment_dir, "/tmp/attachments")
+        self.assertEqual(s.overflow_dir, "/tmp/outlook-activesync-overflow")
+
+    def test_env_overrides_for_android(self):
+        with mock.patch.dict(os.environ, {"EAS_ATTACHMENT_DIR": "/data/a", "EAS_OVERFLOW_DIR": "/data/o"}):
+            s = self._settings()
+        self.assertEqual((s.attachment_dir, s.overflow_dir), ("/data/a", "/data/o"))
