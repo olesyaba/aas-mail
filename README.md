@@ -1,5 +1,7 @@
 # AAS mail
 
+![AAS mail — Spiral @](docs/media/aas-mail-github-preview.png)
+
 Локальный клиент почты и календаря для **Alfa-Bank** и **Alfa-Seller** поверх Exchange ActiveSync.
 
 - Нативное macOS-приложение (WKWebView + menu-bar tray)
