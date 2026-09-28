@@ -2284,6 +2284,21 @@ $('#setbtn').onclick = async () => {
         </ul>
         <div class="aas-about__thanks-out">${esc(aboutMeta.thanks_outro || '')}</div>
       </div>` : ''}
+      ${aboutMeta.donate?.url ? `
+      <div class="aas-about__donate">
+        <div class="aas-about__donate-qr">
+          <img src="${esc(aboutMeta.donate.qr || '/ui-kit/donate-qr.svg')}" width="132" height="132" alt="QR-код доната в Т-Банк" decoding="async" />
+        </div>
+        <div class="aas-about__donate-body">
+          <div class="aas-about__donate-kicker" aria-hidden="true">
+            ${(aboutMeta.donate.items || []).map(i => `<span class="aas-about__donate-chip"><span class="aas-about__donate-emoji">${esc(i.emoji || '')}</span>${esc(i.label || '')}</span>`).join('')}
+          </div>
+          <div class="aas-about__donate-title">${esc(aboutMeta.donate.title || 'Поддержать')}</div>
+          <p class="aas-about__donate-blurb">${esc(aboutMeta.donate.blurb || '')}</p>
+          <a class="aas-btn aas-btn--primary aas-about__donate-cta" href="${esc(aboutMeta.donate.url)}" target="_blank" rel="noopener noreferrer">${esc(aboutMeta.donate.cta || 'Открыть ссылку')}</a>
+          <div class="aas-about__donate-hint">Сканируй QR с телефона или жми кнопку — откроется Т-Банк</div>
+        </div>
+      </div>` : ''}
       <p class="hint">Локальный клиент поверх Exchange ActiveSync · данные не уходят с этой машины.</p>
     </div>
     </div>`);

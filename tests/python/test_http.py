@@ -128,6 +128,13 @@ class ApiTest(ServerTest):
         self.assertEqual(code, 200)
         self.assertEqual(j["version"], webapp.APP_META["version"])
         self.assertEqual(j["defaults"], webapp.DEFAULT_EAS_URLS)
+        self.assertEqual(j["donate"]["url"], webapp.APP_META["donate"]["url"])
+        self.assertTrue(j["donate"]["qr"].startswith("/ui-kit/"))
+
+    def test_donate_qr_asset(self):
+        r, body = self.c.request("GET", "/ui-kit/donate-qr.svg")
+        self.assertEqual(r.status, 200)
+        self.assertIn(b"<svg", body[:64])
 
     def test_prefs_roundtrip(self):
         webapp.PREFS_PATH.unlink(missing_ok=True)

@@ -44,7 +44,7 @@ MAX_BODY = 40 * 1024 * 1024
 # Product identity (About page + UI chrome).
 APP_META = {
     "name": "AAS mail",
-    "version": "1.2.22",
+    "version": "1.2.23",
     "description": "Локальный клиент почты и календаря Alfa / Alfa-Seller поверх Exchange ActiveSync.",
     "contact_mm": "@olesya_ba",
     "thanks_intro": "Спасибо за тест-рейды и светлые идеи:",
@@ -53,6 +53,19 @@ APP_META = {
         {"emoji": "🧙", "title": "магу", "handle": "@ivan.rachenko", "name": "Раченко Ивану"},
     ],
     "thanks_outro": "Спасибо — вы сделали AAS mail чуть волшебнее ✨",
+    # Soft tip jar in About — link + local QR (web/ui-kit/donate-qr.*). No paywall.
+    "donate": {
+        "title": "На кальян, кофе и антидепрессанты",
+        "blurb": "Если AAS mail чуть спас нервы — можно угостить. По желанию, без обязательств.",
+        "url": "https://t.tb.ru/pm_short/4G5KYLcCEXx",
+        "cta": "Открыть Т-Банк",
+        "qr": "/ui-kit/donate-qr.svg",
+        "items": [
+            {"emoji": "💨", "label": "кальян"},
+            {"emoji": "☕", "label": "кофе"},
+            {"emoji": "💊", "label": "антидепрессанты"},
+        ],
+    },
 }
 
 # Seeded into empty account-config fields so the settings form has working defaults.

@@ -1135,6 +1135,114 @@
   line-height: 1.45;
 }
 
+/* Soft tip jar: wide QR + CTA strip under thanks (interactive → card ok). */
+.aas-about__donate {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px 18px;
+  align-items: center;
+  margin: 14px 0 10px;
+  padding: 14px 16px;
+  border-radius: var(--aas-radius, 10px);
+  background:
+    linear-gradient(
+      125deg,
+      color-mix(in srgb, var(--aas-accent, #ef3124) 9%, transparent) 0%,
+      color-mix(in srgb, var(--aas-seller, #003830) 7%, transparent) 55%,
+      transparent 100%
+    );
+  border: 1px solid color-mix(in srgb, var(--aas-accent, #ef3124) 16%, transparent);
+}
+
+.aas-about__donate-qr {
+  flex: none;
+  padding: 8px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+  line-height: 0;
+}
+
+.aas-about__donate-qr img {
+  display: block;
+  width: 132px;
+  height: 132px;
+  image-rendering: pixelated;
+}
+
+.aas-about__donate-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.aas-about__donate-kicker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.aas-about__donate-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px 3px 7px;
+  border-radius: var(--aas-r-pill, 999px);
+  background: color-mix(in srgb, var(--aas-panel, #fff) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--aas-line, #e3e6ea) 80%, transparent);
+  font-size: var(--aas-t-xs, 12px);
+  color: var(--aas-muted, #66707a);
+  line-height: 1.3;
+}
+
+.aas-about__donate-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.aas-about__donate-title {
+  font-weight: 700;
+  font-size: var(--aas-t-md, 16px);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.aas-about__donate-blurb {
+  margin: 0;
+  font-size: var(--aas-t-sm, 13px);
+  line-height: 1.45;
+  color: var(--aas-muted, #66707a);
+}
+
+.aas-about__donate-cta {
+  margin-top: 4px;
+}
+
+.aas-about__donate-hint {
+  font-size: var(--aas-t-xs, 12px);
+  color: var(--aas-muted, #66707a);
+  line-height: 1.35;
+}
+
+@media (max-width: 520px) {
+  .aas-about__donate {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .aas-about__donate-body {
+    align-items: center;
+  }
+
+  .aas-about__donate-kicker {
+    justify-content: center;
+  }
+}
+
 .aas-acct-title {
   font-weight: 700;
   margin-bottom: 8px;
