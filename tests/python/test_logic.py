@@ -6,7 +6,7 @@ import os
 import threading
 import time
 import unittest
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 from unittest import mock
 
@@ -1515,3 +1515,35 @@ class BridgePathsTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"EAS_ATTACHMENT_DIR": "/data/a", "EAS_OVERFLOW_DIR": "/data/o"}):
             s = self._settings()
         self.assertEqual((s.attachment_dir, s.overflow_dir), ("/data/a", "/data/o"))
+
+
+class ReceivedBackfillTest(unittest.TestCase):
+    """Alfa-Seller's server sends sent items without DateReceived: they sank to the
+    bottom of «Отправленные», below older meeting invitations. Take the MIME Date."""
+
+    RAW = b"Date: Sun, 28 Sep 2026 05:23:10 +0300\r\nSubject: Test\r\n\r\nx"
+
+    def test_undated_item_gets_the_letter_date(self):
+        a = make_acct("seller")
+        items = [{"item_id": "new", "received": None}, {"item_id": "old", "received": "2026-09-22 15:24"}]
+        calls = []
+        def mime(acct, item_id):
+            calls.append(item_id)
+            return self.RAW
+        with mock.patch.object(webapp, "get_mime", mime):
+            webapp._backfill_received(a, items)
+        self.assertEqual(calls, ["new"])  # dated letters cost nothing
+        want = datetime(2026, 9, 28, 5, 23, 10, tzinfo=timezone(timedelta(hours=3))).astimezone().strftime("%Y-%m-%d %H:%M")
+        self.assertEqual(items[0]["received"], want)
+        self.assertEqual(items[1]["received"], "2026-09-22 15:24")
+
+    def test_failure_is_not_retried(self):
+        a = make_acct("seller")
+        calls = []
+        def boom(acct, item_id):
+            calls.append(item_id)
+            raise webapp.Gone("x")
+        with mock.patch.object(webapp, "get_mime", boom):
+            webapp._backfill_received(a, [{"item_id": "z", "received": None}])
+            webapp._backfill_received(a, [{"item_id": "z", "received": None}])
+        self.assertEqual(calls, ["z"])
