@@ -1670,3 +1670,90 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
     border-radius: 50%; background: var(--aas-accent);
   }
 }
+
+/* ═══ Unified view: month + day agenda beside the mail (prefs.unified_cal) ═══
+   Off by default; #railbtn / ⌘⇧K toggles it. Needs ~1100px to leave the reader
+   room, so narrower windows (Fold, small Mac windows) keep the classic layout. */
+.aas-railbtn[hidden], .aas-rail__live[hidden] { display: none !important; }
+.aas-railbtn.on { color: var(--aas-accent-text); background: var(--aas-accent-bg); }
+.aas-rail { display: none; }
+body.unified .aas-rail {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: 288px;
+  flex: none;
+  min-height: 0;
+  border-left: 1px solid var(--aas-line);
+  background: var(--aas-panel-2);
+  animation: aas-rail-in .32s var(--aas-ease) both;
+}
+.aas-rail__month { padding: 12px 12px 10px; border-bottom: 1px solid var(--aas-line); background: var(--aas-panel); }
+.aas-rail__bar { display: flex; align-items: center; gap: 4px; margin-bottom: 10px; }
+.aas-rail__bar h3 { flex: 1; margin: 0; font-size: var(--aas-t-md); font-weight: 600; text-align: center; }
+.aas-rail__bar h3::first-letter { text-transform: uppercase; }
+.aas-rail__wd, .aas-rail__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.aas-rail__wd { margin-bottom: 2px; }
+.aas-rail__wd span { text-align: center; font-size: 11px; font-weight: 600; color: var(--aas-muted); padding: 2px 0; }
+.aas-mday {
+  position: relative; display: grid; place-items: center; height: 32px;
+  border: 0; border-radius: 8px; background: transparent; color: var(--aas-text);
+  font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; cursor: pointer;
+  transition: background var(--aas-dur) var(--aas-ease), transform var(--aas-dur) var(--aas-ease);
+}
+.aas-mday:hover { background: var(--aas-accent-bg); }
+.aas-mday:active { transform: scale(.94); }
+.aas-mday:focus-visible { outline: 2px solid var(--aas-accent-text); outline-offset: 1px; }
+.aas-mday--mute { color: var(--aas-muted); }
+.aas-mday--today { font-weight: 700; color: var(--aas-accent-text); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aas-accent-text) 35%, transparent); }
+.aas-mday--sel, .aas-mday--sel:hover { background: var(--aas-accent); color: var(--aas-on-accent); font-weight: 600; }
+.aas-mday--busy::after {
+  content: ""; position: absolute; bottom: 3px; left: 50%; width: 4px; height: 4px; margin-left: -2px;
+  border-radius: 50%; background: var(--aas-accent-text);
+}
+.aas-mday--sel.aas-mday--busy::after { background: var(--aas-on-accent); }
+
+.aas-rail__agenda { display: flex; flex-direction: column; min-height: 0; }
+.aas-rail__head { display: flex; align-items: baseline; gap: 8px; padding: 12px 14px 6px; }
+.aas-rail__head h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.aas-rail__head .aas-linkbtn { font-size: 13px; font-weight: 600; color: var(--aas-text); }
+.aas-rail__head .aas-linkbtn:hover { color: var(--aas-accent-text); text-decoration: underline; }
+.aas-rail__day { font-size: 12px; color: var(--aas-muted); }
+.aas-rail__live { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--aas-ok); }
+.aas-rail__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--aas-ok); animation: aas-breathe 2.4s ease-in-out infinite; }
+.aas-rail__list { flex: 1; overflow: auto; padding: 2px 8px 16px; display: flex; flex-direction: column; gap: 2px; }
+.aas-meet {
+  --evc: var(--aas-busy);
+  display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 10px; align-items: start;
+  width: 100%; padding: 8px; border: 0; border-radius: 10px; background: transparent;
+  color: var(--aas-text); font: inherit; text-align: left; cursor: pointer;
+  transition: background var(--aas-dur) var(--aas-ease);
+  animation: aas-rise .36s var(--aas-ease) both; animation-delay: calc(var(--i, 0) * 40ms);
+}
+.aas-meet:hover { background: var(--aas-panel); }
+.aas-meet:focus-visible { outline: 2px solid var(--aas-accent-text); outline-offset: -2px; }
+.aas-meet__time {
+  position: relative; padding-left: 9px; font-size: 11px; line-height: 1.35;
+  color: var(--aas-muted); font-variant-numeric: tabular-nums;
+}
+.aas-meet__time::before { content: ""; position: absolute; left: 0; top: 2px; bottom: 2px; width: 3px; border-radius: 2px; background: var(--evc); }
+.aas-meet__main { min-width: 0; display: grid; gap: 2px; }
+.aas-meet__title { font-size: 13px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.aas-meet__meta { font-size: 11px; color: var(--aas-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aas-meet--now { background: color-mix(in srgb, var(--aas-ok) 9%, var(--aas-panel)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aas-ok) 28%, transparent); }
+.aas-meet--now .aas-meet__time { color: var(--aas-ok); font-weight: 600; }
+.aas-meet--pending .aas-meet__time::before { background: repeating-linear-gradient(var(--evc) 0 3px, transparent 3px 5px); }
+.aas-meet--cancelled .aas-meet__title { text-decoration: line-through; color: var(--aas-muted); font-weight: 500; }
+.aas-rail__gap { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 66px; font-size: 11px; color: var(--aas-muted); }
+.aas-rail__gap::before { content: ""; flex: 1; border-top: 1px dashed var(--aas-line-strong); }
+.aas-rail__gap span { order: -1; }
+.aas-rail__empty { display: grid; justify-items: center; gap: 10px; padding: 28px 16px; font-size: 13px; color: var(--aas-muted); text-align: center; }
+
+@keyframes aas-rail-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+@keyframes aas-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes aas-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+@media (prefers-reduced-motion: reduce) {
+  body.unified .aas-rail, .aas-meet, .aas-rail__dot { animation: none; }
+}
+/* The list gives up some width so the reader keeps ~60ch next to the rail. */
+@media (max-width: 1440px) { body.unified #list { width: 320px; } }
+@media (max-width: 1099px) { body.unified .aas-rail, .aas-railbtn { display: none; } }

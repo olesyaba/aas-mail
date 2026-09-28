@@ -642,3 +642,30 @@ test('new-mail bridge names the account id and the letter, so Android can open i
   assert.deepEqual(plain(sent[0]), {count: 1, from: 'Бухгалтерия', subject: 'Счёт', preview: '', account: 'Seller',
     acct: 'seller', item_id: 'new1'});
 });
+
+test('railGrid: 6 weeks from the Monday on/before the 1st', () => {
+  const {railGrid} = load(['railGrid']);
+  const g = railGrid(new Date(2026, 8, 1));  // 1 Sep 2026 is a Tuesday
+  assert.equal(g.length, 42);
+  assert.equal(g[0].getDay(), 1);
+  assert.equal(g[0].getDate(), 31);
+  assert.equal(g[1].getDate(), 1);
+});
+
+test('railAgenda: all-day first, timed by start, free gaps ≥1h, cancelled neither busy nor gap-splitting', () => {
+  const {railAgenda} = load(['railAgenda']);
+  const at = (h, m = 0) => new Date(2026, 8, 28, h, m);
+  const ev = (subject, s, e, x = {}) => ({subject, s, e, ...x});
+  const list = [
+    ev('late', at(14), at(14, 30)),
+    ev('early', at(9, 30), at(10)),
+    ev('now', at(11), at(11, 45)),
+    ev('gone', at(12, 30), at(13), {meeting_status: 'cancelled'}),
+    ev('holiday', new Date(2026, 8, 28), new Date(2026, 8, 29), {is_all_day: true}),
+    ev('tomorrow', new Date(2026, 8, 29, 10), new Date(2026, 8, 29, 11)),
+  ];
+  const out = plain(railAgenda(list, new Date(2026, 8, 28), at(11, 10)));
+  assert.deepEqual(out.map(x => x.gap ?? x.e.subject), ['holiday', 'early', 60, 'now', 'gone', 135, 'late']);
+  assert.deepEqual(out.filter(x => x.now).map(x => x.e.subject), ['now']);
+  assert.deepEqual(plain(railAgenda(list, new Date(2026, 8, 27))), []);
+});

@@ -145,6 +145,11 @@ class SharedViewPrefsTest(unittest.TestCase):
         self.assertEqual(webapp.update_prefs({"update_mode": "manual"})["update_mode"], "manual")
         self.assertEqual(webapp.update_prefs({"update_mode": "never"})["update_mode"], "manual", "unknown mode ignored")
 
+    def test_unified_cal(self):
+        self.assertIs(webapp.load_prefs()["unified_cal"], False, "classic layout by default")
+        self.assertIs(webapp.update_prefs({"unified_cal": True})["unified_cal"], True)
+        self.assertIs(webapp.update_prefs({"unified_cal": "yes"})["unified_cal"], True, "non-bool ignored")
+
     def test_mail_sort(self):
         self.assertEqual(webapp.load_prefs()["mail_sort"], "date_desc", "newest first by default")
         self.assertEqual(webapp.update_prefs({"mail_sort": "from"})["mail_sort"], "from")

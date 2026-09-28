@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AAS mail · прототип: почта + месяц + день</title>
+<link rel="stylesheet" href="../ui-kit/fonts.css">
+<link rel="stylesheet" href="../ui-kit/tokens.css">
+<link rel="stylesheet" href="../ui-kit/components.css">
+<style>
+/* Unified mail + month + day agenda — layout prototype (2026-09-28)
+   Dials: variance 8 · motion 6 · density 4. Tokens from AAS ui-kit. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: var(--aas-font);
+  background: var(--aas-bg);
+  color: var(--aas-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.aas-root {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* —— Banner —— */
+.proto-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: color-mix(in srgb, var(--aas-bank) 8%, var(--aas-panel));
+  border-bottom: 1px solid var(--aas-line);
+  font-size: var(--aas-t-sm);
+  color: var(--aas-muted);
+}
+.proto-banner b { color: var(--aas-text); font-weight: 600; }
+.proto-banner a {
+  margin-left: auto;
+  color: var(--aas-accent-text);
+  text-decoration: none;
+  font-weight: 500;
+}
+.proto-banner a:hover { text-decoration: underline; }
+
+/* —— Shell —— */
+.shell {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 188px minmax(260px, 320px) minmax(0, 1.55fr) minmax(260px, 300px);
+  background: var(--aas-panel);
+}
+
+/* —— Folders —— */
+.col-folders {
+  background: var(--aas-panel-2);
+  border-right: 1px solid var(--aas-line);
+  padding: 10px 8px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.col-folders .aas-folder {
+  animation: rise .45s var(--aas-ease) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+.folder-sec {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--aas-muted);
+  padding: 14px 10px 6px;
+}
+
+/* —— List —— */
+.col-list {
+  border-right: 1px solid var(--aas-line);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--aas-panel);
+}
+.listbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 50px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--aas-line);
+  color: var(--aas-muted);
+}
+.listbar__title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--aas-text);
+  font-size: var(--aas-t-md);
+}
+.listbar__unread {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: var(--aas-r-pill);
+  background: var(--aas-accent-bg);
+  color: var(--aas-accent-text);
+  font-variant-numeric: tabular-nums;
+}
+.listfilter {
+  flex: none;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--aas-line);
+}
+.rows {
+  flex: 1;
+  overflow: auto;
+}
+.aas-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--aas-line);
+  border-left: 0;
+  animation: rise .4s var(--aas-ease) both;
+  animation-delay: calc(var(--i, 0) * 35ms);
+  cursor: pointer;
+}
+.aas-row:hover { background: var(--aas-panel-2); }
+.aas-row.on {
+  background: var(--aas-accent-bg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aas-accent-text) 30%, transparent);
+}
+.aas-row__lead {
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+}
+.aas-av {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--aas-accent-bg);
+  color: var(--aas-accent-text);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  user-select: none;
+}
+.aas-row__main { min-width: 0; display: grid; gap: 1px; }
+.aas-row__who {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+.aas-row__from {
+  min-width: 0;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+.aas-row.unread .aas-row__from,
+.aas-row.unread .aas-row__subj {
+  font-weight: 700;
+  color: var(--aas-unread);
+}
+.aas-row__date {
+  flex: none;
+  font-size: 11px;
+  color: var(--aas-muted);
+  font-variant-numeric: tabular-nums;
+}
+.aas-row__subj {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aas-row .snip {
+  display: block;
+  font-size: 12px;
+  color: var(--aas-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+/* —— Reader —— */
+.col-reader {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--aas-panel);
+  border-right: 1px solid var(--aas-line);
+}
+.rtools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 50px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--aas-line);
+}
+.rtools .aas-spacer { flex: 1; }
+.chead {
+  flex: none;
+  padding: 18px 22px 10px;
+}
+.chead h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -.02em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.chead .meta {
+  font-size: 13px;
+  color: var(--aas-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.conv {
+  flex: 1;
+  overflow: auto;
+  padding: 0 0 32px;
+}
+.aas-mc {
+  margin: 12px 18px;
+  animation: rise .5s var(--aas-ease) both;
+}
+.aas-mc__body {
+  display: block;
+  padding: 4px 14px 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--aas-text);
+  max-width: 68ch;
+}
+.aas-mc__body p { margin: 0 0 12px; }
+.aas-mc__body p:last-child { margin-bottom: 0; }
+
+/* —— Right rail: month + day —— */
+.col-rail {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  background: var(--aas-panel-2);
+}
+.month {
+  flex: none;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid var(--aas-line);
+  background: var(--aas-panel);
+}
+.month__bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.month__bar h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  text-transform: capitalize;
+}
+.month__wd {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 4px;
+}
+.month__wd span {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--aas-muted);
+  letter-spacing: .02em;
+  padding: 2px 0;
+}
+.month__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.mday {
+  height: 32px;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--aas-text);
+  cursor: pointer;
+  position: relative;
+  display: grid;
+  place-items: center;
+  transition: background var(--aas-dur) var(--aas-ease), color var(--aas-dur) var(--aas-ease), transform var(--aas-dur) var(--aas-ease);
+}
+.mday:hover { background: var(--aas-accent-bg); }
+.mday:active { transform: scale(.96); }
+.mday--mute { color: var(--aas-muted); opacity: .45; }
+.mday--today {
+  font-weight: 700;
+  color: var(--aas-accent-text);
+  background: var(--aas-accent-bg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aas-accent-text) 28%, transparent);
+}
+.mday--sel {
+  background: var(--aas-accent);
+  color: var(--aas-on-accent);
+  font-weight: 600;
+}
+.mday--sel.mday--today { color: var(--aas-on-accent); }
+.mday--busy::after {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--aas-accent-text);
+}
+.mday--sel.mday--busy::after { background: var(--aas-on-accent); }
+
+/* Day agenda */
+.agenda {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.agenda__head {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 14px 16px 8px;
+}
+.agenda__head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.agenda__head .sub {
+  font-size: 12px;
+  color: var(--aas-muted);
+  text-transform: capitalize;
+}
+.agenda__live {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--aas-ok);
+}
+.agenda__live .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--aas-ok);
+  animation: breathe 2.4s ease-in-out infinite;
+}
+.agenda__list {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.meet {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background var(--aas-dur) var(--aas-ease), transform var(--aas-dur) var(--aas-ease);
+  animation: rise .45s var(--aas-ease) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+.meet:hover { background: var(--aas-panel); }
+.meet:active { transform: scale(.985); }
+.meet--now {
+  background: color-mix(in srgb, var(--aas-ok) 8%, var(--aas-panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--aas-ok) 22%, transparent);
+}
+.meet__time {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--aas-muted);
+  line-height: 1.35;
+  padding-top: 2px;
+}
+.meet--now .meet__time { color: var(--aas-ok); font-weight: 600; }
+.meet__title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  line-height: 1.3;
+}
+.meet__meta {
+  font-size: 11px;
+  color: var(--aas-muted);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.meet__meta span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.meet__bar {
+  width: 3px;
+  height: 100%;
+  min-height: 28px;
+  border-radius: 2px;
+  background: var(--evc, var(--aas-busy));
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  margin-left: -4px;
+  display: none;
+}
+.meet__when-wrap {
+  position: relative;
+  padding-left: 8px;
+}
+.meet__when-wrap::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--evc, var(--aas-busy));
+}
+.agenda__empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--aas-muted);
+  font-size: 13px;
+}
+.agenda__empty p { margin: 8px 0 0; max-width: 28ch; margin-inline: auto; line-height: 1.45; }
+
+.gap-free {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 60px;
+  font-size: 11px;
+  color: var(--aas-muted);
+}
+.gap-free::before {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--aas-line) 0 4px,
+    transparent 4px 8px
+  );
+}
+.gap-free span { flex: none; }
+
+/* Motion */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .45; transform: scale(.85); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* —— Narrow screens —— */
+@media (max-width: 1100px) {
+  .shell {
+    grid-template-columns: 0 minmax(240px, 280px) minmax(0, 1fr) minmax(240px, 280px);
+  }
+  .col-folders { display: none; }
+}
+@media (max-width: 860px) {
+  .shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+    overflow: auto;
+  }
+  .col-folders, .col-list { display: none; }
+  .col-reader { border-right: 0; min-height: 50dvh; }
+  .col-rail {
+    border-top: 1px solid var(--aas-line);
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto;
+  }
+  .month { border-bottom: 0; border-right: 1px solid var(--aas-line); }
+}
+@media (max-width: 560px) {
+  .col-rail { grid-template-columns: 1fr; }
+  .month { border-right: 0; border-bottom: 1px solid var(--aas-line); }
+  .proto-banner { flex-wrap: wrap; }
+  .proto-banner a { margin-left: 0; }
+}
+
+.ic { flex: none; }
+.aas-topnav input[type="search"] {
+  width: min(220px, 28vw);
+  border: 1px solid var(--aas-line);
+  border-radius: var(--aas-r-control);
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 13px;
+  background: var(--aas-panel);
+  color: var(--aas-text);
+}
+.aas-topnav input[type="search"]:focus {
+  outline: 2px solid color-mix(in srgb, var(--aas-accent-text) 40%, transparent);
+  outline-offset: 1px;
+}
+</style>
+</head>
+<body class="aas-root theme-bank">
+
+<div class="proto-banner">
+  <b>Прототип раскладки</b>
+  <span>Папки · список · письмо · месяц · встречи дня — один экран, без переключения вкладок</span>
+  <a href="../index.html">к рабочему клиенту</a>
+</div>
+
+<header class="aas-topnav aas-topnav--bank">
+  <h1 class="aas-brand">AAS mail</h1>
+  <div class="aas-tabs aas-accts" role="group" aria-label="Ящик">
+    <button type="button" class="aas-tab aas-tab--bank on"><span class="aas-tab__dot"></span><span class="aas-tab__name">Alfa-Bank</span></button>
+    <button type="button" class="aas-tab aas-tab--seller"><span class="aas-tab__dot"></span><span class="aas-tab__name">Alfa-Seller</span></button>
+  </div>
+  <div class="aas-seg aas-sect" role="group" aria-label="Раздел">
+    <button type="button" class="on">Единый</button>
+    <button type="button">Почта</button>
+    <button type="button">Календарь</button>
+  </div>
+  <div class="aas-spacer"></div>
+  <input type="search" placeholder="Поиск по почте" aria-label="Поиск">
+  <button type="button" class="aas-btn aas-btn--primary">
+    <svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+    <span class="lbl">Создать</span>
+  </button>
+</header>
+
+<main class="shell" id="shell">
+  <!-- Folders -->
+  <nav class="col-folders aas-folders" aria-label="Папки">
+    <div class="folder-sec">Избранное</div>
+    <button type="button" class="aas-folder on" style="--i:0"><span class="aas-folder__name">Входящие</span><span class="aas-badge">14</span></button>
+    <button type="button" class="aas-folder" style="--i:1"><span class="aas-folder__name">Флаг</span></button>
+    <button type="button" class="aas-folder" style="--i:2"><span class="aas-folder__name">Open 03.12</span><span class="aas-badge">3</span></button>
+    <div class="folder-sec">Папки</div>
+    <button type="button" class="aas-folder" style="--i:3"><span class="aas-folder__name">Отправленные</span></button>
+    <button type="button" class="aas-folder" style="--i:4"><span class="aas-folder__name">Черновики</span><span class="aas-badge">2</span></button>
+    <button type="button" class="aas-folder" style="--i:5"><span class="aas-folder__name">Архив</span></button>
+    <button type="button" class="aas-folder" style="--i:6"><span class="aas-folder__name">Удалённые</span></button>
+    <button type="button" class="aas-folder" style="--i:7"><span class="aas-folder__name">Warroom</span></button>
+    <button type="button" class="aas-folder" style="--i:8"><span class="aas-folder__name">MUST</span></button>
+  </nav>
+
+  <!-- List -->
+  <section class="col-list" aria-label="Письма">
+    <div class="listbar">
+      <span class="listbar__title">Входящие</span>
+      <span class="listbar__unread">14</span>
+      <button type="button" class="aas-btn aas-btn--sm">Вид</button>
+    </div>
+    <div class="listfilter">
+      <span class="aas-seg aas-seg--soft">
+        <button type="button" class="on">Все</button>
+        <button type="button">Непрочитанные</button>
+        <button type="button">С вложениями</button>
+      </span>
+    </div>
+    <div class="rows" id="rows" role="listbox" aria-label="Список писем"></div>
+  </section>
+
+  <!-- Reader -->
+  <section class="col-reader" aria-label="Письмо">
+    <div class="rtools">
+      <button type="button" class="aas-btn aas-btn--sm aas-btn--ghost" title="Ответить">
+        <svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+        <span class="lbl">Ответить</span>
+      </button>
+      <button type="button" class="aas-btn aas-btn--sm aas-btn--ghost" title="Переслать">
+        <svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
+        <span class="lbl">Переслать</span>
+      </button>
+      <span class="aas-spacer"></span>
+      <button type="button" class="aas-btn aas-btn--sm aas-btn--icon aas-btn--ghost" title="Удалить" aria-label="Удалить">
+        <svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>
+    <div class="chead" id="chead"></div>
+    <div class="conv" id="conv"></div>
+  </section>
+
+  <!-- Month + day -->
+  <aside class="col-rail" aria-label="Календарь">
+    <div class="month">
+      <div class="month__bar">
+        <button type="button" class="aas-btn aas-btn--icon aas-btn--sm" id="mprev" aria-label="Предыдущий месяц">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <h3 id="mtitle">сентябрь 2026</h3>
+        <button type="button" class="aas-btn aas-btn--icon aas-btn--sm" id="mnext" aria-label="Следующий месяц">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+        <button type="button" class="aas-btn aas-btn--sm" id="mtoday">Сегодня</button>
+      </div>
+      <div class="month__wd" aria-hidden="true">
+        <span>пн</span><span>вт</span><span>ср</span><span>чт</span><span>пт</span><span>сб</span><span>вс</span>
+      </div>
+      <div class="month__grid" id="mgrid" role="grid" aria-label="Месяц"></div>
+    </div>
+
+    <div class="agenda">
+      <div class="agenda__head">
+        <h3>Встречи</h3>
+        <span class="sub" id="aday">пн, 28 сентября</span>
+        <span class="agenda__live" id="alive" hidden><span class="dot"></span>сейчас</span>
+      </div>
+      <div class="agenda__list" id="alist"></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+
+const RU_WD = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+const RU_MO = ["январь","февраль","март","апрель","май","июнь","июль","август","сентябрь","октябрь","ноябрь","декабрь"];
+
+const MAILS = [
+  {
+    id: "m1", unread: true,
+    from: "Владен Греков", av: "ВГ",
+    subj: "Open 03.12 — светофор и MUST на пятницу",
+    snip: "Олеся, давай к пятнице сводку по красным: B2B_AlfaSeller Start + Warroom.",
+    date: "12:41",
+    to: "мне",
+    body: `<p>Олеся, привет.</p>
+<p>К пятнице нужна сводка по красным из сквозного беклога и Warroom. Фокус — то, что блокирует Open 03.12, без архивного листа Мерката.</p>
+<p>Если удобно — кинь черновик до 16:00, синхронизируем на стендапе.</p>
+<p>Владен</p>`
+  },
+  {
+    id: "m2", unread: true,
+    from: "Иван Раченко", av: "ИР",
+    subj: "Re: RSVP — архитектурный разбор эквайринга",
+    snip: "Принял. Принесу схемы по 3DS и статусам авторизации.",
+    date: "11:18",
+    to: "мне",
+    body: `<p>Олеся, ок — буду.</p>
+<p>Принесу актуальные схемы по 3DS и статусам авторизации, плюс открытые вопросы по ретраям.</p>
+<p>Иван</p>`
+  },
+  {
+    id: "m3", unread: false,
+    from: "Марина Кольцова", av: "МК",
+    subj: "Дизайн-ревью AlfaSELL: карточка заказа",
+    snip: "Выложила фреймы в Figma. Посмотри плотность meta и CTA на Fold.",
+    date: "10:02",
+    to: "мне, команда",
+    body: `<p>Коллеги,</p>
+<p>Фреймы карточки заказа — в общем файле, страница «Fold / density».</p>
+<p>Особенно посмотрите: meta-ряд под статусом и поведение CTA при узкой панели. Комменты до среды.</p>
+<p>Марина</p>`
+  },
+  {
+    id: "m4", unread: false,
+    from: "Сергей Нуриев", av: "СН",
+    subj: "Инвайт: синк по перфу списка писем",
+    snip: "Завтра 15:30, 25 мин. Повестка: кэп 400, измерение 1000+.",
+    date: "вчера",
+    to: "мне",
+    body: `<p>Олеся,</p>
+<p>Поставил синк на завтра 15:30. Повестка короткая: кэп на папку, замер при большой непрочитанной очереди, что уже закрыто в 1.2.x.</p>
+<p>Сергей</p>`
+  },
+  {
+    id: "m5", unread: true,
+    from: "Алина Вербицкая", av: "АВ",
+    subj: "Категории Outlook и цвета в AAS",
+    snip: "Протокол цвет не отдаёт — продублировала палитру в настройках.",
+    date: "вчера",
+    to: "мне",
+    body: `<p>Олеся, коротко:</p>
+<p>Цвета категорий с сервера не приходят. В настройках ящика выставила те же, что в Outlook (Bank / Seller раздельно).</p>
+<p>Если нужно — могу скинуть скрин палитры.</p>
+<p>Алина</p>`
+  },
+  {
+    id: "m6", unread: false,
+    from: "Пётр Яшин", av: "ПЯ",
+    subj: "Подтверждение: доступ к B2B_AlfaSeller Start",
+    snip: "Доступ выдан. Sheet gid 2141656313.",
+    date: "пт",
+    to: "мне",
+    body: `<p>Доступ к листу выдан. Рабочий gid — 2141656313.</p>
+<p>Пётр</p>`
+  }
+];
+
+/* Meetings keyed by YYYY-MM-DD; today = 2026-09-28 */
+const MEETS = {
+  "2026-09-28": [
+    { t0: "09:30", t1: "10:00", title: "Стендап Open 03.12", where: "MM · warroom", evc: "#8a4a55", now: false },
+    { t0: "11:00", t1: "11:45", title: "Архитектурный разбор эквайринга", where: "Teams · Иван Раченко", evc: "#501820", now: true },
+    { t0: "14:00", t1: "14:30", title: "1:1 с Владеном", where: "Кабинет / звонок", evc: "#2a5c4a", now: false },
+    { t0: "16:30", t1: "17:00", title: "Дизайн-ревью карточки заказа", where: "Figma · Марина", evc: "#b07a82", now: false }
+  ],
+  "2026-09-29": [
+    { t0: "10:00", t1: "11:00", title: "Warroom — красные инициативы", where: "MM", evc: "#501820", now: false },
+    { t0: "15:30", t1: "15:55", title: "Синк по перфу списка", where: "Сергей Нуриев", evc: "#8a4a55", now: false }
+  ],
+  "2026-09-30": [
+    { t0: "12:00", t1: "13:00", title: "MUST-приоритеты на октябрь", where: "переговорка B-4", evc: "#003830", now: false }
+  ],
+  "2026-09-25": [
+    { t0: "15:00", t1: "16:00", title: "Ретро спринта", where: "MM", evc: "#8a4a55", now: false }
+  ]
+};
+
+let selectedMail = MAILS[0].id;
+let viewYear = 2026;
+let viewMonth = 8; // Sep
+let selectedDay = new Date(2026, 8, 28);
+
+function pad(n) { return String(n).padStart(2, "0"); }
+function keyOf(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function renderMails() {
+  const root = document.getElementById("rows");
+  root.innerHTML = MAILS.map((m, i) => `
+    <div class="aas-row${m.id === selectedMail ? " on" : ""}${m.unread ? " unread" : ""}" role="option" aria-selected="${m.id === selectedMail}" data-id="${m.id}" style="--i:${i}" tabindex="0">
+      <div class="aas-row__lead">
+        <span class="aas-av" aria-hidden="true">${m.av}</span>
+      </div>
+      <div class="aas-row__main">
+        <div class="aas-row__who">
+          <span class="aas-row__from">${m.from}</span>
+          <span class="aas-row__date">${m.date}</span>
+        </div>
+        <div class="aas-row__subj">${m.subj}</div>
+        <span class="snip">${m.snip}</span>
+      </div>
+    </div>
+  `).join("");
+  root.querySelectorAll(".aas-row").forEach(el => {
+    el.addEventListener("click", () => selectMail(el.dataset.id));
+    el.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectMail(el.dataset.id); }
+    });
+  });
+}
+
+function selectMail(id) {
+  selectedMail = id;
+  renderMails();
+  renderReader();
+}
+
+function renderReader() {
+  const m = MAILS.find(x => x.id === selectedMail);
+  if (!m) return;
+  document.getElementById("chead").innerHTML = `
+    <h2>${m.subj}</h2>
+    <div class="meta">
+      <span><b style="color:var(--aas-text);font-weight:600">${m.from}</b> → ${m.to}</span>
+      <span>${m.date}</span>
+    </div>`;
+  document.getElementById("conv").innerHTML = `
+    <article class="aas-mc${m.unread ? " unread" : ""} open">
+      <div class="aas-mc__head">
+        <div class="aas-mc__who"><span class="aas-av">${m.av}</span><b>${m.from}</b></div>
+        <span class="aas-mc__when">${m.date}</span>
+      </div>
+      <div class="aas-mc__body">${m.body}</div>
+    </article>`;
+}
+
+function renderMonth() {
+  document.getElementById("mtitle").textContent = `${RU_MO[viewMonth]} ${viewYear}`;
+  const first = new Date(viewYear, viewMonth, 1);
+  let start = (first.getDay() + 6) % 7; // Mon=0
+  const daysIn = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const prevDays = new Date(viewYear, viewMonth, 0).getDate();
+  const today = new Date(2026, 8, 28);
+  const cells = [];
+
+  for (let i = 0; i < 42; i++) {
+    let d, mute = false;
+    if (i < start) {
+      d = new Date(viewYear, viewMonth - 1, prevDays - start + i + 1);
+      mute = true;
+    } else if (i >= start + daysIn) {
+      d = new Date(viewYear, viewMonth + 1, i - start - daysIn + 1);
+      mute = true;
+    } else {
+      d = new Date(viewYear, viewMonth, i - start + 1);
+    }
+    const k = keyOf(d);
+    const busy = !!(MEETS[k] && MEETS[k].length);
+    const cls = [
+      "mday",
+      mute ? "mday--mute" : "",
+      sameDay(d, today) ? "mday--today" : "",
+      sameDay(d, selectedDay) ? "mday--sel" : "",
+      busy ? "mday--busy" : ""
+    ].filter(Boolean).join(" ");
+    cells.push(`<button type="button" class="${cls}" data-k="${k}" aria-label="${d.toLocaleDateString("ru-RU")}"${sameDay(d, selectedDay) ? ' aria-current="date"' : ""}>${d.getDate()}</button>`);
+  }
+  const grid = document.getElementById("mgrid");
+  grid.innerHTML = cells.join("");
+  grid.querySelectorAll(".mday").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const [y, mo, da] = btn.dataset.k.split("-").map(Number);
+      selectedDay = new Date(y, mo - 1, da);
+      viewYear = selectedDay.getFullYear();
+      viewMonth = selectedDay.getMonth();
+      renderMonth();
+      renderAgenda();
+    });
+  });
+}
+
+function renderAgenda() {
+  const k = keyOf(selectedDay);
+  const list = MEETS[k] || [];
+  const aday = document.getElementById("aday");
+  aday.textContent = `${RU_WD[selectedDay.getDay()]}, ${selectedDay.getDate()} ${RU_MO[selectedDay.getMonth()].replace(/ь$/, "я").replace(/й$/, "я").replace(/т$/, "та")}`;
+  // soft genitive-ish labels for demo; Sep -> сентября
+  const gen = { 8: "сентября", 9: "октября" };
+  if (gen[selectedDay.getMonth()]) {
+    aday.textContent = `${RU_WD[selectedDay.getDay()]}, ${selectedDay.getDate()} ${gen[selectedDay.getMonth()]}`;
+  }
+
+  const alive = document.getElementById("alive");
+  alive.hidden = !list.some(m => m.now);
+
+  const root = document.getElementById("alist");
+  if (!list.length) {
+    root.innerHTML = `<div class="agenda__empty">
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v4"/><path d="M16 3v4"/></svg>
+      <p>На этот день встреч нет. Выберите другой день в месяце или создайте событие.</p>
+    </div>`;
+    return;
+  }
+
+  let html = "";
+  list.forEach((m, i) => {
+    if (i === 2) html += `<div class="gap-free"><span>свободно ~2 ч</span></div>`;
+    html += `<button type="button" class="meet${m.now ? " meet--now" : ""}" style="--i:${i};--evc:${m.evc}">
+      <div class="meet__when-wrap">
+        <div class="meet__time">${m.t0}<br>${m.t1}</div>
+      </div>
+      <div>
+        <div class="meet__title">${m.title}</div>
+        <div class="meet__meta"><span>${m.where}</span></div>
+      </div>
+    </button>`;
+  });
+  root.innerHTML = html;
+}
+
+document.getElementById("mprev").onclick = () => {
+  viewMonth--;
+  if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+  renderMonth();
+};
+document.getElementById("mnext").onclick = () => {
+  viewMonth++;
+  if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+  renderMonth();
+};
+document.getElementById("mtoday").onclick = () => {
+  selectedDay = new Date(2026, 8, 28);
+  viewYear = 2026;
+  viewMonth = 8;
+  renderMonth();
+  renderAgenda();
+};
+
+/* Account theme toggle (demo) */
+document.querySelectorAll(".aas-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".aas-tab").forEach(t => t.classList.remove("on"));
+    tab.classList.add("on");
+    document.body.classList.toggle("theme-seller", tab.classList.contains("aas-tab--seller"));
+    document.body.classList.toggle("theme-bank", tab.classList.contains("aas-tab--bank"));
+    const nav = document.querySelector(".aas-topnav");
+    nav.classList.toggle("aas-topnav--seller", tab.classList.contains("aas-tab--seller"));
+    nav.classList.toggle("aas-topnav--bank", tab.classList.contains("aas-tab--bank"));
+  });
+});
+
+document.querySelectorAll(".aas-folders .aas-folder").forEach(f => {
+  f.addEventListener("click", () => {
+    document.querySelectorAll(".aas-folders .aas-folder").forEach(x => x.classList.remove("on"));
+    f.classList.add("on");
+  });
+});
+
+renderMails();
+renderReader();
+renderMonth();
+renderAgenda();
+</script>
+</body>
+</html>

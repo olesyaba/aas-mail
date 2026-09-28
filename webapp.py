@@ -44,7 +44,7 @@ MAX_BODY = 40 * 1024 * 1024
 # Product identity (About page + UI chrome).
 APP_META = {
     "name": "AAS mail",
-    "version": "1.2.21",
+    "version": "1.2.22",
     "description": "Локальный клиент почты и календаря Alfa / Alfa-Seller поверх Exchange ActiveSync.",
     "contact_mm": "@olesya_ba",
     "thanks_intro": "Спасибо за тест-рейды и светлые идеи:",
@@ -2200,6 +2200,8 @@ DEFAULT_PREFS = {
     "update_mode": "auto",
     # Working day for «Свободно у всех» suggestions (local hours).
     "work_start": 9, "work_end": 18,
+    # Unified view: month + day agenda as a rail beside the mail.
+    "unified_cal": False,
 }
 MAIL_SORTS = ("date_desc", "date_asc", "from", "subject")
 _prefs_lock = threading.Lock()

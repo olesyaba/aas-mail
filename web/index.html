@@ -30,6 +30,7 @@ try {
   <div class="aas-seg aas-sect" id="sect" role="group" aria-label="Раздел">
     <button class="on" data-view="mail">Почта</button><button data-view="cal">Календарь</button>
   </div>
+  <button type="button" class="aas-btn aas-btn--ghost aas-btn--icon aas-railbtn" id="railbtn" aria-pressed="false" title="Календарь рядом с почтой: месяц и встречи дня (⌘⇧K)" aria-label="Календарь рядом с почтой"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M15 4v17"/><path d="M3 9h12"/><path d="M8 2v4"/></svg></button>
   <div class="aas-spacer"></div>
   <input id="search" type="search" placeholder="Поиск по почте" aria-label="Поиск по почте">
   <span id="synctxt" class="aas-sync__txt"></span>
@@ -78,6 +79,27 @@ try {
       <div id="rows" role="listbox" aria-label="Письма"></div>
     </div>
     <div id="reader"></div>
+    <!-- Unified view: this month + the chosen day's meetings beside the mail (toggle: #railbtn). -->
+    <aside id="rail" class="aas-rail" aria-label="Календарь">
+      <div class="aas-rail__month">
+        <div class="aas-rail__bar">
+          <button type="button" class="aas-btn aas-btn--icon aas-btn--sm aas-btn--ghost" id="rprev" aria-label="Предыдущий месяц"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+          <h3 id="rmtitle"></h3>
+          <button type="button" class="aas-btn aas-btn--icon aas-btn--sm aas-btn--ghost" id="rnext" aria-label="Следующий месяц"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+          <button type="button" class="aas-btn aas-btn--sm" id="rtoday">Сегодня</button>
+        </div>
+        <div class="aas-rail__wd" aria-hidden="true"><span>пн</span><span>вт</span><span>ср</span><span>чт</span><span>пт</span><span>сб</span><span>вс</span></div>
+        <div class="aas-rail__grid" id="rmgrid" role="group" aria-label="Дни месяца"></div>
+      </div>
+      <div class="aas-rail__agenda">
+        <div class="aas-rail__head">
+          <h3><button type="button" class="aas-linkbtn" id="rdayopen" title="Открыть этот день в календаре">Встречи</button></h3>
+          <span class="aas-rail__day" id="rday"></span>
+          <span class="aas-rail__live" id="rlive" hidden><span class="aas-rail__dot"></span>сейчас</span>
+        </div>
+        <div class="aas-rail__list" id="rlist"></div>
+      </div>
+    </aside>
   </section>
   <section class="view" id="cal">
     <div id="calbar">
@@ -283,7 +305,7 @@ function fmtRange(s, e, allDay = false, now = new Date()) {
 const icon = (name, size = 16) => `<svg class="aas-ic" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
 /* ---------- preferences (kept on the server) ---------- */
-let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 1, cal_view: 'week', links: [], favorite_folders: [], theme: 'system', mail_sound: 'notice14', mail_window: 5, mail_window_seller: 5, mail_sort: 'date_desc', mail_sort_seller: 'date_desc', update_mode: 'auto'};
+let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 1, cal_view: 'week', links: [], favorite_folders: [], theme: 'system', mail_sound: 'notice14', mail_window: 5, mail_window_seller: 5, mail_sort: 'date_desc', mail_sort_seller: 'date_desc', update_mode: 'auto', unified_cal: false};
 /* Period and order are per-account (Bank ⇄ Seller keep their own): main on the base
    key, the Seller mailbox on the *_seller key — same split as signature/signature2. */
 const winKeyFor = a => a === 'main' ? 'mail_window' : 'mail_window_seller';
@@ -465,12 +487,13 @@ let view = 'mail';
 const bindTab = b => b.onclick = () => showView(view, b.dataset.acct || 'main');
 document.querySelectorAll('.aas-tab').forEach(bindTab);
 document.querySelectorAll('#sect [data-view]').forEach(b => b.onclick = () => showView(b.dataset.view, ACCT));
-/* ⌘1 / ⌘2 — mailbox by order; ⌘⇧C — mail ⇄ calendar. Not while a dialog is open. */
+/* ⌘1 / ⌘2 — mailbox by order; ⌘⇧C — mail ⇄ calendar; ⌘⇧K — calendar beside the mail. Not while a dialog is open. */
 document.addEventListener('keydown', e => {
   if (!e.metaKey || e.ctrlKey || e.altKey || modalOpen()) return;
   const n = /^Digit([1-9])$/.exec(e.code)?.[1];
   if (n && !e.shiftKey) { const a = accounts[+n - 1]; if (a) { e.preventDefault(); showView(view, a.id); } return; }
   if (e.shiftKey && e.code === 'KeyC') { e.preventDefault(); showView(view === 'cal' ? 'mail' : 'cal', ACCT); }
+  if (e.shiftKey && e.code === 'KeyK') { e.preventDefault(); setRail(!railOn()); }
 });
 function buildAccountTabs() {
   const box = $('#tabs') || $('.aas-tabs');
@@ -631,8 +654,10 @@ function showView(v, acctId = 'main') {
   document.querySelectorAll('#sect [data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === v));
   document.querySelectorAll('.view').forEach(s => s.classList.toggle('on', s.id === v));
   $('#search').style.visibility = v === 'mail' ? '' : 'hidden';  // keep its slot: no header jump
+  $('#railbtn').hidden = v !== 'mail';
   const nl = $('#newbtn .lbl'); if (nl) nl.textContent = v === 'cal' ? 'Новое событие' : 'Создать';
   $('#newbtn').title = v === 'cal' ? 'Новое событие' : 'Новое письмо (C)';
+  if (v === 'mail') loadRail();
   if (v === 'cal') { loadCal(); syncCalDelta(); }
   // Back on a mail tab from its saved state: pull what changed meanwhile (a fresh
   // account's first load is already a sync).
@@ -643,7 +668,7 @@ function showView(v, acctId = 'main') {
    costs well under a second. The cached view is drawn first, then redrawn. */
 async function syncCalDelta(acct = ACCT) {
   try { await api('sync', {calendar: 'delta'}, acct); } catch (_) { return; }
-  if (acct === ACCT && view === 'cal' && !modalOpen()) loadCal(true);
+  if (acct === ACCT && !modalOpen()) loadCal(true);
 }
 function syncMailDelta() {
   if (searchQ) return;
@@ -669,7 +694,7 @@ async function syncAll() {
   syncing = true; $('#syncbtn').classList.add('busy'); setSyncText();
   try {
     const jobs = [refreshFolders(), loadList(true)];
-    jobs.push(api('sync', {calendar: true}).then(() => { if (view === 'cal') return loadCal(); }));
+    jobs.push(api('sync', {calendar: true}).then(() => loadCal()));
     // Unread across every mail folder (current + other accounts).
     jobs.push(refreshUnread(ACCT, true));
     accounts.filter(a => a.id !== ACCT).forEach(a => {
@@ -758,7 +783,7 @@ async function autoSyncTick() {
     }
     const jobs = [];
     if (view === 'mail' && !searchQ && curFolder) jobs.push(loadListQuiet());
-    if (view === 'cal' && !modalOpen()) jobs.push(loadCal(true));
+    if (!modalOpen()) jobs.push(loadCal(true));
     accounts.forEach((a, i) => jobs.push(refreshInboxBadge(a.id, i ? '' : 'visible')));
     await Promise.allSettled(jobs);
     accounts.forEach(a => sweepUnread(a.id));
@@ -1552,7 +1577,7 @@ function bindInviteCard(mb, c) {
       const r = await api('invite', {item_id: c.m.item_id, response: resp, ...(note ? {note} : {})});
       c.rsvp = {resp, via: r.via}; show(resp, r.via);
       toast(RSVP_DONE[resp]);
-      if (view === 'cal') loadCal();
+      loadCal();
     } catch (e) { box.querySelectorAll('[data-rsvp]').forEach(x => x.disabled = false); throw e; }
   }));
 }
@@ -2348,8 +2373,10 @@ $('#today').onclick = () => {
 $('#caloff').onclick = () => { calOffOpen = !calOffOpen; drawCal(); };
 $('#calmode').onclick = e => { const m = e.target.dataset?.m; if (!m) return; calMode = m; savePrefs({cal_view: m}); $('#weekwrap')._scrolled = false; loadCal(); };
 let events = [];
+const normEv = acct => e => { const s = new Date(e.start_iso); let en = e.end ? localDate(e.end) : s; if (isNaN(en) || en < s) en = s; (e.categories || []).forEach(c => seenCat(c)); return {...e, s, e: en, _acct: acct, _join: joinURL(e.location, e.body), _cat: uniqCats(e.categories)[0] || ''}; };
 
 const loadCal = guard(async (quiet = false) => {
+  if (view !== 'cal') return loadRail(quiet);  // the grid reloads on entering the tab anyway
   const acct = ACCT;
   document.querySelectorAll('#calmode button').forEach(b => b.classList.toggle('on', b.dataset.m === calMode));
   const days = visibleDays(), end = new Date(days[days.length - 1]); end.setDate(end.getDate() + 1);
@@ -2367,7 +2394,7 @@ const loadCal = guard(async (quiet = false) => {
   // Stale cache answers instantly and refreshes behind the scenes: look again once it is done.
   if (j.cached_age > 180 && view === 'cal') setTimeout(() => { if (view === 'cal') loadCal(); }, 40000);
   // Join links are parsed once per load, not on every redraw of the grid.
-  events = j.items.map(e => { const s = new Date(e.start_iso); let en = e.end ? localDate(e.end) : s; if (isNaN(en) || en < s) en = s; (e.categories || []).forEach(c => seenCat(c)); return {...e, s, e: en, _acct: acct, _join: joinURL(e.location, e.body), _cat: uniqCats(e.categories)[0] || ''}; });
+  events = j.items.map(normEv(acct));
   // AAS-24-02: the server is still paging the calendar in (Seller sends 1–2 events
   // per round) — say so and look again shortly instead of showing a stub day.
   $('#caltitle').textContent = title + (j.truncated ? ' — календарь ещё загружается…' : ''); drawCal();
@@ -2377,6 +2404,110 @@ const loadCal = guard(async (quiet = false) => {
   $('#dot').className = 'aas-status-dot aas-status-dot--ok';
 });
 let calMoreT = null, calMoreTries = 0;
+
+/* ---------- unified view: month + day agenda beside the mail ---------- */
+let railMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1), railDay = startOfDay(new Date());
+let railEvents = [], railFor = '', railMoreTries = 0;
+const railOn = () => !!prefs.unified_cal;
+/** 6 weeks from the Monday on/before the 1st: the grid the month rail draws. */
+function railGrid(month) {
+  const g = mondayOf(month);
+  return [...Array(42)].map((_, i) => { const d = new Date(g); d.setDate(g.getDate() + i); return d; });
+}
+/**
+ * One day's agenda: all-day events first, then timed ones by start, with a «free»
+ * marker wherever the gap between meetings is an hour or more. Cancelled meetings
+ * stay (struck through) but neither count as busy nor split the free time.
+ * Returns [{e, now}] and [{gap: minutes}] items.
+ */
+function railAgenda(list, day, now = new Date()) {
+  const d0 = startOfDay(day).getTime(), d1 = d0 + 864e5;
+  const on = list.filter(e => e.s.getTime() < d1 && Math.max(e.e.getTime(), e.s.getTime() + 1) > d0);
+  const all = on.filter(e => e.is_all_day), timed = on.filter(e => !e.is_all_day).sort((a, b) => a.s - b.s || b.e - a.e);
+  const out = all.map(e => ({e, now: false}));
+  let busyTo = null;
+  timed.forEach(e => {
+    const live = e.meeting_status !== 'cancelled';
+    if (live && busyTo !== null && e.s - busyTo >= 36e5) out.push({gap: Math.round((e.s - busyTo) / 6e4)});
+    out.push({e, now: live && e.s <= now && now < e.e});
+    if (live) busyTo = Math.max(busyTo ?? 0, e.e.getTime());
+  });
+  return out;
+}
+function paintRail() {
+  document.body.classList.toggle('unified', railOn());
+  const b = $('#railbtn'); if (b) { b.setAttribute('aria-pressed', String(railOn())); b.classList.toggle('on', railOn()); }
+}
+async function setRail(on) {
+  await savePrefs({unified_cal: on}); paintRail();
+  if (on) loadRail();
+}
+$('#railbtn').onclick = () => setRail(!railOn());
+const loadRail = guard(async (quiet = false) => {
+  if (!railOn() || view !== 'mail') return;
+  const acct = ACCT, days = railGrid(railMonth), end = new Date(days[41]); end.setDate(end.getDate() + 1);
+  const key = acct + ':' + isoDay(days[0]);
+  if (railFor.split(':')[0] !== acct) { railEvents = []; }  // never show one mailbox's meetings under another
+  if (railFor !== key || quiet !== true) drawRail();
+  const j = await api('events', {action: 'list', start: isoDay(days[0]), end: isoDay(end), limit: 500}, acct);
+  if (acct !== ACCT || key !== acct + ':' + isoDay(railGrid(railMonth)[0])) return;  // switched meanwhile
+  railEvents = j.items.map(normEv(acct)); railFor = key; drawRail();
+  // Server still paging the calendar in (see loadCal): look again shortly.
+  if (j.truncated && railMoreTries++ < 20) setTimeout(() => loadRail(true), 5000);
+  if (!j.truncated) railMoreTries = 0;
+});
+function drawRail() {
+  const today = isoDay(new Date()), sel = isoDay(railDay), mo = railMonth.getMonth();
+  $('#rmtitle').textContent = railMonth.toLocaleDateString('ru-RU', {month: 'long'}) + ' ' + railMonth.getFullYear();
+  const busy = new Set();
+  railEvents.forEach(e => {
+    if (e.meeting_status === 'cancelled') return;
+    const last = new Date(Math.max(e.s.getTime(), e.e.getTime() - 1));
+    for (let d = startOfDay(e.s); d <= last; d.setDate(d.getDate() + 1)) busy.add(isoDay(d));
+  });
+  $('#rmgrid').innerHTML = railGrid(railMonth).map(d => {
+    const id = isoDay(d), cls = ['aas-mday', d.getMonth() !== mo && 'aas-mday--mute', id === today && 'aas-mday--today',
+      id === sel && 'aas-mday--sel', busy.has(id) && 'aas-mday--busy'].filter(Boolean).join(' ');
+    const label = d.toLocaleDateString('ru-RU', {weekday: 'long', day: 'numeric', month: 'long'}) + (busy.has(id) ? ', есть встречи' : '');
+    return `<button type="button" class="${cls}" data-day="${id}" aria-label="${label}"${id === sel ? ' aria-pressed="true"' : ''}${id === today ? ' aria-current="date"' : ''}>${d.getDate()}</button>`;
+  }).join('');
+  $('#rmgrid').querySelectorAll('[data-day]').forEach(b => b.onclick = () => {
+    railDay = new Date(b.dataset.day + 'T00:00');
+    if (railDay.getMonth() !== mo) { railMonth = new Date(railDay.getFullYear(), railDay.getMonth(), 1); loadRail(); }
+    else drawRail();
+  });
+  $('#rday').textContent = railDay.toLocaleDateString('ru-RU', {weekday: 'short', day: 'numeric', month: 'long'});
+  const items = railAgenda(railEvents, railDay);
+  $('#rlive').hidden = !items.some(x => x.now);
+  if (!items.length) {
+    $('#rlist').innerHTML = `<div class="aas-rail__empty">${railFor ? 'В этот день встреч нет.' : 'Загружаем календарь…'}
+      ${railFor ? '<button type="button" class="aas-btn aas-btn--sm" id="rnew">Новое событие</button>' : ''}</div>`;
+    $('#rlist')._h = '';
+    const nb = $('#rnew'); if (nb) nb.onclick = () => { const start = new Date(railDay); start.setHours(10, 0, 0, 0); eventForm(null, {start}); };
+    return;
+  }
+  const hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const evs = [];
+  const html = items.map((x, i) => {
+    if (x.gap) return `<div class="aas-rail__gap"><span>свободно ${x.gap % 60 === 0 ? x.gap / 60 + ' ч' : x.gap >= 90 ? '~' + Math.round(x.gap / 60) + ' ч' : x.gap + ' мин'}</span></div>`;
+    const e = x.e, k = evs.push(e) - 1;
+    const cls = ['aas-meet', x.now && 'aas-meet--now', e.meeting_status === 'cancelled' && 'aas-meet--cancelled',
+      e.response_type === 'not_responded' && 'aas-meet--pending'].filter(Boolean).join(' ');
+    const when = e.is_all_day ? 'весь<br>день' : `${hm(e.s)}<br>${hm(e.e)}`;
+    const meta = [!/^\s*https?:/i.test(e.location || '') && e.location, e.response_type === 'not_responded' && 'ждёт ответа', e._join && 'ссылка'].filter(Boolean).map(esc).join(' · ');
+    return `<button type="button" class="${cls}" data-k="${k}" style="--i:${i}${e._cat ? ';--evc:' + mutedCat(catColor(e._cat)) : ''}">
+      <span class="aas-meet__time">${when}</span>
+      <span class="aas-meet__main"><span class="aas-meet__title">${esc(evTitle(e))}</span>${meta ? `<span class="aas-meet__meta">${meta}</span>` : ''}</span></button>`;
+  }).join('');
+  // Auto-sync redraws every minute: leave an unchanged list alone (no re-played entrance).
+  if ($('#rlist')._h !== html) { $('#rlist').innerHTML = html; $('#rlist')._h = html; }
+  $('#rlist').querySelectorAll('[data-k]').forEach(b => b.onclick = () => eventView(evs[+b.dataset.k]));
+}
+const railShift = n => { railMonth = new Date(railMonth.getFullYear(), railMonth.getMonth() + n, 1); loadRail(); };
+$('#rprev').onclick = () => railShift(-1);
+$('#rnext').onclick = () => railShift(1);
+$('#rtoday').onclick = () => { railDay = startOfDay(new Date()); railMonth = new Date(railDay.getFullYear(), railDay.getMonth(), 1); loadRail(); };
+$('#rdayopen').onclick = () => { anchor = new Date(railDay); calMode = 'day'; showView('cal', ACCT); };
 
 /**
  * Column layout for one day's timed events (sorted by start, longer first).
@@ -2856,7 +2987,7 @@ $('#bulkunread')?.addEventListener('click', bulkMark(false));
   // Independent boot calls go out together (one round-trip of latency instead of three).
   const [p, m, acc] = await Promise.allSettled([api('prefs', {}), api('about', {}), api('accounts', {})]);
   if (p.status === 'fulfilled') prefs = p.value.prefs;
-  applyTheme(prefs.theme); syncNativePrefs();
+  applyTheme(prefs.theme); syncNativePrefs(); paintRail();
   if (m.status === 'fulfilled') aboutMeta = m.value;
   if (acc.status === 'fulfilled') accounts = acc.value.accounts;
   setTimeout(() => applyAuthState(accounts), 0);  // tabs exist after buildAccountTabs
