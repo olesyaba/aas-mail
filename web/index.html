@@ -35,6 +35,7 @@ try {
   <span id="synctxt" class="aas-sync__txt"></span>
   <button class="aas-btn aas-sync" id="syncbtn" title="Принудительная синхронизация почты и календаря с сервером"><svg class="aas-sync__ic ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.6-4.5L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.5L20 16"/><path d="M20 21v-5h-5"/></svg><span class="lbl">Синхронизировать</span></button>
   <button class="aas-btn aas-btn--primary" id="newbtn" title="Создать"><svg class="aas-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg><span class="lbl">Создать</span></button>
+  <a class="aas-btn aas-updpill" id="updpill" href="#" target="_blank" rel="noopener noreferrer" hidden></a>
   <button class="aas-btn aas-btn--ghost aas-setbtn" id="setbtn" title="Настройки" aria-label="Настройки"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   <button type="button" class="aas-status-dot" id="dot" title="Нет связи с почтовым сервером (VPN, пароль или сбой сервера). Нажмите, чтобы повторить. Пока связь есть — этой плашки не видно.">Нет связи</button>
 </header>
@@ -788,6 +789,7 @@ function updatePaneHtml() {
       <div class="frow" style="align-items:center;gap:8px;flex-wrap:wrap">
         <button type="button" class="aas-btn" id="updcheck">Проверить сейчас</button>
         <button type="button" class="aas-btn aas-btn--primary" id="updinstall" ${u?.available && u?.can_install ? '' : 'hidden'}>Обновить до ${esc(u?.latest || '')}</button>
+        ${u?.available && !u.can_install && u.page ? `<a class="aas-btn aas-btn--primary" href="${esc(u.page)}" target="_blank" rel="noopener noreferrer">Открыть страницу релиза</a>` : ''}
         <span id="updstate" class="hint">${esc(updateText(u))}</span></div>
       <div id="updnotes" class="aas-upd__notes" ${u?.available && u?.notes ? '' : 'hidden'}>${esc(u?.notes || '')}</div></div>`;
 }
@@ -797,8 +799,22 @@ function paintUpdate() {
 }
 async function checkUpdate(force = false) {
   try { updateInfo = await api('update', {action: 'check', force}); } catch (_) { return null; }
-  paintUpdate();
+  paintUpdate(); paintUpdatePill();
   return updateInfo;
+}
+/** Header pill for a newer version: Settings → «Обновления» on the Mac; the Android
+ *  shell cannot install, so there it links the release page with the APK. */
+const updatePill = (u, android) => !u?.available ? null : {
+  label: `↑ ${u.latest}`, href: android ? u.page || '' : '',
+  title: `Доступна версия ${u.latest} — ${android ? 'скачать APK со страницы релиза' : 'открыть «Обновления»'}`,
+};
+function paintUpdatePill() {
+  const p = updatePill(updateInfo, !!window.AASNative), el = $('#updpill');
+  document.body.classList.toggle('has-update', !!p);
+  if (!el) return;
+  el.hidden = !p; if (!p) return;
+  el.textContent = p.label; el.title = p.title; el.href = p.href || '#';
+  el.onclick = p.href ? null : async e => { e.preventDefault(); await $('#setbtn').onclick(); document.querySelector('[data-sp="upd"]')?.click(); };
 }
 async function installUpdate() {
   if (updateBusy) return;
@@ -817,10 +833,9 @@ function bindUpdatePane() {
     try { await installUpdate(); closeModal(); } finally { ins.disabled = false; } });
 }
 let updateT = null;
-/** Schedule background checks for «auto»; «manual» has none. */
+/** Background checks in both modes: «auto» installs, «manual» only lights the header pill. */
 function armUpdates(delay = 15000) {
   clearTimeout(updateT); updateT = null;
-  if ((prefs.update_mode || 'auto') !== 'auto') return;
   updateT = setTimeout(async () => {
     const u = await checkUpdate();
     if (u?.available && u.can_install && (prefs.update_mode || 'auto') === 'auto') {

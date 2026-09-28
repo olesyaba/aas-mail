@@ -435,14 +435,23 @@ test('attachments: open / save-as per file and «save all» only inside the app'
   assert.doesNotMatch(attachmentsHtml(m, atts.slice(0, 1)), /data-att-all/, 'one file: no «save all»');
 });
 
-test('updates: «auto» schedules a check, «manual» schedules nothing', () => {
+test('updates: both modes check in the background (manual only shows the header pill)', () => {
   const timers = [];
   const {armUpdates, ctx} = load(['armUpdates']);
   ctx.setTimeout = (fn, ms) => { timers.push(ms); return timers.length; };
   vm.runInContext(`prefs.update_mode = 'manual'`, ctx); armUpdates();
-  assert.deepEqual(timers, [], 'manual: no background checks');
   vm.runInContext(`prefs.update_mode = 'auto'`, ctx); armUpdates();
-  assert.deepEqual(timers, [15000]);
+  assert.deepEqual(timers, [15000, 15000]);
+});
+
+test('update pill: hidden without a newer version; Mac opens Settings, Android links the release page', () => {
+  const {updatePill} = load(['updatePill']);
+  assert.equal(updatePill(null, false), null);
+  assert.equal(updatePill({available: false, latest: '1.2.20'}, false), null);
+  const u = {available: true, latest: '1.2.21', can_install: true, page: 'https://github.com/o/r/releases/latest'};
+  assert.deepEqual(plain(updatePill(u, false)), {label: '↑ 1.2.21', href: '', title: 'Доступна версия 1.2.21 — открыть «Обновления»'});
+  assert.deepEqual(plain(updatePill({...u, can_install: false}, true)),
+    {label: '↑ 1.2.21', href: 'https://github.com/o/r/releases/latest', title: 'Доступна версия 1.2.21 — скачать APK со страницы релиза'});
 });
 
 test('fmtWhen: today → time, вчера, weekday, «24 сент.», full date for other years', () => {

@@ -1658,3 +1658,15 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
   .aas-btn, .aas-tab, .aas-sect button, .aas-seg button, #foldtoggle { min-height: 44px; min-width: 44px; }
   .aas-row { min-height: 56px; }
 }
+
+/* ═══ Newer version: a pill in the header; a dot on ⚙ where the header is tight ═══ */
+.aas-updpill { color: var(--aas-accent); border-color: color-mix(in srgb, var(--aas-accent) 45%, transparent); font-weight: 600; white-space: nowrap; text-decoration: none; }
+.aas-updpill[hidden] { display: none; }
+@media (max-width: 599px) {
+  .aas-updpill { display: none; }
+  body.has-update #setbtn { position: relative; }
+  body.has-update #setbtn::after {
+    content: ''; position: absolute; top: 6px; right: 6px; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--aas-accent);
+  }
+}
