@@ -1515,3 +1515,24 @@ class BridgePathsTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"EAS_ATTACHMENT_DIR": "/data/a", "EAS_OVERFLOW_DIR": "/data/o"}):
             s = self._settings()
         self.assertEqual((s.attachment_dir, s.overflow_dir), ("/data/a", "/data/o"))
+
+
+class OutgoingDateTest(unittest.TestCase):
+    """Upstream build_message sets neither Date nor Message-ID. Exchange adds them;
+    Alfa-Seller's server (Stalwart) stores the letter as is, so our sent mail had no
+    date and sank to the bottom of «Отправленные», under older meeting invitations."""
+
+    def test_sent_mail_carries_date_and_message_id(self):
+        from email import message_from_bytes
+        from email.utils import parsedate_to_datetime
+
+        from outlook_activesync_mcp.commands import mail_write
+        webapp._patch_message_date()
+        webapp._patch_message_date()  # idempotent: main() may run it twice in tests
+        raw = mail_write.build_message(from_addr="me@x.ru", to=["a@x.ru"], subject="Test", body="Тест")
+        msg = message_from_bytes(raw)
+        self.assertEqual(len(msg.get_all("Date")), 1)
+        self.assertLess(abs(time.time() - parsedate_to_datetime(msg["Date"]).timestamp()), 60)
+        self.assertTrue(msg["Message-ID"].startswith("<"))
+        self.assertEqual(msg["Subject"], "Test")
+        self.assertIn(b"\r\n\r\n", raw)  # headers still end with CRLF CRLF

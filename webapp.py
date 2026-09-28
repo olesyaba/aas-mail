@@ -3515,6 +3515,32 @@ def _patch_unreachable_fail_fast():
     EasClient.command = _fail_fast_command(EasClient.command)
 
 
+def _patch_message_date():
+    """Upstream build_message sets neither Date nor Message-ID. Exchange adds them on
+    SendMail; Alfa-Seller's server (Stalwart) stores the letter as is, so our sent
+    mail had no date and sank to the bottom of «Отправленные»."""
+    from email.utils import formatdate, make_msgid
+    try:
+        from outlook_activesync_mcp.commands import mail_write
+    except ImportError:
+        return
+    build = mail_write.build_message
+    if getattr(build, "_eas_dated", False):
+        return
+
+    def dated(*args, **kwargs) -> bytes:
+        raw = build(*args, **kwargs)
+        head = raw.split(b"\r\n\r\n", 1)[0].lower()
+        extra = b"" if head.startswith(b"date:") or b"\r\ndate:" in head else \
+            f"Date: {formatdate(localtime=True)}\r\n".encode()
+        if not (head.startswith(b"message-id:") or b"\r\nmessage-id:" in head):
+            extra += f"Message-ID: {make_msgid(domain='eas-mail')}\r\n".encode()
+        return extra + raw
+
+    dated._eas_dated = True
+    mail_write.build_message = dated
+
+
 def main():
     logging.basicConfig(level=os.environ.get("EAS_MAIL_LOG", "INFO"),
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -3525,6 +3551,7 @@ def main():
     _patch_moveitems_status()
     _patch_calendar_attendees()
     _patch_event_update_attendees()
+    _patch_message_date()
     _patch_unreachable_fail_fast()  # last: wraps the other command patches
     _write_runtime_token()
     cfg = ensure_config()
