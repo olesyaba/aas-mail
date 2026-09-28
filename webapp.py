@@ -649,32 +649,9 @@ def call(a: Acct, domain: str, params: dict) -> dict:
     if not backend.lock.acquire(timeout=LOCK_WAIT_WRITE_S if write else LOCK_WAIT_S):
         return _busy_answer(a, domain, action, params)
     try:
-        res = _call_locked(a, backend, mod, domain, action, params)
+        return _call_locked(a, backend, mod, domain, action, params)
     finally:
         backend.lock.release()
-    if domain == "mail" and action in ("list", "search", "thread"):
-        _backfill_received(a, res.get("items") or [])
-    return res
-
-
-_NO_DATE: set[tuple[str, str]] = set()  # (acct, item_id) whose MIME had no usable Date either
-
-
-def _backfill_received(a: Acct, items: list) -> None:
-    """Alfa-Seller's server leaves DateReceived off sent items, so they sorted below
-    everything (e.g. under an older meeting invitation in «Отправленные»). Take the
-    letter's own Date header once; the dict lives in the folder cache, so it sticks."""
-    from email.utils import parsedate_to_datetime
-    for m in items:
-        iid = m.get("item_id")
-        if m.get("received") or not iid or (a.id, iid) in _NO_DATE:
-            continue
-        try:
-            d = parsedate_to_datetime(str(parse_raw(get_mime(a, iid))["Date"])).astimezone()
-            m["received"] = d.strftime("%Y-%m-%d %H:%M")
-        except Exception as e:  # noqa: BLE001 — no date is no worse than before
-            log.info("[%s] no date for %s: %s", a.id, iid, e)
-            _NO_DATE.add((a.id, iid))
 
 
 _WRITE_ACTIONS = frozenset({"send", "reply", "forward", "move", "delete", "mark_read", "flag",
