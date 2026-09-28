@@ -44,7 +44,7 @@ MAX_BODY = 40 * 1024 * 1024
 # Product identity (About page + UI chrome).
 APP_META = {
     "name": "AAS mail",
-    "version": "1.2.23",
+    "version": "1.2.24",
     "description": "Локальный клиент почты и календаря Alfa / Alfa-Seller поверх Exchange ActiveSync.",
     "contact_mm": "@olesya_ba",
     "thanks_intro": "Спасибо за тест-рейды и светлые идеи:",
@@ -1421,6 +1421,16 @@ def _cal_claim(a: Acct) -> bool:
         return True
 
 
+def _calendar_ids(client) -> list[str]:
+    """All Exchange/Stalwart calendars (FolderType 8). Stalwart may expose several
+    type-8 folders; the first is sometimes an empty stub — callers must merge or pick."""
+    ids = [f["id"] for f in client.foldersync() if str(f.get("type")) == "8" and f.get("id")]
+    if ids:
+        return ids
+    from outlook_activesync_mcp.commands import calendar as cal_mod
+    return [cal_mod._calendar_id(client)]
+
+
 def _cal_expand(masters: dict, calendar_id: str, win_start, win_end, fields) -> tuple[list, list]:
     """Expand stored masters into occurrence rows for the UI window."""
     import copy
@@ -1436,20 +1446,24 @@ def _cal_expand(masters: dict, calendar_id: str, win_start, win_end, fields) -> 
     win_start, win_end = default_window(str(win_start), str(win_end), days=7)
     notes: list = []
     items = []
-    for server_id, master in masters.items():
+    for key, master in masters.items():
+        # Multi-calendar masters carry _cid/_sid; single-calendar keeps plain keys.
+        server_id = master.get("_sid") or key
+        cid = master.get("_cid") or calendar_id
+        body = {k: v for k, v in master.items() if k not in ("_cid", "_sid")}
         # One odd series must never blank the whole calendar: fall back to the
         # plain upstream expansion, and failing that skip just this meeting.
         try:
-            occs = cal_mod._occurrences(_cal_inherit_exceptions(copy.deepcopy(master)), win_start, win_end, notes)
+            occs = cal_mod._occurrences(_cal_inherit_exceptions(copy.deepcopy(body)), win_start, win_end, notes)
         except Exception as e:  # noqa: BLE001
             log.warning("calendar: series %s not expanded with exceptions (%s: %s)", server_id, type(e).__name__, e)
             try:
-                occs = cal_mod._occurrences(copy.deepcopy(master), win_start, win_end, notes)
+                occs = cal_mod._occurrences(copy.deepcopy(body), win_start, win_end, notes)
             except Exception as e2:  # noqa: BLE001
                 log.warning("calendar: series %s skipped (%s: %s)", server_id, type(e2).__name__, e2)
                 continue
         for occ in occs:
-            occ_item_id = pack_item_id(calendar_id, server_id, instance=occ.get("instance_start"))
+            occ_item_id = pack_item_id(cid, server_id, instance=occ.get("instance_start"))
             items.append(project_event(occ, proj, item_id=occ_item_id))
     items.sort(key=lambda e: e.get("start_iso") or "")
     return items, notes
@@ -1528,9 +1542,15 @@ def _cal_parse(appdata) -> dict:
     return ev
 
 
-def _cal_apply_tree(tree, masters: dict) -> tuple[int, int]:
-    """Apply one calendar Sync tree into masters. Returns (n_add, n_del)."""
+def _cal_apply_tree(tree, masters: dict, calendar_id: str | None = None) -> tuple[int, int]:
+    """Apply one calendar Sync tree into masters. Returns (n_add, n_del).
+
+    With ``calendar_id`` (multi type-8), keys are ``{calendar_id}/{ServerId}`` so
+    stubs and the real Stalwart calendar never overwrite each other."""
     from outlook_activesync_mcp.wbxml import find, find_all, text_of
+
+    def key(sid: str) -> str:
+        return f"{calendar_id}/{sid}" if calendar_id else sid
 
     n_add = 0
     for node in find_all(tree, "AirSync", "Add") + find_all(tree, "AirSync", "Change"):
@@ -1538,13 +1558,16 @@ def _cal_apply_tree(tree, masters: dict) -> tuple[int, int]:
         appdata = find(node, "AirSync", "ApplicationData")
         if not sid or appdata is None:
             continue
-        masters[sid] = _cal_parse(appdata)
+        ev = _cal_parse(appdata)
+        if calendar_id:
+            ev["_cid"], ev["_sid"] = calendar_id, sid
+        masters[key(sid)] = ev
         n_add += 1
     n_del = 0
     for node in find_all(tree, "AirSync", "Delete") + find_all(tree, "AirSync", "SoftDelete"):
         sid = text_of(find(node, "AirSync", "ServerId"))
-        if sid and sid in masters:
-            masters.pop(sid, None)
+        if sid and key(sid) in masters:
+            masters.pop(key(sid), None)
             n_del += 1
     return n_add, n_del
 
@@ -1554,7 +1577,7 @@ def _cal_apply_tree(tree, masters: dict) -> tuple[int, int]:
 # known calendar at once and catches up with a delta (~0.5 s) instead of a
 # SyncKey=0 prime (~30 s). The generation is checked against the client's state
 # file on the first round: a mismatch is CursorExpired → full sync.
-CAL_CACHE_VERSION = 2  # 2: exceptions keyed by InstanceId (EAS 16.x); v1 files lack the keys
+CAL_CACHE_VERSION = 3  # 3: multi type-8 calendars (Stalwart); 2: InstanceId exceptions
 
 
 def _cal_cache_path(a: Acct):
@@ -1570,8 +1593,8 @@ def _cal_save(a: Acct) -> None:
     c = a.cal
     with a.cv:
         blob = {"v": CAL_CACHE_VERSION, "owner": _cal_cache_owner(a), "ts": c["ts"], "gen": c["gen"],
-                "cal_id": c["cal_id"], "filter": c.get("filter"), "masters": c["masters"],
-                "truncated": c["truncated"]}
+                "cal_id": c["cal_id"], "cal_ids": c.get("cal_ids"), "gens": c.get("gens"),
+                "filter": c.get("filter"), "masters": c["masters"], "truncated": c["truncated"]}
     path = _cal_cache_path(a)
     tmp = path.with_suffix(".tmp")
     try:
@@ -1605,6 +1628,7 @@ def _cal_load(a: Acct, start, end) -> bool:
         return False
     with a.cv:
         a.cal.update(items=items, masters=blob["masters"], gen=blob["gen"], cal_id=blob["cal_id"],
+                     cal_ids=blob.get("cal_ids"), gens=blob.get("gens"),
                      filter=blob.get("filter"), ts=blob["ts"], loaded=True, error=None,
                      range=(start, end), truncated=bool(blob.get("truncated")))
         a.cv.notify_all()  # a cold cal_events() is waiting for loaded
@@ -1748,47 +1772,82 @@ def _cal_more_soon(a: Acct) -> None:
     threading.Timer(1.0, cal_refresh_bg, args=(a,)).start()
 
 
+def _cal_sync_one(backend, calendar_id: str, *, gen, opts, window: int, pages_budget: int,
+                  t_deadline: float, masters: dict, multi: bool) -> tuple[dict, int | None, bool, int]:
+    """Sync one calendar collection into ``masters``. Returns (masters, gen, more, pages)."""
+    pages = 0
+    more = True
+    while pages < pages_budget and (pages == 0 or time.monotonic() < t_deadline):
+        pages += 1
+        prev_gen = gen
+        backend._pace()
+        tree, more, gen = backend.client.sync_round(
+            calendar_id, generation=gen, window=window,
+            options_children=opts if pages == 1 else None, get_changes=True)
+        if gen != prev_gen and prev_gen is not None:
+            # Fresh prime: drop only this calendar's rows.
+            prefix = f"{calendar_id}/"
+            if multi:
+                masters = {k: v for k, v in masters.items() if not str(k).startswith(prefix)}
+            else:
+                masters = {}
+        _cal_apply_tree(tree, masters, calendar_id if multi else None)
+        if not more:
+            break
+    return masters, gen, more, pages
+
+
 def _cal_full_sync(a: Acct, backend, start, end) -> None:
-    """Prime SyncKey=0 and fill masters + expanded items (same window as before)."""
+    """Prime SyncKey=0 and fill masters + expanded items (same window as before).
+
+    Stalwart (Alfa-Seller) may expose several FolderType=8 calendars; the first is
+    often empty. We sync every type-8 folder and merge so meetings are not lost."""
     from outlook_activesync_mcp.commands import calendar as cal_mod
     from outlook_activesync_mcp.commands.sync import body_preference
-    from outlook_activesync_mcp.wbxml import el, find_all
+    from outlook_activesync_mcp.wbxml import el
 
     days = max(1, (end - start).days)
     t0 = time.time()
-    calendar_id = cal_mod._calendar_id(backend.client)
+    cal_ids = _calendar_ids(backend.client)
+    multi = len(cal_ids) > 1
     opts = [el("AirSync", "FilterType", text=cal_mod._filter_type(days)),
             body_preference(type_code="1", truncation=CAL_BODY_TRUNCATION)]
     masters: dict = {}
+    gens: dict = {}
     truncated = False
-    backend._pace()
-    tree, more, gen = backend.client.sync_round(
-        calendar_id, generation=None, window=cal_mod._WINDOW,
-        options_children=opts, get_changes=True)
-    _cal_apply_tree(tree, masters)
-    pages, t_start = 1, time.monotonic()
+    pages_total = 0
+    t_start = time.monotonic()
     a.cal_step = "полная загрузка календаря"
-    while more and pages < _CAL_MAX_PAGES and time.monotonic() - t_start < _CAL_BUDGET_S:
-        a.cal_step = f"полная загрузка календаря, страница {pages + 1}"
+    for i, calendar_id in enumerate(cal_ids):
+        a.cal_step = (f"полная загрузка календаря ({i + 1}/{len(cal_ids)})"
+                      if multi else "полная загрузка календаря")
         backend._pace()
-        tree, more, gen = backend.client.sync_round(
-            calendar_id, generation=gen, window=cal_mod._WINDOW)
-        n_add, _ = _cal_apply_tree(tree, masters)
-        # Ignore empty progress; still count the page.
-        pages += 1
-        if n_add == 0 and not more:
+        # generation=None primes SyncKey=0 for a fresh listing of this folder.
+        left = max(1, _CAL_MAX_PAGES - pages_total)
+        masters, gen, more, pages = _cal_sync_one(
+            backend, calendar_id, gen=None, opts=opts, window=cal_mod._WINDOW,
+            pages_budget=left, t_deadline=t_start + _CAL_BUDGET_S, masters=masters, multi=multi)
+        gens[calendar_id] = gen
+        pages_total += pages
+        if more:
+            truncated = True
+        if pages_total >= _CAL_MAX_PAGES or time.monotonic() - t_start >= _CAL_BUDGET_S:
+            truncated = truncated or more
             break
-    if more:
-        truncated = True
-    items, _notes = _cal_expand(masters, calendar_id, start, end, CAL_FIELDS)
+    primary = cal_ids[0]
+    if multi:
+        primary = max(cal_ids, key=lambda cid: sum(1 for k in masters if str(k).startswith(f"{cid}/")))
+    items, _notes = _cal_expand(masters, primary, start, end, CAL_FIELDS)
     with a.cv:
-        a.cal.update(items=items, masters=masters, gen=gen, cal_id=calendar_id,
+        a.cal.update(items=items, masters=masters, gen=gens.get(primary), cal_id=primary,
+                     cal_ids=cal_ids, gens=gens,
                      ts=time.time(), loaded=True, error=None, range=(start, end),
                      truncated=truncated, filter=cal_mod._filter_type(days))
         _cal_overlay_prune(a.cal, t0)  # the server's view now includes earlier writes
     _cal_save(a)
-    log.info("[%s] calendar full: %d masters → %d events in %d pages%s", a.id, len(masters), len(items),
-             pages, " (continuing)" if truncated else "")
+    log.info("[%s] calendar full: %d masters → %d events in %d pages%s%s", a.id, len(masters), len(items),
+             pages_total, f" across {len(cal_ids)} calendars" if multi else "",
+             " (continuing)" if truncated else "")
     if truncated:
         _cal_more_soon(a)
 
@@ -1800,40 +1859,49 @@ def _cal_delta_sync(a: Acct, backend, start, end) -> None:
     from outlook_activesync_mcp.wbxml import el
 
     c = a.cal
-    calendar_id = c["cal_id"]
     days = max(1, (end - start).days)
     opts = [el("AirSync", "FilterType", text=cal_mod._filter_type(days)),
             body_preference(type_code="1", truncation=CAL_BODY_TRUNCATION)]
     masters = dict(c.get("masters") or {})
-    gen = c["gen"]
-    pages = changed = 0
-    t_start, more = time.monotonic(), False
-    while pages < _CAL_MAX_PAGES and time.monotonic() - t_start < _CAL_BUDGET_S:
-        pages += 1
-        a.cal_step = f"обновление календаря, страница {pages}"
+    cal_ids = list(c.get("cal_ids") or ([c["cal_id"]] if c.get("cal_id") else _calendar_ids(backend.client)))
+    multi = len(cal_ids) > 1
+    gens = dict(c.get("gens") or ({c["cal_id"]: c["gen"]} if c.get("cal_id") is not None and c.get("gen") is not None else {}))
+    pages_total = changed = 0
+    truncated = False
+    t_start = time.monotonic()
+    for i, calendar_id in enumerate(cal_ids):
+        gen = gens.get(calendar_id)
+        if gen is None:
+            continue  # never primed in this cache — full sync will pick it up
+        a.cal_step = (f"обновление календаря ({i + 1}/{len(cal_ids)}), страница 1"
+                      if multi else "обновление календаря, страница 1")
         backend._pace()
-        prev_gen = gen
-        tree, more, gen = backend.client.sync_round(
-            calendar_id, generation=gen, window=cal_mod._WINDOW,
-            options_children=opts if pages == 1 else None, get_changes=True)
-        # A new generation means sync_round re-primed a dead key: this is a
-        # fresh full listing, so it replaces the cache (a count of Adds is not
-        # a reliable signal — a busy day of invitations would wipe everything).
-        if gen != prev_gen:
-            masters = {}
-        n_add, n_del = _cal_apply_tree(tree, masters)
-        changed += n_add + n_del
-        if not more:
+        left = max(1, _CAL_MAX_PAGES - pages_total)
+        before = len(masters)
+        masters, gen, more, pages = _cal_sync_one(
+            backend, calendar_id, gen=gen, opts=opts, window=cal_mod._WINDOW,
+            pages_budget=left, t_deadline=t_start + _CAL_BUDGET_S, masters=masters, multi=multi)
+        gens[calendar_id] = gen
+        # Approximate change count from size delta when multi (apply already merged).
+        changed += abs(len(masters) - before)
+        pages_total += pages
+        if more:
+            truncated = True
+        if pages_total >= _CAL_MAX_PAGES or time.monotonic() - t_start >= _CAL_BUDGET_S:
             break
-    items, _notes = _cal_expand(masters, calendar_id, start, end, CAL_FIELDS)
+    primary = c.get("cal_id") or cal_ids[0]
+    if multi:
+        primary = max(cal_ids, key=lambda cid: sum(1 for k in masters if str(k).startswith(f"{cid}/")))
+    items, _notes = _cal_expand(masters, primary, start, end, CAL_FIELDS)
     with a.cv:
-        a.cal.update(items=items, masters=masters, gen=gen, cal_id=calendar_id,
+        a.cal.update(items=items, masters=masters, gen=gens.get(primary), cal_id=primary,
+                     cal_ids=cal_ids, gens=gens,
                      ts=time.time(), loaded=True, error=None, range=(start, end),
-                     truncated=bool(more), filter=cal_mod._filter_type(days))
+                     truncated=truncated, filter=cal_mod._filter_type(days))
     _cal_save(a)
-    log.info("[%s] calendar delta: %d changes, %d masters → %d events%s", a.id, changed, len(masters),
-             len(items), " (continuing)" if more else "")
-    if more:
+    log.info("[%s] calendar delta: ~%d changes, %d masters → %d events%s", a.id, changed, len(masters),
+             len(items), " (continuing)" if truncated else "")
+    if truncated:
         _cal_more_soon(a)
 
 
@@ -1870,6 +1938,14 @@ def _cal_refresh(a: Acct, claimed: bool = False, force: bool = False):
         same_filter = c.get("filter") == calendar._filter_type(max(1, (end - start).days))
         can_delta = (not force and c.get("loaded") and c.get("gen") is not None
                      and c.get("cal_id") and same_filter and c.get("masters") is not None)
+        # Empty cache on a multi-calendar account is usually the Stalwart stub
+        # (first type-8 folder) — do not keep delta-syncing nothing.
+        if can_delta and not c.get("masters"):
+            try:
+                if len(_calendar_ids(backend.client)) > 1:
+                    can_delta = False
+            except Exception:  # noqa: BLE001
+                pass
         with backend.lock:
             if can_delta:
                 try:
@@ -2051,8 +2127,12 @@ def cal_events(a: Acct, start: str, end: str) -> dict:
 
     def ts(x):
         return datetime.fromisoformat(x.replace("Z", "+00:00")).timestamp() if x else 0
+    # ``end`` is exclusive in the UI (day view sends tomorrow). Same calendar day
+    # for start and end used to collapse the window to midnight→midnight = empty.
+    from datetime import timedelta
+    hi_day = de if de > ds else de + timedelta(days=1)
     lo_t = datetime.combine(ds, datetime.min.time()).timestamp()
-    hi_t = datetime.combine(de, datetime.min.time()).timestamp()
+    hi_t = datetime.combine(hi_day, datetime.min.time()).timestamp()
 
     def end_ts(e):  # "end" is local "YYYY-MM-DD HH:MM"; fall back to the start
         try:

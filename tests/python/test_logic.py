@@ -554,6 +554,13 @@ class CalendarCacheTest(unittest.TestCase):
         r = webapp.cal_events(a, day.date().isoformat(), (day.date() + timedelta(days=1)).isoformat())
         self.assertEqual(sorted(e["subject"] for e in r["items"]), ["in", "overnight", "zero-length"])
 
+    def test_same_day_start_end_still_returns_the_day(self):
+        """UI uses exclusive end; a same-day pair must not collapse to an empty window."""
+        day = datetime.combine(date.today(), datetime.min.time()).replace(hour=10)
+        a = self._loaded([_ev(day, subject="today")])
+        r = webapp.cal_events(a, day.date().isoformat(), day.date().isoformat())
+        self.assertEqual([e["subject"] for e in r["items"]], ["today"])
+
     def test_outside_cached_window_goes_to_server(self):
         a = self._loaded([])
         far = date.today() + timedelta(days=200)
@@ -808,7 +815,7 @@ class CalendarPagingTest(unittest.TestCase):
             return el("AirSync", "Sync", el("AirSync", "Collections", el("AirSync", "Collection",
                       el("AirSync", "Commands", add)))), i < pages_total, 1
 
-        a.backend.client = mock.Mock(sync_round=sync_round)
+        a.backend.client = mock.Mock(sync_round=sync_round, foldersync=lambda: [{"id": "cal", "type": "8"}])
         from outlook_activesync_mcp.commands import calendar as cal_mod
         with mock.patch.object(cal_mod, "_calendar_id", return_value="cal"), \
              mock.patch.object(webapp, "_cal_save"), mock.patch.object(webapp, "_cal_more_soon") as more:
@@ -827,6 +834,32 @@ class CalendarPagingTest(unittest.TestCase):
             a, pages, more = self._run_full(20)
         self.assertTrue(a.cal["truncated"])
         more.assert_called_once()
+
+    def test_multiple_type8_calendars_are_merged(self):
+        """Stalwart exposes an empty stub calendar first — merge every type-8."""
+        a = make_acct("seller")
+        a.backend = mock.Mock(_pace=lambda: None)
+
+        def sync_round(cid, generation=None, window=None, options_children=None, get_changes=True, **kw):
+            if cid == "stub":
+                return el("AirSync", "Sync"), False, 1
+            add = el("AirSync", "Add", el("AirSync", "ServerId", text="real1"),
+                     el("AirSync", "ApplicationData", el("Calendar", "Subject", text="from-real"),
+                        el("Calendar", "StartTime", text="20260928T100000Z"),
+                        el("Calendar", "EndTime", text="20260928T110000Z")))
+            return el("AirSync", "Sync", el("AirSync", "Collections", el("AirSync", "Collection",
+                      el("AirSync", "Commands", add)))), False, 1
+
+        a.backend.client = mock.Mock(
+            sync_round=sync_round,
+            foldersync=lambda: [{"id": "stub", "type": "8"}, {"id": "real", "type": "8"}],
+        )
+        with mock.patch.object(webapp, "_cal_save"), mock.patch.object(webapp, "_cal_more_soon"):
+            webapp._cal_full_sync(a, a.backend, date(2026, 9, 1), date(2026, 10, 30))
+        self.assertEqual(a.cal["cal_ids"], ["stub", "real"])
+        self.assertEqual(a.cal["cal_id"], "real")
+        self.assertTrue(any(e.get("subject") == "from-real" for e in a.cal["items"]))
+        self.assertTrue(any(str(k).startswith("real/") for k in a.cal["masters"]))
 
 
 class MoveItemsStatusTest(unittest.TestCase):
