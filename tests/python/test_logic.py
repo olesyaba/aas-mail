@@ -985,6 +985,25 @@ class AccountConfigTest(unittest.TestCase):
         self.assertNotIn("password", json.loads(webapp.bridge.CONF_PATH.read_text()))
         self.assertFalse(webapp.account_needs_setup(webapp.ensure_config()))
 
+    def test_client_tmp_dirs_are_private(self):
+        for name in ("overflow", "attachments"):
+            d = webapp.bridge.private_dir(name)
+            self.assertTrue(d.startswith(str(webapp.bridge.DATA_DIR)), "never /tmp")
+            self.assertEqual(os.stat(d).st_mode & 0o777, 0o700)
+        self.assertEqual(os.stat(webapp.bridge.DATA_DIR).st_mode & 0o777, 0o700)
+
+    def test_plaintext_copy_dropped_when_keychain_already_has_it(self):
+        KEYCHAIN["main"] = "kc-pw"; KEYCHAIN["seller"] = "kc-pw2"
+        webapp._write_config({"url": "u", "username": "user", "password": "stale", "local_password": "x",
+                              "second": {"username": "s", "password": "stale2"}})
+        self.assertEqual(webapp.get_password("main", "stale"), "kc-pw", "the Keychain wins")
+        self.assertEqual(webapp.get_password("seller", "stale2"), "kc-pw2")
+        cfg = json.loads(webapp.bridge.CONF_PATH.read_text())
+        self.assertNotIn("password", cfg)
+        self.assertNotIn("local_password", cfg)
+        self.assertNotIn("password", cfg["second"])
+        self.assertEqual(cfg["username"], "user", "the rest of the config is kept")
+
     def test_save_rejects_incomplete_input_without_touching_config(self):
         self.assertEqual(webapp.save_account_config({"target": "x"})["error"], "bad_request")
         self.assertEqual(webapp.save_account_config({"target": "main", "url": "u"})["error"], "bad_request")
@@ -1542,12 +1561,12 @@ class BridgePathsTest(unittest.TestCase):
             bridge.EasBackend({"username": "u", "password": "p", "url": "https://x/", "device_id": "D"})
         return ctor.call_args.args[0]
 
-    def test_defaults_stay_in_tmp_on_mac(self):
+    def test_mac_defaults_are_private_not_tmp(self):
         env = {k: v for k, v in os.environ.items() if k not in ("EAS_ATTACHMENT_DIR", "EAS_OVERFLOW_DIR")}
         with mock.patch.dict(os.environ, env, clear=True):
             s = self._settings()
-        self.assertEqual(s.attachment_dir, "/tmp/attachments")
-        self.assertEqual(s.overflow_dir, "/tmp/outlook-activesync-overflow")
+        root = str(webapp.bridge.DATA_DIR / "tmp")
+        self.assertEqual((s.attachment_dir, s.overflow_dir), (root + "/attachments", root + "/overflow"))
 
     def test_env_overrides_for_android(self):
         with mock.patch.dict(os.environ, {"EAS_ATTACHMENT_DIR": "/data/a", "EAS_OVERFLOW_DIR": "/data/o"}):

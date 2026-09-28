@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -14,6 +15,29 @@ log = logging.getLogger("eas-bridge")
 
 CONF_PATH = Path(os.environ.get("EAS_BRIDGE_CONFIG", "~/.config/eas-bridge/config.json")).expanduser()
 DATA_DIR = Path(os.environ.get("EAS_BRIDGE_DATA_DIR", "~/.config/eas-bridge")).expanduser()
+# The client spills big answers (whole calendars, mail lists) and downloads into
+# these dirs. /tmp is world-readable on macOS, so they live under DATA_DIR (0700).
+LEGACY_TMP = ("/tmp/attachments", "/tmp/outlook-activesync-overflow")
+
+
+def private_dir(name: str) -> str:
+    p = DATA_DIR / "tmp" / name
+    p.mkdir(parents=True, exist_ok=True)
+    for d in (DATA_DIR, DATA_DIR / "tmp", p):
+        os.chmod(d, 0o700)
+    return str(p)
+
+
+def drop_legacy_tmp():
+    """Old builds left mail/calendar dumps in /tmp: remove ours (never another user's)."""
+    for d in LEGACY_TMP:
+        try:
+            if os.stat(d).st_uid == os.getuid():
+                shutil.rmtree(d, ignore_errors=True)
+        except OSError:
+            pass
+
+
 LIST_FIELDS = ["subject", "from", "received", "is_read", "has_attachments", "to", "cc", "size"]
 
 
@@ -33,9 +57,9 @@ class EasBackend:
             "EAS_URL": cfg["url"], "EAS_DEVICE_ID": cfg["device_id"],
             "EAS_STATE_FILE": str(DATA_DIR / cfg.get("state_name", "state.json")),
             "EAS_MAX_RESPONSE_TOKENS": "1000000",
-            # Android has no /tmp: the shell points these into the app's private storage.
-            "EAS_ATTACHMENT_DIR": os.environ.get("EAS_ATTACHMENT_DIR", "/tmp/attachments"),
-            "EAS_OVERFLOW_DIR": os.environ.get("EAS_OVERFLOW_DIR", "/tmp/outlook-activesync-overflow"),
+            # Android: the shell points these into the app's private storage.
+            "EAS_ATTACHMENT_DIR": os.environ.get("EAS_ATTACHMENT_DIR") or private_dir("attachments"),
+            "EAS_OVERFLOW_DIR": os.environ.get("EAS_OVERFLOW_DIR") or private_dir("overflow"),
         }
         self.client = EasClient(load_settings(env))
         self.lock = threading.RLock()

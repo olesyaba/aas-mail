@@ -253,7 +253,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         guard let u = a.request.url else { return decisionHandler(.cancel) }
         let local = u.host == "127.0.0.1" || u.host == "localhost"
         if u.scheme == "about" || u.scheme == "data" || local && a.targetFrame != nil { return decisionHandler(.allow) }
-        if u.scheme == "http" || u.scheme == "https" || u.scheme == "mailto" { NSWorkspace.shared.open(u) }
+        // Only a click opens the browser: a letter's <meta http-equiv="refresh"> (or any other
+        // navigation nobody asked for) is cancelled instead of popping a site open unprompted.
+        if a.navigationType == .linkActivated, ["http", "https", "mailto"].contains(u.scheme ?? "") { NSWorkspace.shared.open(u) }
         decisionHandler(.cancel)
     }
     func webView(_ w: WKWebView, decidePolicyFor r: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {

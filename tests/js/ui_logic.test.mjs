@@ -669,3 +669,11 @@ test('railAgenda: all-day first, timed by start, free gaps ≥1h, cancelled neit
   assert.deepEqual(out.filter(x => x.now).map(x => x.e.subject), ['now']);
   assert.deepEqual(plain(railAgenda(list, new Date(2026, 8, 27))), []);
 });
+
+test('stripRefresh drops meta refresh in any spelling, keeps other meta and text', () => {
+  const {stripRefresh} = load(['stripRefresh']);
+  assert.equal(stripRefresh('<META HTTP-EQUIV="Refresh" CONTENT="0;url=https://x">a'), 'a');
+  assert.equal(stripRefresh("<meta content='1;url=https://x' http-equiv=refresh>b"), 'b');
+  assert.equal(stripRefresh('<meta http-equiv = " refresh" content="0">c'), 'c');
+  assert.equal(stripRefresh('<meta charset="utf-8"><p>refresh me</p>'), '<meta charset="utf-8"><p>refresh me</p>');
+});

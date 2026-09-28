@@ -44,7 +44,7 @@ MAX_BODY = 40 * 1024 * 1024
 # Product identity (About page + UI chrome).
 APP_META = {
     "name": "AAS mail",
-    "version": "1.2.24",
+    "version": "1.2.25",
     "description": "Локальный клиент почты и календаря Alfa / Alfa-Seller поверх Exchange ActiveSync.",
     "contact_mm": "@olesya_ba",
     "thanks_intro": "Спасибо за тест-рейды и светлые идеи:",
@@ -235,6 +235,8 @@ def _strip_config_password(account_id: str):
         return
     if account_id == "main":
         changed = cfg.pop("password", None) is not None
+        # Left over from the retired IMAP bridge: a secret nothing reads any more.
+        changed = cfg.pop("local_password", None) is not None or changed
     else:
         s2 = cfg.get("second")
         changed = isinstance(s2, dict) and s2.pop("password", None) is not None
@@ -251,9 +253,14 @@ def get_password(account_id: str, cfg_password: str | None, service: str = "eas-
     """Keychain first; a plaintext password still in config.json (pre-Keychain
     accounts) is migrated in on first read and returned so the caller can use
     it right away without a second round-trip. Once the Keychain write is
-    confirmed, the plaintext copy is stripped from config.json."""
+    confirmed — or the Keychain already has one — the plaintext copy is
+    stripped from config.json."""
     pw = _keychain_get(account_id, service)
     if pw:
+        # Already in the Keychain (an earlier migration, or the settings form):
+        # a plaintext copy still in config.json is only a leak — drop it.
+        if cfg_password and service == "eas-bridge":
+            _strip_config_password(account_id)
         return pw
     if cfg_password:
         try:
@@ -3649,6 +3656,7 @@ def main():
     _patch_message_date()
     _patch_unreachable_fail_fast()  # last: wraps the other command patches
     _write_runtime_token()
+    bridge.drop_legacy_tmp()
     cfg = ensure_config()
     ACCTS.update(load_accounts(cfg))
     for acct in ACCTS.values():
