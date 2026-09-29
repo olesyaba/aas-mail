@@ -1222,6 +1222,24 @@ class ScheduleTest(unittest.TestCase):
         self.assertFalse(r["ok"])
         self.assertIn("no availability", r["message"])
 
+    def test_bad_days_and_case_fold_who(self):
+        self.assertEqual(webapp._schedule(make_acct(), {"who": ["a@x.ru"], "start": "2026-10-05", "days": "x"})["error"], "bad_request")
+        calls = []
+
+        def handle(client, action, who=None, **_):
+            calls.append(list(who))
+            return {"items": [{"address": w, "name": w, "freebusy": "0"} for w in who], "unresolved": []}
+
+        with mock.patch.object(people_cmd, "handle", handle):
+            r = webapp._schedule(make_acct(), {"who": ["A@x.ru", "a@x.ru", "B@x.ru"], "start": "2026-10-05"})
+        self.assertEqual(calls, [["A@x.ru", "B@x.ru"]])
+        self.assertEqual(r["count"], 2)
+
+    def test_sched_cache_prunes_expired(self):
+        webapp._SCHED_CACHE[("a", ("x@y",), "2026-10-05", 5)] = (time.time() - 999, {"ok": True})
+        webapp._sched_cache_prune()
+        self.assertFalse(webapp._SCHED_CACHE)
+
 
 if __name__ == "__main__":
     unittest.main()

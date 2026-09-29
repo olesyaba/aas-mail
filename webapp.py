@@ -827,6 +827,21 @@ def _free_slots(a: Acct, params: dict) -> dict:
 
 _SCHED_CACHE: dict[tuple, tuple[float, dict]] = {}
 _SCHED_BATCH = 20
+_SCHED_CACHE_TTL = 120
+_SCHED_CACHE_MAX = 64
+
+
+def _sched_cache_prune(now: float | None = None) -> None:
+    """Drop expired free/busy answers so the process does not keep them forever."""
+    now = time.time() if now is None else now
+    dead = [k for k, (t, _) in _SCHED_CACHE.items() if now - t >= _SCHED_CACHE_TTL]
+    for k in dead:
+        _SCHED_CACHE.pop(k, None)
+    if len(_SCHED_CACHE) <= _SCHED_CACHE_MAX:
+        return
+    # Still too many: drop the oldest first.
+    for k, _ in sorted(_SCHED_CACHE.items(), key=lambda kv: kv[1][0])[: len(_SCHED_CACHE) - _SCHED_CACHE_MAX]:
+        _SCHED_CACHE.pop(k, None)
 
 
 def _schedule(a: Acct, params: dict) -> dict:
@@ -837,15 +852,32 @@ def _schedule(a: Acct, params: dict) -> dict:
     constraint changes never hit Exchange again."""
     from datetime import datetime, timedelta
     fail = lambda err, msg: {"ok": False, "action": "schedule", "count": 0, "items": [], "error": err, "message": msg}
-    who = list(dict.fromkeys(str(x).strip() for x in (params.get("who") or []) if str(x).strip()))[:200]
-    days = max(1, min(int(params.get("days") or 5), 7))
+    # One address in any case: A@x and a@x must not become two people.
+    who, seen = [], set()
+    for x in params.get("who") or []:
+        s = str(x).strip()
+        if not s:
+            continue
+        k = s.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        who.append(s)
+        if len(who) >= 200:
+            break
+    try:
+        days = max(1, min(int(params.get("days") or 5), 7))
+    except (TypeError, ValueError):
+        return fail("bad_request", "days: нужно целое число от 1 до 7")
     try:
         d0 = datetime.strptime(str(params.get("start") or "")[:10], "%Y-%m-%d")
     except ValueError:
         return fail("bad_request", "start: нужна дата YYYY-MM-DD")
     key = (a.id, tuple(sorted(w.lower() for w in who)), d0.date().isoformat(), days)
+    now = time.time()
+    _sched_cache_prune(now)
     hit = _SCHED_CACHE.get(key)
-    if hit and time.time() - hit[0] < 120:
+    if hit and now - hit[0] < _SCHED_CACHE_TTL:
         return hit[1]
     fmt = "%Y-%m-%dT%H:%M"
     start, end = d0.strftime(fmt), (d0 + timedelta(days=days)).strftime(fmt)
@@ -878,6 +910,7 @@ def _schedule(a: Acct, params: dict) -> dict:
     res = {"ok": True, "action": "schedule", "count": len(out), "items": out, "unresolved": unresolved,
            "start": d0.date().isoformat(), "days": days}
     _SCHED_CACHE[key] = (time.time(), res)
+    _sched_cache_prune()
     return res
 
 
