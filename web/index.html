@@ -159,7 +159,10 @@ function recipBlock(label, list) {
 // Turn URLs in already-escaped text into links that open outside the app window.
 const linkify = h => h.replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
 /** First Teams/Zoom/Telemost/… URL from location or body (plain or HTML). */
-function joinURL(location, body) {
+/** The join link of a meeting. It can sit in three places: the separate «Ссылка на
+ *  встречу» field (`online`), «Место» and the description; they are read in that
+ *  order, and a video-meeting host wins over any other link wherever it is. */
+function joinURL(location, body, online = '') {
   const preferred = ['teams.microsoft', 'teams.live', 'zoom.us', 'ktalk', 'kontur',
     'meet.google', 'trueconf', 'jazz.sber', 'telemost.yandex', 'webex.com'];
   const strip = s => String(s || '')
@@ -167,7 +170,7 @@ function joinURL(location, body) {
     .replace(/&amp;/gi, '&')
     .replace(/<[^>]+>/g, ' ');
   const blobs = [];
-  for (const raw of [location, body]) {
+  for (const raw of [online, location, body]) {
     if (!raw) continue;
     blobs.push(String(raw), strip(raw));
   }
@@ -293,6 +296,13 @@ function dayHead(day, now = new Date()) {
 /* ---------- meeting scheduler: pure parts ---------- */
 /** Working-day half-hours of one day from a people/schedule string (48 codes a day
  *  from the first day's midnight: 0 free, 1 tentative, 2 busy, 3 away, 4 no data). */
+/** An address outside the account's own domain (its subdomains count as ours). A typed
+ *  name without «@» is not judged here: the directory resolves it. */
+function isExternal(addr, me) {
+  const dom = x => (String(x || '').split('@')[1] || '').trim().toLowerCase();
+  const a = dom(addr), m = dom(me);
+  return !!(a && m) && a !== m && !a.endsWith('.' + m);
+}
 /** A meeting's length in half-hours, rounded up (45 min takes 2 slots, never 1). */
 const halfHours = ms => Math.max(1, Math.ceil(ms / 18e5));
 const fbSlice = (fb, day, ws, we) => Array.from({length: (we - ws) * 2}, (_, i) => String(fb || '')[day * 48 + ws * 2 + i] || '4');
@@ -1679,7 +1689,7 @@ function showReaderEmpty() {
   nextMeeting(acct).then(ev => {
     const slot = $('#reader .aas-rempty__meet');
     if (!ev || !slot || acct !== ACCT) return;
-    const mins = Math.round((ev.s - new Date()) / 6e4), link = joinURL(ev.location, ev.body);
+    const mins = Math.round((ev.s - new Date()) / 6e4), link = joinURL(ev.location, ev.body, ev.online_meeting);
     const when = mins < 60 ? `через ${mins} мин` : `в ${pad(ev.s.getHours())}:${pad(ev.s.getMinutes())}`;
     slot.innerHTML = `<div class="aas-rempty__meet-txt"><small>Следующая встреча ${when}</small><b>${esc(evTitle(ev))}</b></div>
       ${link ? `<a class="aas-btn aas-btn--primary" href="${esc(link)}" target="_blank" rel="noopener noreferrer">Подключиться</a>` : ''}`;
@@ -1887,7 +1897,7 @@ document.addEventListener('click', e => {
 });
 function inviteCard(inv) {
   const cancelled = inv.method === 'cancel';
-  const link = joinURL(inv.location, '');
+  const link = joinURL(inv.location, '', inv.online);
   const org = inv.organizer?.name || inv.organizer?.address || '';
   return `<div class="aas-invite${cancelled ? ' aas-invite--cancel' : ''}">
     <div class="aas-invite__kind">${cancelled ? 'Встреча отменена' : 'Приглашение на встречу'}</div>
@@ -2753,7 +2763,7 @@ $('#today').onclick = () => {
 $('#caloff').onclick = () => { calOffOpen = !calOffOpen; drawCal(); };
 $('#calmode').onclick = e => { const m = e.target.dataset?.m; if (!m) return; calMode = m; savePrefs({cal_view: m}); $('#weekwrap')._scrolled = false; loadCal(); };
 let events = [];
-const normEv = acct => e => { const s = new Date(e.start_iso); let en = e.end ? localDate(e.end) : s; if (isNaN(en) || en < s) en = s; (e.categories || []).forEach(c => seenCat(c)); return {...e, s, e: en, _acct: acct, _join: joinURL(e.location, e.body), _cat: uniqCats(e.categories)[0] || ''}; };
+const normEv = acct => e => { const s = new Date(e.start_iso); let en = e.end ? localDate(e.end) : s; if (isNaN(en) || en < s) en = s; (e.categories || []).forEach(c => seenCat(c)); return {...e, s, e: en, _acct: acct, _join: joinURL(e.location, e.body, e.online_meeting), _cat: uniqCats(e.categories)[0] || ''}; };
 
 const loadCal = guard(async (quiet = false) => {
   if (view !== 'cal') return loadRail(quiet);  // the grid reloads on entering the tab anyway
@@ -3152,7 +3162,7 @@ function eventView(e) {
     const on = (code === 'accept' && my === 'accepted') || (code === 'tentative' && my === 'tentative') || (code === 'decline' && my === 'declined');
     return `<button class="aas-btn ${on ? 'on' : ''}" data-r="${code}" aria-pressed="${on}" ${on ? 'title="Ваш текущий ответ"' : ''}>${on ? icon('check', 14) : ''}${label}</button>`;
   };
-  const link = e._join ?? joinURL(e.location, e.body);
+  const link = e._join ?? joinURL(e.location, e.body, e.online_meeting);
   // Writing about the meeting: the same actions and icons as under a letter, kept quiet
   // (ghost) so they never compete with the answer (Принять / Отклонить) or «Подключиться».
   const others = att.filter(a => a.address && a.address.toLowerCase() !== me.toLowerCase());

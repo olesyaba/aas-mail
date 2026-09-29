@@ -763,3 +763,21 @@ test('scheduler: meeting length in half-hours rounds up, never down', () => {
   const {halfHours} = load(['halfHours']);
   assert.deepEqual([15, 30, 45, 60, 0].map(m => halfHours(m * 6e4)), [1, 1, 2, 2, 1]);
 });
+
+test('joinURL: dedicated link field, then location, then body; a meeting host wins anywhere', () => {
+  const {joinURL} = load(['joinURL']);
+  assert.equal(joinURL('Переговорная 5', 'https://wiki.test/a', 'https://alfaseller.ktalk.ru/vladena'), 'https://alfaseller.ktalk.ru/vladena');
+  assert.equal(joinURL('https://docs.test/x', '', 'https://zoom.us/j/1'), 'https://zoom.us/j/1');
+  assert.equal(joinURL('https://alfabank.ktalk.ru/a', '', 'https://intranet.test/room'), 'https://alfabank.ktalk.ru/a');
+  assert.equal(joinURL('', '', 'https://intranet.test/room'), 'https://intranet.test/room');
+  assert.equal(joinURL('Room', 'no links'), '');
+});
+
+test('external participants: outside the account domain (subdomains are ours)', () => {
+  const {isExternal} = load(['isExternal']);
+  assert.equal(isExternal('kamil@advantshop.net', 'OBabakaeva@alfabank.ru'), true);
+  assert.equal(isExternal('ASChekanov@AlfaBank.ru', 'OBabakaeva@alfabank.ru'), false);
+  assert.equal(isExternal('x@msk.alfabank.ru', 'me@alfabank.ru'), false);
+  assert.equal(isExternal('Иванов', 'me@alfabank.ru'), false);
+  assert.equal(isExternal('a@x.ru', ''), false);
+});

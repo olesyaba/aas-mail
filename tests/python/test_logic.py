@@ -691,6 +691,17 @@ class InvitationInMailTest(unittest.TestCase):
         self.assertEqual(inv["organizer"], {"name": "Грекова Владена Дмитриевна", "address": "VDGrekova@alfabank.ru"})
         self.assertEqual(r["attachments"], [], "the .ics is shown as the card, not as a file")
 
+    def test_invitation_carries_the_meeting_link_field(self):
+        for prop in ("CONFERENCE;VALUE=URI;FEATURE=VIDEO:", "URL:", "X-MICROSOFT-SKYPETEAMSMEETINGURL:"):
+            ics = _ICS.replace("LOCATION:https://alfabank.ktalk.ru/vladena",
+                               "LOCATION:Переговорная 5\r\n" + prop + "https://alfaseller.ktalk.ru/vladena")
+            self.a.backend.mime["14:3"] = _invite_mime(ics)
+            self.assertEqual(webapp.render_message(self.a, "14:3")["invite"]["online"],
+                             "https://alfaseller.ktalk.ru/vladena", prop)
+
+    def test_calendar_asks_for_the_meeting_link_field(self):
+        self.assertIn("online_meeting", webapp.CAL_FIELDS)
+
     def test_plain_mail_has_no_invite(self):
         m = EmailMessage(); m["Subject"] = "x"; m.set_content("y")
         self.a.backend.mime["14:2"] = bytes(m)

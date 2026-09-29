@@ -24,6 +24,8 @@ struct TrayEvent: Decodable, Identifiable {
     let organizer: TrayOrganizer?
     let meetingStatus: String?
     let responseType: String?
+    /// The separate «Ссылка на встречу» field (EAS OnlineMeetingConfLink / ExternalLink).
+    let onlineMeeting: String?
 
     /// Two independent accounts are merged into one list, and their servers
     /// encode item ids differently — prefix with the account so a collision
@@ -43,6 +45,7 @@ struct TrayEvent: Decodable, Identifiable {
         case organizer
         case meetingStatus = "meeting_status"
         case responseType = "response_type"
+        case onlineMeeting = "online_meeting"
     }
 
     /// Not part of the server JSON — set by TrayEventMerge after decoding
@@ -85,8 +88,8 @@ struct TrayEvent: Decodable, Identifiable {
         return (attendees?.count ?? 0) > 1
     }
 
-    /// Teams / Zoom / KTalk / Meet link from location or body HTML/text.
-    var joinURL: URL? { TrayJoinLink.url(location: location, body: body) }
+    /// Teams / Zoom / KTalk / Meet link from the link field, location or body HTML/text.
+    var joinURL: URL? { TrayJoinLink.url(location: location, body: body, online: onlineMeeting) }
 
     /// Brand tint for the source account (matches web tabs).
     var accountTintHex: String {
@@ -102,15 +105,13 @@ enum TrayJoinLink {
         "meet.google", "trueconf", "jazz.sber", "telemost.yandex", "webex.com",
     ]
 
-    static func url(location: String?, body: String?) -> URL? {
-        if let loc = location?.trimmingCharacters(in: .whitespacesAndNewlines),
-           let u = Self.httpURL(loc) {
-            return u
-        }
-        // Collect links from every variant (raw, unescaped, HTML-stripped) before
-        // choosing, like the web UI's joinURL(): a Teams link that only appears
-        // JSON-escaped must still beat an ordinary wiki link earlier in the body.
-        let urls = [location, body].compactMap { $0 }
+    /// Three places, read in order: the separate link field, «Место», the description.
+    /// Links from every variant (raw, unescaped, HTML-stripped) are collected before
+    /// choosing, like the web UI's joinURL(): a video-meeting host wins wherever it is,
+    /// otherwise the first link — a Teams link that only appears JSON-escaped must
+    /// still beat an ordinary wiki link earlier on.
+    static func url(location: String?, body: String?, online: String? = nil) -> URL? {
+        let urls = [online, location, body].compactMap { $0 }
             .flatMap { sources(from: $0) }
             .flatMap { urls(in: $0) }
         return urls.first(where: isMeetingHost) ?? urls.first

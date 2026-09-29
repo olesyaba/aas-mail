@@ -21,7 +21,7 @@ let local: DateFormatter = {
 /// Decodes like the server JSON does, so tests also cover the CodingKeys.
 func event(_ subject: String, start: Date, minutes: Int = 30, allDay: Bool = false, busy: String? = "busy",
            id: String? = nil, location: String? = nil, body: String? = nil, meeting: String? = nil,
-           response: String? = nil, organizer: String? = nil, attendees: Int = 0) -> TrayEvent {
+           response: String? = nil, organizer: String? = nil, attendees: Int = 0, online: String? = nil) -> TrayEvent {
     var obj: [String: Any] = [
         "item_id": id ?? subject, "subject": subject, "start_iso": iso.string(from: start),
         "end": local.string(from: start.addingTimeInterval(Double(minutes) * 60)), "is_all_day": allDay,
@@ -29,6 +29,7 @@ func event(_ subject: String, start: Date, minutes: Int = 30, allDay: Bool = fal
     if let busy { obj["busy_status"] = busy }
     if let location { obj["location"] = location }
     if let body { obj["body"] = body }
+    if let online { obj["online_meeting"] = online }
     if let meeting { obj["meeting_status"] = meeting }
     if let response { obj["response_type"] = response }
     if let organizer { obj["organizer"] = ["name": "Org", "address": organizer] }
@@ -75,6 +76,12 @@ suite("TrayJoinLink") {
     eq(event("m", start: now, body: "docs: https://docs.test/x).").joinURL?.absoluteString,
        "https://docs.test/x", "trailing punctuation stripped")
     check(event("m", start: now, location: "ftp://x", body: "none").joinURL == nil, "no http link")
+    eq(event("m", start: now, location: "Переговорная 5", body: "https://wiki.test/a",
+             online: "https://alfaseller.ktalk.ru/vladena").joinURL?.absoluteString,
+       "https://alfaseller.ktalk.ru/vladena", "dedicated meeting-link field")
+    eq(event("m", start: now, location: "https://wiki.test/room",
+             body: "<a href=\"https://teams.microsoft.com/l/x\">Join</a>").joinURL?.absoluteString,
+       "https://teams.microsoft.com/l/x", "meeting host beats a plain link in Место (like the web UI)")
 }
 
 suite("TrayEventMerge") {

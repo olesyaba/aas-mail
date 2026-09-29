@@ -1502,7 +1502,7 @@ def send_invites(a: Acct, p: dict, attendees: list[str]) -> list[str]:
 
 CAL_FIELDS = ["subject", "start", "end", "location", "is_all_day", "is_recurring", "organizer",
               "busy_status", "attendees", "response_type", "meeting_status", "body", "reminder",
-              "categories", "uid"]
+              "categories", "uid", "online_meeting"]  # online_meeting: the separate «Ссылка на встречу» field
 # Event body: keep plain text (safe to render), but a small cap dropped long
 # descriptions and the join link that vendors (Yandex, Teams) put near the end —
 # so read enough of it to keep both. (#13/#14)
@@ -2766,6 +2766,10 @@ def _find_invite(msg) -> tuple[dict | None, object | None, dict]:
             "method": method.lower(), "uid": props.get("UID", ("", ""))[1].strip(),
             "subject": _ics_unescape(props.get("SUMMARY", ("", ""))[1]),
             "location": _ics_unescape(props.get("LOCATION", ("", ""))[1]),
+            # The separate «Ссылка на встречу» field, as calendars write it into iCalendar.
+            "online": next((_ics_unescape(props[k][1]).strip() for k in
+                            ("CONFERENCE", "X-MICROSOFT-SKYPETEAMSMEETINGURL", "X-GOOGLE-CONFERENCE", "URL")
+                            if k in props and props[k][1].strip()), ""),
             "start": start, "end": end, "start_iso": start_iso, "all_day": all_day,
             "organizer": {"name": (cn.group(1).strip('"') if cn else ""),
                           "address": re.sub(r"^mailto:", "", org_val.strip(), flags=re.I)},
