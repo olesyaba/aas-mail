@@ -547,6 +547,16 @@ body.green #folders {
   cursor: grabbing;
 }
 
+/* Event editor with the scheduler: form left, «Лучшие варианты / По людям» right */
+#modal.aas-modal--wide { width: min(1180px, 100%); }
+.aas-evwrap { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 20px; }
+.aas-evwrap > * { min-width: 0; }
+.aas-sched { border-left: 1px solid var(--aas-line); padding-left: 20px; }
+@media (max-width: 900px) {
+  .aas-evwrap { grid-template-columns: 1fr; }
+  .aas-sched { border-left: 0; padding-left: 0; border-top: 1px solid var(--aas-line); padding-top: 14px; }
+}
+
 /* Dragged modal: no backdrop, page underneath stays scrollable/clickable. */
 #ov.floating {
   background: transparent;

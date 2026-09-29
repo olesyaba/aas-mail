@@ -495,7 +495,7 @@ function openModal(html) {
 }
 function closeModal() {
   $('#ov').classList.remove('on');
-  const m = $('#modal'); m.innerHTML = ''; m.classList.remove('aas-modal--actions-top', 'aas-dropping');
+  const m = $('#modal'); m.innerHTML = ''; m.classList.remove('aas-modal--actions-top', 'aas-dropping', 'aas-modal--wide');
   m.ondragover = m.ondragleave = m.ondrop = null;
   delete m.dataset.dirty; resetModalPos();
 }
@@ -1999,6 +1999,15 @@ function rememberPeople(people) {
   cur.sort((a, b) => (b.useCount - a.useCount) || (b.lastUsed - a.lastUsed));
   saveRecentPeople(cur);
 }
+/** Rooms typed into the editor are remembered for the quick-pick buttons and for
+ *  «Лучшие варианты» (which saved room is free). */
+function rememberRooms(text) {
+  const got = splitAddrs(text).map(s => ({name: s.replace(/\s*<[^>]*>\s*$/, '').replace(/^"|"$/g, '').trim(), address: addrOnly(s)}))
+    .filter(r => r.address.includes('@'));
+  if (!got.length) return;
+  const seen = new Set(got.map(r => r.address.toLowerCase()));
+  savePrefs({rooms: [...got, ...(prefs.rooms || []).filter(r => !seen.has(r.address.toLowerCase()))].slice(0, 30)});
+}
 function rememberAddrsFromFields(...fields) {
   const people = [];
   for (const s of fields) {
@@ -2119,6 +2128,7 @@ function bindPeopleInput(inp) {
     inp.focus();
     const pos = inp.value.length;
     inp.setSelectionRange(pos, pos);
+    inp.dispatchEvent(new Event('change', {bubbles: true}));  // the event editor's scheduler reloads on it
   };
 
   const run = async () => {
@@ -2911,9 +2921,9 @@ function eventForm(e, opts = {}) {
     }
   }
   const s = e ? e.s : now, en = e ? e.e : new Date(now.getTime() + 30 * 6e4);  // 30 min by default
-  const attStr = e ? (e.attendees || []).filter(a => a.address && a.address !== e.organizer?.address)
+  const attOf = type => e ? (e.attendees || []).filter(a => a.address && a.address !== e.organizer?.address && (a.type || 'required') === type)
     .map(a => formatPerson(a)).join(', ') : '';
-  openModal(`<h3>${editing ? 'Изменить событие' : 'Новое событие'}</h3>
+  openModal(`<h3>${editing ? 'Изменить событие' : 'Новое событие'}</h3><div class="aas-evwrap"><div class="aas-evform">
     <div class="f"><label>Тема</label><input type="text" id="esub" value="${esc(e?.subject || '')}"></div>
     <div class="frow"><div class="f"><label>Начало</label><input type="datetime-local" id="est" value="${isoLocal(s)}"></div>
       <div class="f"><label>Конец</label><input type="datetime-local" id="een" value="${isoLocal(en)}"></div></div>
@@ -2923,16 +2933,25 @@ function eventForm(e, opts = {}) {
       <div class="aas-locrow"><input type="text" id="eloc" value="${esc(e?.location || '')}" placeholder="Переговорная или https://…">
       ${(prefs.links || []).length ? `<select id="elink" title="Подставить сохранённую ссылку"><option value="">Мои ссылки…</option>${prefs.links.map((l, i) => `<option value="${i}">${esc(l.name)}</option>`).join('')}</select>` : ''}</div>
       ${(prefs.links || []).length ? '' : '<div class="hint">Свои ссылки на встречи (Telemost, KTalk…) можно сохранить в «Настройки → Почта».</div>'}</div>
-    <div class="f"><label>Участники</label><div class="aas-people"><input type="text" id="eatt" placeholder="фамилия или email" value="${esc(attStr)}"></div>
+    <div class="f"><label for="eatt">Обязательные участники</label><div class="aas-people"><input type="text" id="eatt" placeholder="фамилия или email" value="${esc(attOf('required'))}"></div></div>
+    <div class="f"><label for="eopt">Опциональные</label><div class="aas-people"><input type="text" id="eopt" placeholder="могут не приходить" value="${esc(attOf('optional'))}"></div></div>
+    <div class="f"><label for="eroom">Переговорка</label><div class="aas-people"><input type="text" id="eroom" placeholder="найдите по названию, например «Байкал»" value="${esc(attOf('resource'))}"></div>
+      ${(prefs.rooms || []).length ? `<div class="aas-slots">${prefs.rooms.map((r, i) => `<button type="button" class="aas-btn aas-btn--sm" data-room="${i}">${esc(r.name || r.address)}</button>`).join('')}</div>` : ''}
       <div class="hint">Подсказки из недавних и каталога — Enter/Tab подставляют.</div></div>
-    <div class="f" id="avw"><button class="aas-btn" id="eavail" type="button">Проверить занятость</button><div class="hint">Проверка запускается автоматически при изменении участников или времени (как в OWA Widget).</div><div id="avres" class="hint"></div></div>
     <div class="f"><label>Описание</label>
       <textarea id="ebody" rows="4">${esc(e?.body || '')}</textarea></div>
     ${editing || !(accounts.find(a => a.id === ACCT) || {}).green ? '' : `<div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="emime" checked> Разослать участникам приглашения письмом</label>
       <div class="hint">Сервер ${esc((accounts.find(a => a.id === ACCT) || {}).name || 'Seller')} сам приглашения не отправляет — без этой галочки участники не узнают о встрече. В Alfa-Bank приглашения рассылает Exchange, поэтому там этой опции нет.</div></div>`}
     <div class="f" id="repw" ${editing ? 'style="display:none"' : ''}><label>Повторять</label><select id="erep"><option value="">Не повторять</option><option value="daily">Каждый день</option><option value="weekly">Каждую неделю</option><option value="monthly">Каждый месяц</option></select></div>
-    <div class="acts2"><button class="aas-btn" id="ecancel">Отмена</button><button class="aas-btn aas-btn--primary" id="esave">${editing ? 'Сохранить' : 'Создать'}</button></div>`);
-  bindPeopleInput($('#eatt'));
+    <div class="acts2"><button class="aas-btn" id="ecancel">Отмена</button><button class="aas-btn aas-btn--primary" id="esave">${editing ? 'Сохранить' : 'Создать'}</button></div>
+    </div><div class="aas-sched" id="sched"></div></div>`);
+  $('#modal').classList.add('aas-modal--wide');
+  ['#eatt', '#eopt', '#eroom'].forEach(id => bindPeopleInput($(id)));
+  $('#modal').querySelectorAll('[data-room]').forEach(b => b.onclick = () => {
+    const r = prefs.rooms[+b.dataset.room], f = $('#eroom');
+    if (!splitAddrs(f.value).map(addrOnly).includes(r.address)) f.value = (f.value.trim() ? f.value.replace(/[,\s]*$/, ', ') : '') + formatPerson(r) + ', ';
+    f.dispatchEvent(new Event('change', {bubbles: true}));
+  });
   const sel = $('#elink');
   // A saved link goes where people look for it: «Место» (the Join button reads it
   // in the calendar, tray and attendees' Outlook) and, bare, into the description.
@@ -2942,71 +2961,11 @@ function eventForm(e, opts = {}) {
     const b = $('#ebody');
     if (!b.value.includes(l.url)) b.value = (b.value.trim() ? b.value.replace(/\s*$/, '\n\n') : '') + l.url;
   };
-  const av = $('#eavail');
-  let avTok = 0;
-  const runAvailability = guard(async () => {
-    if (!$('#avres')) return;
-    const box = $('#avres');
-    const allDay = !!$('#eall')?.checked;
-    let st = new Date($('#est').value), en = new Date($('#een').value);
-    // All-day: a point-time window is meaningless — check the working day itself,
-    // so the button keeps working after the «Весь день» toggle.
-    if (allDay && !isNaN(st)) {
-      const ws = prefs.work_start ?? 9, we = prefs.work_end ?? 18, d = isNaN(en) ? st : en;
-      st = new Date(st.getFullYear(), st.getMonth(), st.getDate(), ws, 0);
-      en = new Date(d.getFullYear(), d.getMonth(), d.getDate(), we, 0);
-      if (en <= st) en = new Date(st.getTime() + 60 * 6e4);
-    }
-    const att = splitAddrs($('#eatt').value).map(addrOnly).filter(Boolean);
-    if (isNaN(st) || isNaN(en)) { box.textContent = ''; return; }
-    // Don't fail silently on a backwards range — say why the check can't run.
-    if (en <= st) { box.innerHTML = `<div class="aas-avline">${avDot('warn')}Конец раньше начала — поправьте время, тогда проверю занятость.</div>`; return; }
-    if (!att.length) { box.textContent = ''; return; }
-    const tok = ++avTok; box.textContent = 'Проверяю…';
-    let j;
-    try { j = await api('people', {action: 'availability', who: att, start: isoLocal(st), end: isoLocal(en)}); }
-    catch (x) {   // e.g. Stalwart (Seller) has no free/busy lookup: check only our own calendar
-      if (tok !== avTok) return;
-      const l = await api('events', {action: 'list', start: isoDay(st), end: isoDay(new Date(en.getTime() + 864e5)), limit: 300});
-      if (tok !== avTok) return;
-      const hit = (l.items || []).filter(e => { const es = new Date(e.start_iso), ee = e.end ? localDate(e.end) : es; return es < en && ee > st && e.busy_status !== 'free'; });
-      box.innerHTML = `<div class="aas-avline">${icon('info', 14)} Этот сервер не отдаёт занятость участников, проверен только ваш календарь.</div>` +
-        (hit.length ? hit.map(e => `<div class="aas-avline">${avDot('bad')}Пересечение: ${esc(evTitle(e))} (${fmtRange(new Date(e.start_iso))})</div>`).join('') : `<div class="aas-avline">${avDot('ok')}У вас в это время свободно</div>`);
-      return;
-    }
-    if (tok !== avTok) return;
-    const L = {'0': ['свободен', 'ok'], '1': ['под вопросом', 'warn'], '2': ['занят', 'bad'], '3': ['вне офиса', 'bad'], '4': ['нет данных', '']};
-    const rows = (j.items || []).map(x => {
-      const fb = x.freebusy || ''; const w = ['2', '3', '1', '0'].find(c => fb.includes(c)) || '4'; const [t, c] = L[w];
-      return `<div class="aas-avline">${avDot(c)}${esc(x.name || x.address)}: ${t}</div>`; });
-    (j.unresolved || []).forEach(u => rows.push(`<div class="aas-avline">${avDot('')}${esc(u.query)}: не найден или неоднозначен, занятость неизвестна</div>`));
-    box.innerHTML = rows.join('') || 'Нет данных';
-    // Offer «free for everyone» slots whenever attendees resolved — not only on a
-    // conflict — so the suggestions actually show (a busy check alone left them hidden).
-    const anyBusy = (j.items || []).some(x => /[23]/.test(x.freebusy || ''));
-    if (!allDay && (j.items || []).length) {
-      try { const f = await api('people', {action: 'find_free_slots', who: att, duration_minutes: Math.max(15, Math.round((en - st) / 6e4)), start: isoLocal(st), count: 3});
-        if (tok !== avTok) return;
-        const slotLabel = x => fmtRange(new Date(x.start_iso), new Date(x.end_iso));
-        if ((f.items || []).length) box.innerHTML += `<div style="margin-top:6px">${anyBusy ? 'Свободно у всех' : 'Другие свободные слоты'} (рабочий день ${pad(f.work_start ?? prefs.work_start)}:00–${pad(f.work_end ?? prefs.work_end)}:00):</div>`
-          + '<div class="aas-slots">' + f.items.map(x => `<button class="aas-btn aas-btn--sm" type="button" data-s="${esc(x.start_iso)}" data-e="${esc(x.end_iso)}">${esc(slotLabel(x))}</button>`).join('') + '</div>';
-        box.querySelectorAll('[data-s]').forEach(b => b.onclick = () => { $('#est').value = isoLocal(new Date(b.dataset.s)); $('#een').value = isoLocal(new Date(b.dataset.e)); runAvailability(); });
-      } catch (x) { /* slots are a nicety */ } }
+  // If the start is pushed past the end, carry the end along (keep a 30-min meeting).
+  $('#est')?.addEventListener('change', () => {
+    const st = new Date($('#est').value), en = new Date($('#een').value);
+    if (!isNaN(st) && (isNaN(en) || en <= st)) $('#een').value = isoLocal(new Date(st.getTime() + 30 * 6e4));
   });
-  if (av) {
-    av.onclick = runAvailability;
-    // OWA-like: auto-check after attendee/time edits (debounced).
-    let avT;
-    const arm = () => { clearTimeout(avT); avT = setTimeout(() => runAvailability(), 450); };
-    ['eatt', 'est', 'een', 'eall'].forEach(id => { const el = $('#' + id); if (el) el.addEventListener('change', arm); });
-    // If the start is pushed past the end, carry the end along (keep a 30-min meeting)
-    // so the range never goes backwards and the availability check keeps working.
-    $('#est')?.addEventListener('change', () => {
-      const st = new Date($('#est').value), en = new Date($('#een').value);
-      if (!isNaN(st) && (isNaN(en) || en <= st)) $('#een').value = isoLocal(new Date(st.getTime() + 30 * 6e4));
-    });
-    $('#eatt')?.addEventListener('input', arm);
-  }
   $('#ecancel').onclick = closeModal;
   $('#esave').onclick = guard(async () => {
     const all = $('#eall').checked; let mimeFailed = false;
@@ -3015,18 +2974,23 @@ function eventForm(e, opts = {}) {
     const p = {subject: $('#esub').value, location: $('#eloc').value, body: $('#ebody').value, all_day: all,
       start: all ? isoDay(st) + 'T00:00' : isoLocal(st), end: all ? isoDay(new Date(Math.max(en2, st).getTime() + (en2 <= st ? 864e5 : 0))) + 'T00:00' : isoLocal(en2)};
     if (all && p.end <= p.start) p.end = isoDay(new Date(st.getTime() + 864e5)) + 'T00:00';
+    const addrs = id => splitAddrs($(id).value).map(addrOnly).filter(Boolean);
+    const req = addrs('#eatt'), opt = addrs('#eopt'), rooms = addrs('#eroom');
+    const att = [...new Set([...req, ...opt, ...rooms])];
+    const roles = Object.fromEntries([...opt.map(x => [x, 'optional']), ...rooms.map(x => [x, 'resource'])]);
+    if (Object.keys(roles).length) p.attendee_types = roles;
+    if (rooms.length && !p.location.trim()) p.location = splitAddrs($('#eroom').value).map(x => x.replace(/\s*<[^>]*>\s*$/, '').replace(/^"|"$/g, '').trim()).join(', ');
+    const remember = () => { rememberAddrsFromFields($('#eatt').value, $('#eopt').value, $('#eroom').value); rememberRooms($('#eroom').value); };
     if (editing) {
-      const att = splitAddrs($('#eatt').value).map(addrOnly).filter(Boolean);
-      if (att.length) p.attendees = att;
-      else p.attendees = [];  // explicit empty — clear/keep server meeting roster via update patch
+      p.attendees = att;  // an empty list clears the roster (update patch)
       await api('events', {action: 'update', item_id: e.item_id, ...p}, e._acct || ACCT);
-      rememberAddrsFromFields($('#eatt').value);
+      remember();
     } else {
-      const att = splitAddrs($('#eatt').value).map(addrOnly).filter(Boolean); if (att.length) p.attendees = att;
+      if (att.length) p.attendees = att;
       if ($('#erep').value) { p.repeat = $('#erep').value; p.repeat_count = 10; }
       if (att.length && $('#emime')?.checked) p.mime_invite = true;
       const r = await api('events', {action: 'create', ...p});
-      rememberAddrsFromFields($('#eatt').value);
+      remember();
       if (r.mime_invite_pending) { mimeFailed = true; toast('Событие создано. Приглашения отправляются письмом — сообщу, когда уйдут.'); watchNotices(); }
     }
     closeModal(); if (!mimeFailed) toast(editing ? 'Сохранено' : 'Событие создано'); loadCal();
