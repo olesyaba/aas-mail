@@ -695,3 +695,41 @@ test('stripRefresh drops meta refresh in any spelling, keeps other meta and text
   assert.equal(stripRefresh('<meta http-equiv = " refresh" content="0">c'), 'c');
   assert.equal(stripRefresh('<meta charset="utf-8"><p>refresh me</p>'), '<meta charset="utf-8"><p>refresh me</p>');
 });
+
+test('scheduler: fbSlice, ranking, constraints, no data, past, too long', () => {
+  const {fbSlice, rankSlots, explainSlot} = load(['fbSlice', 'rankSlots', 'explainSlot']);
+  const day = w => '0'.repeat(18) + w;   // 09:00 is code 18; working day 9..12 = 6 half-hours
+  assert.deepEqual(plain(fbSlice('0'.repeat(48) + day('21'), 1, 9, 10)), ['2', '1']);
+  assert.deepEqual(plain(fbSlice('', 0, 9, 10)), ['4', '4']);
+  const A = {address: 'a@x', role: 'req', fb: day('220000')};
+  const B = {address: 'b@x', role: 'req', fb: day('000010')};
+  const O = {address: 'o@x', role: 'opt', fb: day('002200')};
+  const base = {days: 1, dur: 2, ws: 9, we: 12, k: 6};
+  const r = plain(rankSlots({...base, people: [A, B, O]}));
+  assert.deepEqual(r.map(o => o.s), [2, 4, 0]);            // scores 2, 3, 10; 3 and 1 overlap picks
+  assert.deepEqual(r[0].optBusy, ['o@x']);
+  assert.deepEqual(r[1].reqTent, ['b@x']);
+  assert.deepEqual(r[2].reqBusy, ['a@x']);
+  const c = plain(rankSlots({...base, people: [A, B, O], cons: {not_before_10: true}}));
+  assert.deepEqual(c.find(o => o.s === 0).pen, ['раньше 10:00']);
+  const N = {address: 'n@x', role: 'req', fb: ''};
+  const nd = plain(rankSlots({...base, people: [A, B, O, N]}));
+  assert.deepEqual(nd.map(o => o.s), [2, 4, 0]);            // no data is not busy
+  assert.deepEqual(nd[0].noData, ['n@x']);
+  const R = {address: 'r@x', role: 'room', fb: day('002222')};
+  const rm = plain(rankSlots({...base, people: [A, B, O, R]}));
+  assert.ok(rm.find(o => o.s === 2).pen.includes('переговорка занята'));
+  const past = plain(rankSlots({...base, people: [A, B, O], past: (d, s) => s < 3}));
+  assert.deepEqual(past.map(o => o.s), [4]);
+  assert.deepEqual(plain(rankSlots({...base, dur: 7, people: [A]})), []);
+  assert.equal(explainSlot({reqBusy: ['a', 'b', 'c', 'd'], reqTent: [], optBusy: ['o'], oof: [], noData: [], pen: ['раньше 10:00']}, x => x.toUpperCase()),
+    'Заняты обязательные: A, B, C и ещё 1; опциональные заняты: O; раньше 10:00');
+});
+
+test('agenda: numbered text block, empty rows skipped', () => {
+  const {agendaText, AGENDA_TPL} = load(['agendaText', 'AGENDA_TPL']);
+  assert.equal(agendaText([{t: 'Что получилось', m: 15, who: 'Соколова М.'}, {t: ' ', m: 5}, {t: 'Итоги', m: 0}]),
+    'Повестка:\n1. Что получилось — 15 мин (Соколова М.)\n2. Итоги');
+  assert.equal(agendaText([]), '');
+  assert.equal(AGENDA_TPL.retro.length, 4);
+});

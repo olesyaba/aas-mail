@@ -290,6 +290,72 @@ function dayHead(day, now = new Date()) {
   if (days === 1) return 'Вчера';
   return `${RU_WD_SHORT[d.getDay()]}, ${d.getDate()} ${RU_MON[d.getMonth()]}${d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : ''}`;
 }
+/* ---------- meeting scheduler: pure parts ---------- */
+/** Working-day half-hours of one day from a people/schedule string (48 codes a day
+ *  from the first day's midnight: 0 free, 1 tentative, 2 busy, 3 away, 4 no data). */
+const fbSlice = (fb, day, ws, we) => Array.from({length: (we - ws) * 2}, (_, i) => String(fb || '')[day * 48 + ws * 2 + i] || '4');
+/** Meeting starts for «Лучшие варианты». people: [{address, role: 'req'|'opt'|'room'|'cand', fb}];
+ *  `cand` = a saved room that is not invited: it only says which room is free. `s`/`dur` are
+ *  half-hours from ws:00, `day` counts from Monday. Score: busy required 10, tentative
+ *  required 3, busy optional 2, each broken constraint 6. Up to k starts, not overlapping
+ *  within a day. */
+function rankSlots({people, days = 5, dur = 2, ws = 9, we = 18, cons = {}, k = 6, past = () => false}) {
+  const n = (we - ws) * 2, out = [];
+  const invited = people.filter(p => p.role === 'room'), cand = people.filter(p => p.role === 'cand');
+  for (let day = 0; day < days; day++) {
+    const codes = people.map(p => fbSlice(p.fb, day, ws, we));
+    for (let s = 0; s + dur <= n; s++) {
+      if (past(day, s)) continue;
+      const o = {day, s, reqBusy: [], reqTent: [], optBusy: [], oof: [], noData: [], rooms: [], pen: []};
+      people.forEach((p, i) => {
+        const w = codes[i].slice(s, s + dur);
+        const c = ['3', '2', '1', '4'].find(x => w.includes(x)) || '0';
+        if (p.role === 'room' || p.role === 'cand') { if (c === '0') o.rooms.push(p.address); return; }
+        if (c === '2' || c === '3') (p.role === 'req' ? o.reqBusy : o.optBusy).push(p.address);
+        if (c === '3') o.oof.push(p.address);
+        if (c === '1' && p.role === 'req') o.reqTent.push(p.address);
+        if (c === '4' && p.role === 'req') o.noData.push(p.address);
+      });
+      const h = ws + s / 2, end = h + dur / 2;
+      if (cons.not_before_10 && h < 10) o.pen.push('раньше 10:00');
+      if (cons.lunch && h < 14 && end > 13) o.pen.push('задевает обед');
+      if (cons.fri_late && day === 4 && end > 16) o.pen.push('пятница после 16:00');
+      const need = invited.length ? invited : cons.room ? cand : [];
+      if (need.length && !need.some(r => o.rooms.includes(r.address))) o.pen.push(invited.length ? 'переговорка занята' : 'нет свободной переговорки');
+      o.score = o.reqBusy.length * 10 + o.reqTent.length * 3 + o.optBusy.length * 2 + o.pen.length * 6;
+      out.push(o);
+    }
+  }
+  out.sort((a, b) => a.score - b.score || a.day - b.day || a.s - b.s);
+  const picked = [];
+  for (const o of out) {
+    if (picked.every(p => p.day !== o.day || Math.abs(p.s - o.s) >= dur)) picked.push(o);
+    if (picked.length === k) break;
+  }
+  return picked;
+}
+/** «Заняты обязательные: …; под вопросом: …; …» for one ranked start. */
+function explainSlot(o, nameOf = a => a) {
+  const list = (arr, max = 3) => { const n = arr.map(nameOf); return n.length > max ? `${n.slice(0, max).join(', ')} и ещё ${n.length - max}` : n.join(', '); };
+  const parts = [o.reqBusy.length ? `Заняты обязательные: ${list(o.reqBusy)}` : 'Все обязательные свободны'];
+  if (o.reqTent.length) parts.push(`под вопросом: ${list(o.reqTent, 2)}`);
+  if (o.optBusy.length) parts.push(`опциональные заняты: ${list(o.optBusy, 2)}`);
+  if (o.oof.length) parts.push(`вне офиса: ${list(o.oof, 2)}`);
+  if (o.noData.length) parts.push(`нет данных: ${list(o.noData, 2)}`);
+  if (o.pen.length) parts.push(o.pen.join(', '));
+  return parts.join('; ');
+}
+const AGENDA_TPL = {
+  retro: [['Что получилось', 15], ['Что не получилось', 15], ['Что меняем к следующему релизу', 20], ['Ответственные и сроки', 10]],
+  demo: [['Показ', 20], ['Вопросы', 10], ['Решение о запуске', 10]],
+  daily: [['Вчера, сегодня, блокеры', 10], ['Разбор блокеров', 5]],
+};
+/** Agenda rows → the text block that opens the invitation's description. */
+function agendaText(items) {
+  const rows = (items || []).filter(a => String(a.t || '').trim())
+    .map((a, i) => `${i + 1}. ${String(a.t).trim()}${+a.m ? ` — ${+a.m} мин` : ''}${a.who ? ` (${a.who})` : ''}`);
+  return rows.length ? 'Повестка:\n' + rows.join('\n') : '';
+}
 /** Stroke icons (one set, 1.8 px) instead of emoji and text glyphs. */
 const ICONS = {
   clip: '<path d="m21.4 11.6-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/>',
