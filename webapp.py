@@ -852,19 +852,28 @@ def _schedule(a: Acct, params: dict) -> dict:
     items, unresolved = [], []
     if who:
         backend = a.get()
-        with backend.lock:
-            from outlook_activesync_mcp.commands import people
-            for i in range(0, len(who), _SCHED_BATCH):
-                try:
-                    backend._pace()
-                    r = people.handle(backend.client, "availability", who=who[i:i + _SCHED_BATCH], start=start, end=end)
-                except Exception as e:  # noqa: BLE001
-                    log.warning("[%s] people/schedule failed: %s", a.id, e)
-                    return fail(getattr(e, "code", None) or type(e).__name__, str(e))
-                items += r.get("items") or []
-                unresolved += r.get("unresolved") or []
+        from outlook_activesync_mcp.commands import people
+        for i in range(0, len(who), _SCHED_BATCH):
+            batch = who[i:i + _SCHED_BATCH]
+            # One batch at a time under the mailbox lock, and never wait long for it:
+            # a full calendar resync must not freeze the editor (or mail) behind us.
+            if not backend.lock.acquire(timeout=LOCK_WAIT_S):
+                return fail("unreachable", f"Сервер {a.name} сейчас занят — попробуйте ещё раз через минуту.")
+            try:
+                backend._pace()
+                r = people.handle(backend.client, "availability", who=batch, start=start, end=end)
+            except Exception as e:  # noqa: BLE001
+                log.warning("[%s] people/schedule failed: %s", a.id, e)
+                return fail(getattr(e, "code", None) or type(e).__name__, str(e))
+            finally:
+                backend.lock.release()
+            # Answers come in request order with the unresolved left out: tag each one with
+            # what was typed, so «Иванов» (no address yet) still finds his free/busy row.
+            missed = {str(u.get("query")) for u in r.get("unresolved") or []}
+            items += [{**x, "query": q} for q, x in zip([q for q in batch if q not in missed], r.get("items") or [])]
+            unresolved += r.get("unresolved") or []
     n = days * 48
-    out = [{"address": x.get("address"), "name": x.get("name"),
+    out = [{"query": x.get("query"), "address": x.get("address"), "name": x.get("name"),
             "freebusy": (str(x.get("freebusy") or "") + "4" * n)[:n]} for x in items]
     res = {"ok": True, "action": "schedule", "count": len(out), "items": out, "unresolved": unresolved,
            "start": d0.date().isoformat(), "days": days}
@@ -3295,8 +3304,23 @@ def _patch_attendee_types():
                                 text=_ATT_TYPE_CODE.get(roles.get(str(email).lower(), ""), "1"))))
         return el("Calendar", "Attendees", *people)
 
+    orig_resolve = calendar._resolve_attendees
+
+    def resolve(client, attendees):
+        # A typed name («Петров») becomes an address here: carry its role over.
+        out = orig_resolve(client, attendees)
+        roles = getattr(_ATT, "types", None)
+        if roles:
+            asked = attendees if isinstance(attendees, list) else [attendees]
+            for q, got in zip(asked, out):
+                role = roles.get(str(q).lower())
+                if role:
+                    roles.setdefault(str(got).lower(), role)
+        return out
+
     block._eas_types_patched = True  # type: ignore[attr-defined]
     calendar._attendees_block = block
+    calendar._resolve_attendees = resolve
 
 
 def _patch_event_update_attendees():

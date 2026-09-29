@@ -742,3 +742,8 @@ test('scheduler: one person away outranks nobody, however many are tentative', (
   const r = plain(rankSlots({people: [...tent, away], days: 1, dur: 2, ws: 9, we: 11, k: 2}));
   assert.deepEqual(r.map(o => o.s), [0, 2]);   // 5 tentative at 09:00 beats one away at 10:00
 });
+
+test('scheduler: meeting length in half-hours rounds up, never down', () => {
+  const {halfHours} = load(['halfHours']);
+  assert.deepEqual([15, 30, 45, 60, 0].map(m => halfHours(m * 6e4)), [1, 1, 2, 2, 1]);
+});

@@ -293,6 +293,8 @@ function dayHead(day, now = new Date()) {
 /* ---------- meeting scheduler: pure parts ---------- */
 /** Working-day half-hours of one day from a people/schedule string (48 codes a day
  *  from the first day's midnight: 0 free, 1 tentative, 2 busy, 3 away, 4 no data). */
+/** A meeting's length in half-hours, rounded up (45 min takes 2 slots, never 1). */
+const halfHours = ms => Math.max(1, Math.ceil(ms / 18e5));
 const fbSlice = (fb, day, ws, we) => Array.from({length: (we - ws) * 2}, (_, i) => String(fb || '')[day * 48 + ws * 2 + i] || '4');
 /** Meeting starts for «Лучшие варианты». people: [{address, role: 'req'|'opt'|'room'|'cand', fb}];
  *  `cand` = a saved room that is not invited: it only says which room is free. `s`/`dur` are
@@ -367,20 +369,27 @@ function mountScheduler(box) {
   const monday = d => { const x = startOfDay(d), wd = (x.getDay() + 6) % 7; x.setDate(x.getDate() + (wd > 4 ? 7 - wd : -wd)); return x; };
   const slotDate = (day, s) => new Date(S.wk.getFullYear(), S.wk.getMonth(), S.wk.getDate() + day, ws(), s * 30);
   const hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  // The organizer is a required participant too (their own calendar counts), shown as «Вы».
+  // Saved rooms are asked about only while «Нужна свободная переговорка» is on.
   const roleList = () => {
     const pick = (id, role) => splitAddrs($(id)?.value).map(addrOnly).filter(Boolean).map(address => ({address, role}));
-    const seen = new Set();
-    return [...pick('#eatt', 'req'), ...pick('#eopt', 'opt'), ...pick('#eroom', 'room'),
-      ...(prefs.rooms || []).map(r => ({address: r.address, role: 'cand'}))]
+    const me = accounts.find(a => a.id === ACCT)?.email, seen = new Set();
+    return [...(me ? [{address: me, role: 'req', me: true}] : []), ...pick('#eatt', 'req'), ...pick('#eopt', 'opt'), ...pick('#eroom', 'room'),
+      ...(cons().room ? (prefs.rooms || []).map(r => ({address: r.address, role: 'cand'})) : [])]
       .filter(p => { const k = p.address.toLowerCase(); return !seen.has(k) && seen.add(k); });
   };
+  const invited = ppl => ppl.some(p => p.role !== 'cand' && !p.me);
   const people = () => {
-    const by = new Map((S.data?.items || []).map(i => [String(i.address || '').toLowerCase(), i]));
-    return roleList().map(p => { const i = by.get(p.address.toLowerCase()); return {...p, name: i?.name || p.address, fb: i?.freebusy || ''}; });
+    const by = new Map();
+    (S.data?.items || []).forEach(i => [i.address, i.query].forEach(k => k && by.set(String(k).toLowerCase(), i)));
+    return roleList().map(p => { const i = by.get(p.address.toLowerCase()); return {...p, name: p.me ? 'Вы' : i?.name || p.address, fb: i?.freebusy || ''}; });
   };
+  // `ms` is the real length (kept when the meeting moves); `dur` rounds it up to half-hours.
   const cur = () => {
     const st = new Date($('#est').value), en = new Date($('#een').value);
-    return isNaN(st) ? null : {st, dur: Math.max(1, Math.round(((isNaN(en) ? st : en) - st) / 18e5))};
+    if (isNaN(st)) return null;
+    const ms = !isNaN(en) && en > st ? en - st : 18e5;
+    return {st, ms, dur: halfHours(ms)};
   };
   const slotOf = d => {
     const day = Math.round((startOfDay(d) - S.wk) / 864e5), s = (d.getHours() - ws()) * 2 + Math.floor(d.getMinutes() / 30);
@@ -388,7 +397,7 @@ function mountScheduler(box) {
   };
   const setSlot = (day, s) => {
     const c = cur(), st = slotDate(day, s);
-    $('#est').value = isoLocal(st); $('#een').value = isoLocal(new Date(+st + (c ? c.dur : 2) * 18e5));
+    $('#est').value = isoLocal(st); $('#een').value = isoLocal(new Date(+st + (c ? c.ms : 18e5)));
     $('#modal').dataset.dirty = '1'; S.gday = day; paint();
   };
   const empty = t => `<div class="aas-sched__empty">${esc(t)}</div>`;
@@ -398,7 +407,7 @@ function mountScheduler(box) {
     const c = cur(); if (!S.wk) S.wk = monday(c ? c.st : new Date());
     const p0 = c && slotOf(c.st); if (p0) S.gday = p0.day;
     const ppl = roleList();
-    if (!ppl.some(p => p.role !== 'cand')) { S.data = null; S.err = ''; S.key = ''; return paint(); }
+    if (!invited(ppl)) { S.data = null; S.err = ''; S.key = ''; return paint(); }
     const key = ppl.map(p => p.address.toLowerCase()).join(',') + '|' + isoDay(S.wk);
     if (key === S.key && (S.data || S.err)) return paint();
     S.key = key; S.data = null; S.err = ''; const tok = ++S.tok; paint();
@@ -429,14 +438,16 @@ function mountScheduler(box) {
     const c = cons(), ppl = people(), cu = cur(), now = new Date();
     const nameOf = a => ppl.find(p => p.address.toLowerCase() === a.toLowerCase())?.name || a;
     const req = ppl.filter(p => p.role === 'req').length;
-    const list = cu ? rankSlots({people: ppl, days: 5, dur: cu.dur, ws: ws(), we: we(), cons: c, k: 6, past: (d, s) => slotDate(d, s) < now}) : [];
+    if (!cu) return empty('Укажите «Начало» — подберу время на эту неделю.');
+    if (cu.dur > (we() - ws()) * 2) return empty(`Встреча длиннее рабочего дня (${ws()}:00–${we()}:00) — сократите её или поменяйте рабочие часы в Настройках.`);
+    const list = rankSlots({people: ppl, days: 5, dur: cu.dur, ws: ws(), we: we(), cons: c, k: 6, past: (d, s) => slotDate(d, s) < now});
     const at = cu && slotOf(cu.st);
     const ck = (k, t) => `<label class="chk"><input type="checkbox" data-con="${k}" ${c[k] ? 'checked' : ''}> ${t}</label>`;
     const unres = (S.data.unresolved || []).map(u => u.query).filter(Boolean);
-    return `<div class="aas-sched__cons">${ck('not_before_10', 'Не раньше 10:00')}${ck('lunch', 'Не трогать обед 13–14')}${ck('fri_late', 'Не в пятницу после 16:00')}${ppl.some(p => p.role === 'room' || p.role === 'cand') ? ck('room', 'Нужна свободная переговорка') : ''}</div>
+    return `<div class="aas-sched__cons">${ck('not_before_10', 'Не раньше 10:00')}${ck('lunch', 'Не трогать обед 13–14')}${ck('fri_late', 'Не в пятницу после 16:00')}${ppl.some(p => p.role === 'room') || (prefs.rooms || []).length ? ck('room', 'Нужна свободная переговорка') : ''}</div>
       ${unres.length ? `<div class="aas-avline hint">${avDot('')}Не нашла в каталоге: ${esc(unres.join(', '))}. Их занятость не учтена.</div>` : ''}
       ${list.length ? list.map((o, i) => {
-        const st = slotDate(o.day, o.s), en = new Date(+st + cu.dur * 18e5), room = o.rooms[0];
+        const st = slotDate(o.day, o.s), en = new Date(+st + cu.ms), room = o.rooms[0];
         const on = at && at.day === o.day && at.s === o.s;
         return `<button type="button" class="aas-bo${on ? ' on' : ''}" data-pick="${o.day},${o.s}" data-room="${esc(room || '')}">
           <span class="aas-bo__rk">${i + 1}</span>
@@ -465,10 +476,10 @@ function mountScheduler(box) {
       });
     });
     const days = Array.from({length: 5}, (_, i) => { const x = slotDate(i, 0); return `<button type="button" data-gday="${i}" class="${i === d ? 'on' : ''}" aria-pressed="${i === d}">${RU_WD_SHORT[x.getDay()]} ${x.getDate()}</button>`; }).join('');
-    const en = cu && new Date(+cu.st + cu.dur * 18e5);
+    const en = cu && new Date(+cu.st + cu.ms), w = cu ? Math.min(cu.dur, n - (at ? at.s : 0)) : 0;
     const frame = at && at.day === d ? `<div class="aas-pg__sel" tabindex="0" role="slider" aria-label="Время встречи, стрелки двигают на 30 минут"
-      aria-valuenow="${at.s}" aria-valuemin="0" aria-valuemax="${n - cu.dur}" aria-valuetext="${hm(cu.st)}–${hm(en)}"
-      style="left:${at.s / n * 100}%;width:${cu.dur / n * 100}%"></div>` : '';
+      aria-valuenow="${at.s}" aria-valuemin="0" aria-valuemax="${Math.max(0, n - cu.dur)}" aria-valuetext="${hm(cu.st)}–${hm(en)}"
+      style="left:${at.s / n * 100}%;width:${w / n * 100}%"></div>` : '';
     return `<div class="aas-pg__bar"><span class="aas-seg aas-seg--sm">${days}</span>
         <span class="aas-pg__legend"><span><i class="aas-pg__c--2"></i>занят</span><span><i class="aas-pg__c--1"></i>под вопросом</span><span><i class="aas-pg__c--3"></i>вне офиса</span><span><i class="aas-pg__c--4"></i>нет данных</span></span></div>
       <div class="aas-pg" style="--n:${n}"><div class="aas-pg__names">${names}</div><div class="aas-pg__grid">${rows}<div class="aas-pg__hit"></div>${frame}</div></div>`;
@@ -502,7 +513,7 @@ function mountScheduler(box) {
       <button type="button" class="aas-btn aas-btn--sm" data-wk="1" aria-label="Следующая неделя">›</button></div>`;
     let body;
     if ($('#eall')?.checked) body = empty('Для события на весь день время подбирать не нужно.');
-    else if (!roleList().some(p => p.role !== 'cand')) body = empty('Добавьте участников — покажу свободное время.');
+    else if (!invited(roleList())) body = empty('Добавьте участников — покажу свободное время.');
     else if (S.err) body = `<div class="aas-sched__empty">Занятость участников недоступна: ${esc(S.err)}. <button type="button" class="aas-linkbtn" data-retry>Повторить</button></div><div class="aas-sched__own"></div>`;
     else if (!S.data) body = `<div class="aas-sched__skel" aria-busy="true" aria-label="Загружаю занятость">${'<i></i>'.repeat(5)}</div>`;
     else body = S.tab === 'grid' ? gridHtml() : bestHtml();
@@ -524,7 +535,11 @@ function mountScheduler(box) {
     if (d.gday) { S.gday = +d.gday; return paint(); }
     if (d.fold) { S.fold[d.fold] = !S.fold[d.fold]; return paint(); }
   };
-  box.onchange = e => { const k = e.target.dataset.con; if (k) { savePrefs({sched_cons: {...cons(), [k]: e.target.checked}}); paint(); } };
+  box.onchange = e => {
+    const k = e.target.dataset.con; if (!k) return;
+    savePrefs({sched_cons: {...cons(), [k]: e.target.checked}});
+    k === 'room' ? load() : paint();  // saved rooms join or leave the free/busy request
+  };
   return {load, retime};
 }
 /** Stroke icons (one set, 1.8 px) instead of emoji and text glyphs. */
@@ -3143,7 +3158,9 @@ function eventForm(e, opts = {}) {
   const sched = mountScheduler($('#sched'));
   let schedT;
   const reload = () => { clearTimeout(schedT); schedT = setTimeout(sched.load, 450); };
-  ['#eatt', '#eopt', '#eroom'].forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, reload)));
+  // Reload on a finished entry (picked from suggestions or left the field), not on every
+  // keystroke: each half-typed name would be another ResolveRecipients round (throttling).
+  ['#eatt', '#eopt', '#eroom'].forEach(id => $(id).addEventListener('change', reload));
   ['#est', '#een', '#eall'].forEach(id => $(id)?.addEventListener('change', sched.retime));
   sched.load();
   // Agenda: rows with minutes and an owner; they open the description on save.

@@ -1145,6 +1145,17 @@ class AttendeeTypesTest(unittest.TestCase):
         codes = [text_of(find(x, "Calendar", "AttendeeType")) for x in find_all(node, "Calendar", "Attendee")]
         self.assertEqual(codes, ["1", "2", "3"])
 
+    def test_roles_follow_names_resolved_on_send(self):
+        webapp._patch_attendee_types()
+        webapp._ATT.types = {"петров": "optional"}
+        try:
+            with mock.patch.object(people_cmd, "resolve_for_send", return_value=["a@x.ru", "petrov@x.ru"]):
+                out = cal_cmd._resolve_attendees(None, ["a@x.ru", "Петров"])
+            self.assertEqual(out, ["a@x.ru", "petrov@x.ru"])
+            self.assertEqual(webapp._ATT.types.get("petrov@x.ru"), "optional")
+        finally:
+            webapp._ATT.types = {}
+
     def test_call_scopes_roles_to_one_request(self):
         seen = {}
         with mock.patch.object(webapp, "_call_locked", lambda *args: seen.update(webapp._ATT.types) or {"ok": True}):
@@ -1178,6 +1189,31 @@ class ScheduleTest(unittest.TestCase):
         self.assertEqual(r["unresolved"], [{"query": "ghost", "count": 0}])
         with mock.patch.object(people_cmd, "handle", side_effect=AssertionError("must be cached")):
             self.assertIs(webapp._schedule(a, {"who": list(reversed(who)), "start": "2026-10-05"}), r)
+
+    def test_typed_names_keep_their_answer(self):
+        def handle(client, action, who=None, start=None, end=None, **_):
+            found = {"Иванов": "ivanov@x.ru", "a@x.ru": "a@x.ru"}
+            return {"items": [{"address": found[w], "name": w, "freebusy": "2"} for w in who if w in found],
+                    "unresolved": [{"query": w, "count": 0} for w in who if w not in found]}
+        with mock.patch.object(people_cmd, "handle", handle):
+            r = webapp._schedule(make_acct(), {"who": ["Иванов", "ghost", "a@x.ru"], "start": "2026-10-05"})
+        self.assertEqual([(x["query"], x["address"]) for x in r["items"]], [("Иванов", "ivanov@x.ru"), ("a@x.ru", "a@x.ru")])
+
+    def test_busy_mailbox_answers_instead_of_waiting(self):
+        a = make_acct()
+        held = threading.Event(); release = threading.Event()
+        threading.Thread(target=lambda: (a.backend.lock.acquire(), held.set(), release.wait(), a.backend.lock.release()), daemon=True).start()
+        held.wait(1)
+        try:
+            with mock.patch.object(webapp, "LOCK_WAIT_S", 0.1), \
+                 mock.patch.object(people_cmd, "handle", side_effect=AssertionError("must not run")):
+                t0 = time.time()
+                r = webapp._schedule(a, {"who": ["a@x.ru"], "start": "2026-10-05"})
+            self.assertLess(time.time() - t0, 2)
+            self.assertFalse(r["ok"])
+            self.assertEqual(r["error"], "unreachable")
+        finally:
+            release.set()
 
     def test_bad_start_and_server_error(self):
         self.assertFalse(webapp._schedule(make_acct(), {"who": ["a@x.ru"], "start": "завтра"})["ok"])
