@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="navy-orange">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AAS mail · прототип: виды цепочек</title>
+<link rel="stylesheet" href="../ui-kit/fonts.css">
+<link rel="stylesheet" href="../ui-kit/tokens.css">
+<style>
+/* Long-thread views — 4 throwaway variants (2026-09-29).
+   A: tree in the list · B: timeline in the reader · C: minimap + filter · D: chat. */
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: var(--aas-font);
+  background: var(--aas-bg);
+  color: var(--aas-text);
+  font-size: var(--aas-t-md);
+  -webkit-font-smoothing: antialiased;
+  --p0: #ef6e42; --p1: #5cc6a8; --p2: #e8b86d; --p3: #a89cf0;
+}
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+
+.root { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* —— Variant switcher —— */
+.bar {
+  flex: none; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 10px 16px; border-bottom: 1px solid var(--aas-line);
+  background: var(--aas-panel-2);
+}
+.bar b { font-size: var(--aas-t-lg); color: var(--aas-accent-text); }
+.seg { display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--aas-bg); border: 1px solid var(--aas-line); }
+.seg button { padding: 6px 12px; border-radius: 7px; color: var(--aas-muted); white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--aas-accent); color: var(--aas-on-accent); font-weight: 600; }
+.hint { color: var(--aas-muted); font-size: var(--aas-t-sm); flex: 1 1 320px; }
+
+/* —— Shell —— */
+.shell { flex: 1; min-height: 0; display: grid; grid-template-columns: 380px 1fr; }
+.list { border-right: 1px solid var(--aas-line); overflow: auto; background: var(--aas-bg); }
+.reader { overflow: auto; padding: 20px 24px 60px; scroll-behavior: smooth; }
+@media (max-width: 860px) {
+  .shell { grid-template-columns: 1fr; grid-template-rows: 45% 55%; }
+  .list { border-right: 0; border-bottom: 1px solid var(--aas-line); }
+  .reader { padding: 16px; }
+}
+
+/* —— List rows —— */
+.row {
+  display: grid; grid-template-columns: 36px 1fr auto; gap: 4px 10px;
+  padding: 12px 14px; border-bottom: 1px solid var(--aas-line); width: 100%; text-align: left;
+}
+.row:hover { background: color-mix(in srgb, var(--aas-panel) 60%, transparent); }
+.row.sel { background: var(--aas-bank-bg); box-shadow: inset 3px 0 var(--aas-accent); }
+.row .who { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .time { color: var(--aas-muted); font-size: var(--aas-t-sm); }
+.row .subj, .row .snip { grid-column: 2 / 4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .snip { color: var(--aas-muted); font-size: var(--aas-t-sm); }
+.row > .av { grid-row: span 3; align-self: start; }
+.av {
+  width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 11px; font-weight: 700; color: #0a0a0a; background: var(--c, var(--aas-muted)); flex: none;
+}
+.av.sm { width: 22px; height: 22px; font-size: 9px; }
+.cnt {
+  display: inline-grid; place-items: center; min-width: 20px; height: 18px; padding: 0 5px; margin-left: 6px;
+  border-radius: 9px; font-size: 11px; font-weight: 700; background: var(--aas-bank-bg); color: var(--aas-accent-text);
+}
+
+/* A — tree */
+.twisty { width: 18px; font-size: 14px; display: inline-block; color: var(--aas-muted); transition: transform .15s; }
+.row[aria-expanded="true"] .twisty { transform: rotate(90deg); }
+.tree { border-bottom: 1px solid var(--aas-line); background: var(--aas-panel-2); }
+.day { padding: 8px 14px 4px 50px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--aas-muted); }
+.leaf {
+  position: relative; display: grid; grid-template-columns: 22px 1fr auto; gap: 2px 8px; align-items: center;
+  width: 100%; text-align: left; padding: 6px 14px 6px 50px;
+}
+.leaf::before { content: ""; position: absolute; left: 31px; top: 0; bottom: 0; width: 2px; background: var(--aas-line); }
+.leaf::after { content: ""; position: absolute; left: 31px; top: 50%; width: 14px; height: 2px; background: var(--aas-line); }
+.leaf:hover { background: color-mix(in srgb, var(--aas-panel) 70%, transparent); }
+.leaf.sel { background: var(--aas-bank-bg); }
+.leaf .n { font-size: var(--aas-t-sm); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.leaf .t { font-size: 11px; color: var(--aas-muted); }
+.leaf .s { grid-column: 2 / 4; font-size: 12px; color: var(--aas-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.leaf.unread .n::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--aas-accent); vertical-align: middle; }
+
+/* —— Reader —— */
+.head h1 { margin: 0 0 4px; font-size: 1.25rem; }
+.head .meta { color: var(--aas-muted); font-size: var(--aas-t-sm); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px;
+  border: 1px solid var(--aas-line); font-size: var(--aas-t-sm); color: var(--aas-muted);
+}
+.chip[aria-pressed="true"] { border-color: var(--c); color: var(--aas-text); background: color-mix(in srgb, var(--c) 14%, transparent); }
+.chip .av { width: 20px; height: 20px; font-size: 9px; }
+
+.card { margin-top: 12px; border: 1px solid var(--aas-line); border-radius: 12px; background: var(--aas-panel); }
+.card-h { display: flex; gap: 10px; align-items: center; padding: 12px 14px; width: 100%; text-align: left; }
+.card-h .n { font-weight: 600; }
+.card-h .to { color: var(--aas-muted); font-size: var(--aas-t-sm); }
+.card-h .t { margin-left: auto; color: var(--aas-muted); font-size: var(--aas-t-sm); white-space: nowrap; }
+.card-h .s { color: var(--aas-muted); font-size: var(--aas-t-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.body {
+  margin: 0 14px 14px; padding: 14px 16px; border-radius: 8px; background: #fff; color: #1f2328; line-height: 1.5;
+}
+.body p { margin: 0 0 8px; }
+.q { color: #66707a; font-size: 12px; border-left: 3px solid #cfd4da; padding-left: 8px; margin-top: 8px; }
+.flash { animation: flash 1.2s; }
+@keyframes flash { from { box-shadow: 0 0 0 3px var(--aas-accent); } to { box-shadow: 0 0 0 3px transparent; } }
+
+/* B — timeline */
+.tl { position: relative; margin-top: 16px; padding-left: 28px; }
+.tl::before { content: ""; position: absolute; left: 9px; top: 6px; bottom: 6px; width: 2px; background: var(--aas-line); }
+.tl-day {
+  position: sticky; top: -20px; z-index: 1; margin: 18px 0 6px -28px; padding: 6px 0 6px 28px;
+  font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--aas-muted);
+  background: var(--aas-bg);
+}
+.tl-day span { color: var(--aas-text); }
+.tl-item { position: relative; }
+.tl-item::before {
+  content: ""; position: absolute; left: -24px; top: 17px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--c); box-shadow: 0 0 0 3px var(--aas-bg);
+}
+.tl-item .card { margin-top: 6px; }
+.tl-item:not(.open) .card { background: transparent; border-color: transparent; }
+.tl-item:not(.open) .card:hover { background: var(--aas-panel); }
+.tl-item:not(.open) .card-h { padding: 8px 12px; }
+.gap { margin: 4px 0 4px -18px; font-size: 11px; color: var(--aas-muted); font-style: italic; }
+
+/* C — minimap */
+.map {
+  position: sticky; top: -20px; z-index: 2; margin: 14px -24px 0; padding: 10px 24px 12px;
+  background: color-mix(in srgb, var(--aas-bg) 92%, transparent); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--aas-line);
+}
+.track { position: relative; height: 34px; }
+.track::before { content: ""; position: absolute; left: 0; right: 0; top: 16px; height: 2px; background: var(--aas-line); }
+.tick {
+  position: absolute; top: 9px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%;
+  background: var(--c); border: 3px solid var(--aas-bg); transition: transform .12s, opacity .12s;
+}
+.tick:hover, .tick.cur { transform: scale(1.4); }
+.tick.dim { opacity: .2; }
+.tick .tip {
+  display: none; position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
+  padding: 4px 8px; border-radius: 6px; white-space: nowrap; font-size: 11px;
+  background: var(--aas-panel); border: 1px solid var(--aas-line); color: var(--aas-text);
+}
+.tick:hover .tip { display: block; }
+.axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--aas-muted); }
+.hidden-n { font-size: var(--aas-t-sm); color: var(--aas-muted); margin-top: 12px; }
+
+/* D — chat */
+.chat { display: flex; flex-direction: column; gap: 2px; margin-top: 16px; max-width: 820px; }
+.chat-day { align-self: center; margin: 14px 0 8px; padding: 3px 12px; border-radius: 999px; font-size: 11px; background: var(--aas-panel); color: var(--aas-muted); }
+.msg { display: flex; gap: 8px; align-items: flex-end; max-width: 78%; }
+.msg.me { align-self: flex-end; flex-direction: row-reverse; }
+.msg .av { visibility: hidden; }
+.msg.last .av { visibility: visible; }
+.bub {
+  padding: 8px 12px 6px; border-radius: 14px; background: var(--aas-panel); line-height: 1.45;
+  border: 1px solid var(--aas-line);
+}
+.msg.me .bub { background: color-mix(in srgb, var(--aas-accent) 22%, var(--aas-panel)); border-color: transparent; }
+.msg:not(.first) .bub { border-top-left-radius: 5px; }
+.msg.me:not(.first) .bub { border-top-left-radius: 14px; border-top-right-radius: 5px; }
+.bub .n { font-size: 12px; font-weight: 700; color: var(--c); margin-bottom: 2px; }
+.bub .t { font-size: 10px; color: var(--aas-muted); text-align: right; margin-top: 2px; }
+.bub .att { display: inline-flex; gap: 6px; margin-top: 6px; padding: 4px 8px; border-radius: 6px; font-size: 12px; background: var(--aas-bg); }
+.bub .more { font-size: 11px; color: var(--aas-accent-text); margin-top: 4px; }
+.msg + .msg.first { margin-top: 8px; }
+
+[hidden] { display: none !important; }
+</style>
+</head>
+<body class="theme-bank">
+<div class="root">
+  <div class="bar">
+    <b>Виды цепочек</b>
+    <div class="seg" role="group" aria-label="Вариант">
+      <button data-v="A" aria-pressed="true">A · Дерево в списке</button>
+      <button data-v="B" aria-pressed="false">B · Таймлайн</button>
+      <button data-v="C" aria-pressed="false">C · Мини-карта</button>
+      <button data-v="D" aria-pressed="false">D · Чат</button>
+    </div>
+    <div class="hint" id="hint"></div>
+  </div>
+  <div class="shell">
+    <div class="list" id="list"></div>
+    <div class="reader" id="reader"></div>
+  </div>
+</div>
+
+<script>
+const P = [
+  { id: 0, name: 'Ларионов Роман Альбертович', short: 'Ларионов Р.', ini: 'ЛР' },
+  { id: 1, name: 'Алиева Дарья Эдуардовна',    short: 'Алиева Д.',   ini: 'АД' },
+  { id: 2, name: 'Мамаджанов Мурод',           short: 'Мамаджанов М.', ini: 'ММ' },
+  { id: 3, name: 'Вы',                          short: 'Вы',          ini: 'Я', me: true },
+];
+const M = [
+  [0, '2026-09-04T16:35', 'Дарья, приветствую. Подскажи, пожалуйста, по ситуации с клиентскими сертификатами AlfaID. Серт на Dev/Stage протух 01.09.', 1],
+  [3, '2026-09-04T17:02', 'Добрый вечер! Подключаю Дарью, она ведёт выпуск сертификатов для партнёрских ClientID.'],
+  [1, '2026-09-05T09:48', 'Коллеги, видим заявку. Для перевыпуска нужен CSR от вашей стороны и актуальный список redirect_uri.'],
+  [0, '2026-09-05T11:20', 'CSR приложил. redirect_uri — prod и preprod, список ниже в письме.', 1],
+  [2, '2026-09-05T11:41', 'Добавлю: на preprod у нас два домена, второй появился после миграции в августе.'],
+  [1, '2026-09-08T10:05', 'Приняли. Dev/Preprod перевыпустим сегодня, по prod — нужен апрув владельца системы.'],
+  [3, '2026-09-08T10:30', 'Апрув запросила, ориентир — до конца недели.'],
+  [1, '2026-09-10T10:35', 'Добрый день. Распознавание залогиненного состояния в Alfa ID строится на серверной сессии, которая привязана к куке в браузере.', 1],
+  [0, '2026-09-10T12:14', 'Понял, спасибо. Тогда вопрос по SSO между b2b и e-com — кука общая на домен?'],
+  [1, '2026-09-10T12:50', 'Нет, на поддомен. Для сквозной авторизации нужен отдельный ClientID.'],
+  [2, '2026-09-16T15:02', 'Dev/Preprod — сертификаты встали, проверили логин, всё ок.'],
+  [3, '2026-09-22T09:12', 'Апрув по prod получен, пересылаю вложением.', 1],
+  [1, '2026-09-26T18:40', 'Prod-сертификат выпустим в окно 06.10, заранее пришлём новый отпечаток.'],
+  [0, '2026-09-29T13:08', 'Даша, здравствуй! Это снова мы — команда B2B Альфа Селлер) У нас скоро протухает клиентский сертификат AlfaID на продакшн среде, а никакого уведомления нам никуда не приходило(.', 3, true],
+].map(([p, d, text, att, unread], i) => ({ i, p: P[p], d: new Date(d), text, att: att || 0, unread: !!unread }));
+
+const others = [
+  ['BB', 'Bitbucket', 'CORP-NIB/corp-nib-ansible-united-edition', '3 Pushes, 2 Comments [Corporate NIB] Master…', '12:55'],
+  ['ЧА', 'Чеканов Александр Сергеевич', 'Консультация по Альфа Эквайринг', 'Ответил по тексту @Белов Антон Игоревич', '12:26'],
+  ['ЧИ', 'Черников Иван Сергеевич', 'Daily PIM/ChM', 'доска https://jira.moscow.alfaintra.net/secure…', '12:26'],
+  ['ГВ', 'Грекова Владена Дмитриевна', 'Демо запуска Альфа-Селлер (B2B)', 'Всем привет! Запускаем серию Демо встреч…', '11:49'],
+  ['ГМ', 'Генчу Марина Михайловна', 'СТАТУС_Текущие проблемы с обновлением…', 'Коллеги, привет! Направляю ОС от коллег из…', '10:23'],
+];
+const SUBJ = 'Регистрация ClientID для платформы e-com b2b';
+const HINTS = {
+  A: 'Цепочка раскрывается прямо в списке ▸, письма по дням по дате получения. Клик по письму — справа только оно. Новые — с точкой.',
+  B: 'Вертикальная ось, разделители дней «липнут» при прокрутке, точки — цвет автора, паузы между днями подписаны. Клик по строке раскрывает письмо.',
+  C: 'Полоса-пульс сверху: точка = письмо по реальному времени. Hover — кто/когда, клик — прыжок. Чипы участников фильтруют цепочку.',
+  D: 'Как мессенджер: ваши справа, подряд идущие письма одного автора склеены, цитаты скрыты под «показать цитату».',
+};
+
+const $ = s => document.querySelector(s);
+const col = p => `var(--p${p.id})`;
+const av = (p, cls = '') => `<span class="av ${cls}" style="--c:${col(p)}">${p.ini}</span>`;
+const hm = d => d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+const dayKey = d => d.toDateString();
+const dayLabel = d => {
+  const today = new Date('2026-09-29');
+  if (dayKey(d) === dayKey(today)) return 'Сегодня';
+  return d.toLocaleDateString('ru', { weekday: 'short', day: 'numeric', month: 'long' });
+};
+const shortDate = d => dayKey(d) === dayKey(new Date('2026-09-29')) ? hm(d) : d.toLocaleDateString('ru', { day: 'numeric', month: 'short' }) + ', ' + hm(d);
+const byDay = list => list.reduce((acc, m) => {
+  const last = acc[acc.length - 1];
+  if (last && last.key === dayKey(m.d)) last.items.push(m); else acc.push({ key: dayKey(m.d), d: m.d, items: [m] });
+  return acc;
+}, []);
+const bodyHtml = m => `<div class="body"><p>${m.text}</p>${m.i > 0 ? `<div class="q">&gt; ${M[m.i - 1].p.short}, ${shortDate(M[m.i - 1].d)}: ${M[m.i - 1].text.slice(0, 70)}…</div>` : ''}</div>`;
+const header = () => `<div class="head"><h1>${SUBJ}</h1>
+  <div class="meta">${M.length} писем · ${P.length} участника · 4 сент. — сегодня</div></div>`;
+
+const state = { v: 'ABCD'.includes(location.hash.slice(1) || '-') ? location.hash.slice(1) : 'A', treeOpen: true, sel: M.length - 1, open: new Set([M.length - 1]), who: new Set(P.map(p => p.id)) };
+
+function threadRow(extra = '') {
+  const last = M[M.length - 1];
+  return `<button class="row sel" id="threadRow" ${extra}>
+    ${av(last.p)}
+    <span class="who">${state.v === 'A' ? '<span class="twisty">▸</span>' : ''}Ларионов, Алиева, Мамаджанов, Вы<span class="cnt">${M.length}</span></span>
+    <span class="time">${hm(last.d)}</span>
+    <span class="subj">${SUBJ}</span>
+    <span class="snip">${last.text}</span></button>`;
+}
+function otherRows() {
+  return others.map(([ini, who, subj, snip, t], i) => `<div class="row">
+    <span class="av" style="--c:#6b8088">${ini}</span><span class="who">${who}</span><span class="time">${t}</span>
+    <span class="subj">${subj}</span><span class="snip">${snip}</span></div>`).join('');
+}
+
+function renderList() {
+  let tree = '';
+  if (state.v === 'A' && state.treeOpen) {
+    // newest day first, oldest-to-newest inside a day would scatter — keep newest first everywhere
+    tree = `<div class="tree">${byDay([...M].reverse()).map(g => `<div class="day">${dayLabel(g.d)}</div>` +
+      g.items.map(m => `<button class="leaf ${m.i === state.sel ? 'sel' : ''} ${m.unread ? 'unread' : ''}" data-i="${m.i}">
+        ${av(m.p, 'sm')}<span class="n">${m.p.short}${m.att ? ' 📎' : ''}</span><span class="t">${hm(m.d)}</span>
+        <span class="s">${m.text}</span></button>`).join('')).join('')}</div>`;
+  }
+  $('#list').innerHTML = threadRow(state.v === 'A' ? `aria-expanded="${state.treeOpen}"` : '') + tree + otherRows();
+}
+
+function renderA() {
+  const m = M[state.sel];
+  const pos = `${state.sel + 1} из ${M.length}`;
+  return header() + `<div class="card">
+    <div class="card-h">${av(m.p)}<div><div class="n">${m.p.name}</div><div class="to">${pos} в цепочке · ${shortDate(m.d)}</div></div>
+    <span class="t"><button data-step="-1">↑ раньше</button> &nbsp; <button data-step="1">позже ↓</button></span></div>
+    ${bodyHtml(m)}</div>`;
+}
+
+function renderB() {
+  let prev = null;
+  const out = byDay(M).map(g => {
+    let gap = '';
+    if (prev) {
+      const days = Math.round((g.d - prev) / 864e5);
+      if (days > 1) gap = `<div class="gap">тишина ${days} дн.</div>`;
+    }
+    prev = g.items[g.items.length - 1].d;
+    return gap + `<div class="tl-day"><span>${dayLabel(g.d)}</span> · ${g.items.length} ${g.items.length === 1 ? 'письмо' : 'письма'}</div>` +
+      g.items.map(m => card(m, 'tl-item')).join('');
+  }).join('');
+  return header() + `<div class="tl">${out}</div>`;
+}
+
+function card(m, wrap) {
+  const open = state.open.has(m.i);
+  return `<div class="${wrap} ${open ? 'open' : ''}" style="--c:${col(m.p)}" id="m${m.i}"><div class="card">
+    <button class="card-h" data-toggle="${m.i}">${av(m.p)}<span class="n">${m.p.short}</span>
+    ${open ? `<span class="to">→ ${P.filter(p => p !== m.p).map(p => p.short).join(', ')}</span><span style="flex:1"></span>` : `<span class="s">${m.text}</span>`}
+    <span class="t">${m.att ? '📎 ' : ''}${shortDate(m.d)}</span></button>
+    ${open ? bodyHtml(m) : ''}</div></div>`;
+}
+
+function renderC() {
+  const t0 = M[0].d, t1 = M[M.length - 1].d, span = t1 - t0;
+  const ticks = M.map(m => `<button class="tick ${state.who.has(m.p.id) ? '' : 'dim'} ${state.open.has(m.i) ? 'cur' : ''}"
+    style="left:${2 + 96 * (m.d - t0) / span}%;--c:${col(m.p)}" data-jump="${m.i}"><span class="tip">${m.p.short} · ${shortDate(m.d)}</span></button>`).join('');
+  const chips = P.map(p => `<button class="chip" style="--c:${col(p)}" data-who="${p.id}" aria-pressed="${state.who.has(p.id)}">
+    ${av(p)}${p.short} · ${M.filter(m => m.p === p).length}</button>`).join('');
+  const shown = M.filter(m => state.who.has(m.p.id));
+  const hidden = M.length - shown.length;
+  return header() + `<div class="chips">${chips}</div>
+    <div class="map"><div class="track">${ticks}</div><div class="axis"><span>4 сент.</span><span>15 сент.</span><span>сегодня</span></div></div>
+    ${hidden ? `<div class="hidden-n">Скрыто ${hidden} писем других участников</div>` : ''}
+    ${shown.map(m => card(m, 'c-item')).join('')}`;
+}
+
+function renderD() {
+  const out = byDay(M).map(g => `<div class="chat-day">${dayLabel(g.d)}</div>` + g.items.map((m, k) => {
+    const prevSame = k > 0 && g.items[k - 1].p === m.p;
+    const nextSame = k < g.items.length - 1 && g.items[k + 1].p === m.p;
+    return `<div class="msg ${m.p.me ? 'me' : ''} ${prevSame ? '' : 'first'} ${nextSame ? '' : 'last'}" id="m${m.i}">
+      ${m.p.me ? '' : av(m.p)}<div class="bub" style="--c:${col(m.p)}">
+      ${!m.p.me && !prevSame ? `<div class="n">${m.p.short}</div>` : ''}${m.text}
+      ${m.att ? `<div><span class="att">🖼 ${m.att} влож.</span></div>` : ''}
+      ${m.i > 0 ? `<button class="more">показать цитату</button>` : ''}
+      <div class="t">${hm(m.d)}</div></div></div>`;
+  }).join('')).join('');
+  return header() + `<div class="chat">${out}</div>`;
+}
+
+function render() {
+  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === state.v));
+  $('#hint').textContent = HINTS[state.v];
+  renderList();
+  $('#reader').innerHTML = { A: renderA, B: renderB, C: renderC, D: renderD }[state.v]();
+}
+
+function jump(i) {
+  state.open.add(i); render();
+  const el = document.getElementById('m' + i);
+  if (el) { el.scrollIntoView({ block: 'center' }); el.querySelector('.card')?.classList.add('flash'); }
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('button');
+  if (!t) return;
+  if (t.dataset.v) { state.v = t.dataset.v; state.open = new Set([M.length - 1]); render(); showLatest(); return; }
+  if (t.id === 'threadRow' && state.v === 'A') { state.treeOpen = !state.treeOpen; return render(); }
+  if (t.dataset.i) { state.sel = +t.dataset.i; return render(); }
+  if (t.dataset.step) { state.sel = Math.min(M.length - 1, Math.max(0, state.sel + +t.dataset.step)); return render(); }
+  if (t.dataset.toggle) { const i = +t.dataset.toggle; state.open.has(i) ? state.open.delete(i) : state.open.add(i); return render(); }
+  if (t.dataset.jump) return jump(+t.dataset.jump);
+  if (t.dataset.who) {
+    const id = +t.dataset.who;
+    if (state.who.size === P.length) state.who = new Set([id]);        // first click isolates one person
+    else if (state.who.has(id) && state.who.size === 1) state.who = new Set(P.map(p => p.id));
+    else state.who.has(id) ? state.who.delete(id) : state.who.add(id);
+    return render();
+  }
+  if (t.classList.contains('more')) { t.outerHTML = `<div class="q" style="color:var(--aas-muted);border-color:var(--aas-line)">&gt; ${M[+t.closest('.msg').id.slice(1) - 1].text.slice(0, 90)}…</div>`; }
+});
+
+// B/C/D open on the newest letter, like a mail client would
+function showLatest() {
+  $('#reader').scrollTop = 0;
+  document.getElementById('m' + (M.length - 1))?.scrollIntoView({ block: 'end', behavior: 'instant' });
+}
+render(); showLatest();
+</script>
+</body>
+</html>

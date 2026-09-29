@@ -95,6 +95,24 @@ test('splitAddrs keeps commas inside <…> and addrOnly extracts SMTP', () => {
   assert.deepEqual(plain(splitAddrs(picked).map(addrOnly)), ['ivan@x.ru', 'b@y.ru']);
 });
 
+test('conversation timeline: letters by day, quiet days between them, day headings', () => {
+  const {dayGroups, dayHead} = load(['dayGroups', 'dayHead']);
+  const at = x => x.received;
+  const g = plain(dayGroups([
+    {received: '2026-09-04 16:35'}, {received: '2026-09-04 17:02'},
+    {received: '2026-09-05 09:48'}, {received: '2026-09-10 10:35'}, {received: '2026-09-29 13:08'},
+  ], at));
+  assert.deepEqual(g.map(d => [d.day, d.items.length, d.quiet]),
+    [['2026-09-04', 2, 0], ['2026-09-05', 1, 0], ['2026-09-10', 1, 4], ['2026-09-29', 1, 18]]);
+  // Newest first (the list tree) counts the same quiet days.
+  assert.deepEqual(plain(dayGroups([{received: '2026-09-10 10:00'}, {received: '2026-09-05 10:00'}], at)).map(d => d.quiet), [0, 4]);
+  const now = new Date('2026-09-29T15:00');
+  assert.equal(dayHead('2026-09-29', now), 'Сегодня');
+  assert.equal(dayHead('2026-09-28', now), 'Вчера');
+  assert.equal(dayHead('2026-09-04', now), 'пт, 4 сент.');
+  assert.equal(dayHead('2025-12-31', now), 'ср, 31 дек. 2025');
+});
+
 test('thread grouping strips reply prefixes and sorts newest first', () => {
   const {groupItems, ctx} = load(['groupItems'], {prefs: {threads: true}});
   const items = [

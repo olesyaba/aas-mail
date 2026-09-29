@@ -1050,22 +1050,8 @@ input[type="checkbox"].aas-sw:focus-visible { outline: 2px solid var(--aas-accen
 #cards .aas-mc.open .aas-mc__head { padding: 10px 14px; border-radius: 0; }
 #cards .aas-mc.unread .aas-mc__who { font-weight: 700; color: var(--aas-unread); }
 #cards .aas-mc__who { font-weight: 500; }
-.aas-mc--folded { display: none; }
 .aas-mc__when { font-variant-numeric: tabular-nums; }
 .aas-mc__clip { flex: none; display: inline-flex; color: var(--aas-muted); }
-.aas-mc-more {
-  display: block;
-  margin: 8px auto;
-  padding: 3px 14px;
-  border: 1px solid var(--aas-line);
-  border-radius: var(--aas-r-pill);
-  background: var(--aas-panel-2);
-  color: var(--aas-muted);
-  font: inherit;
-  font-size: var(--aas-t-xs);
-  cursor: pointer;
-}
-.aas-mc-more:hover { color: var(--aas-accent-text); border-color: var(--aas-accent-text); }
 
 /* Nothing open in the reader: summary, next meeting, keys */
 .aas-rempty {
@@ -1258,7 +1244,6 @@ kbd {
 .aas-seg button:focus-visible,
 .aas-row__ico:focus-visible,
 .aas-mc__head:focus-visible,
-.aas-mc-more:focus-visible,
 .aas-ev-more:focus-visible,
 .aas-linkbtn:focus-visible {
   outline: 2px solid var(--aas-accent-text);
@@ -1543,7 +1528,7 @@ main, .view, #list, #reader { min-width: 0; }
   border: 1px solid var(--aas-line);
   border-radius: var(--aas-r-lg);
   background: var(--aas-panel);
-  overflow: hidden;
+  overflow: clip;  /* not hidden: that would make it a scroll box and unstick the day headings */
 }
 .aas-thread #chead { padding: 16px 20px 12px; border-bottom: 1px solid var(--aas-line); }
 #cards .aas-mc,
@@ -1617,27 +1602,50 @@ main, .view, #list, #reader { min-width: 0; }
 #cards .aas-atts { padding: 0 0 10px; }
 #cards .aas-imgbar { margin: 0 0 8px; }
 #cards .aas-mc iframe { border-radius: var(--aas-r-sm); }
-.aas-mc-more {
-  display: flex;
-  justify-content: center;
-  padding: 8px;
-  border-bottom: 1px solid var(--aas-line);
-}
-.aas-mc-more button {
-  padding: 4px 14px;
-  border: 0;
-  border-radius: var(--aas-r-pill);
-  background: var(--aas-panel-2);
-  color: var(--aas-muted);
-  font: inherit;
-  font-size: var(--aas-t-sm);
-  cursor: pointer;
-}
-.aas-mc-more button:hover { color: var(--aas-accent-text); background: var(--aas-accent-bg); }
-.aas-mc-more button:focus-visible { outline: 2px solid var(--aas-accent-text); outline-offset: 2px; }
 .aas-thread + .aas-inline-compose { margin-top: 0; }
-/* «ещё N писем»: the row is a plain divider band, the pill is the button inside. */
-div.aas-mc-more { margin: 0; border: 0; border-bottom: 1px solid var(--aas-line); border-radius: 0; background: transparent; padding: 8px; }
+
+/* Conversation timeline: axis + a dot per letter in the sender's hue (--h, as the avatar) */
+#cards.aas-tl { position: relative; }
+#cards.aas-tl::before { content: ""; position: absolute; left: 21px; top: 0; bottom: 0; width: 2px; background: var(--aas-line); }
+#cards.aas-tl .aas-mc { position: relative; scroll-margin-top: 36px; }  /* clear the sticky day heading */
+#cards.aas-tl .aas-mc::before {
+  content: ""; position: absolute; left: 16px; top: 16px; z-index: 1; width: 12px; height: 12px; border-radius: 50%;
+  background: oklch(0.66 0.12 var(--h, 20)); box-shadow: 0 0 0 3px var(--aas-panel);
+}
+#cards.aas-tl .aas-mc.open::before { top: 26px; box-shadow: 0 0 0 3px var(--aas-panel-2); }
+#cards.aas-tl .aas-mc__head,
+#cards.aas-tl .aas-mc.open .aas-mc__head { padding-left: 40px; }
+.aas-tl-day {
+  position: sticky; top: 0; z-index: 2; padding: 10px 20px 6px 40px;
+  background: var(--aas-panel); border-bottom: 1px solid var(--aas-line);
+  font-size: var(--aas-t-xs); color: var(--aas-muted); letter-spacing: .03em;
+}
+.aas-tl-day b { color: var(--aas-text); font-weight: 600; }
+.aas-tl-gap { position: relative; padding: 6px 20px 6px 40px; font-size: var(--aas-t-xs); font-style: italic; color: var(--aas-muted); }
+.aas-mc--flash { animation: aas-flash 1.2s ease-out; }
+@keyframes aas-flash { from { box-shadow: inset 0 0 0 2px var(--aas-accent-text); } to { box-shadow: inset 0 0 0 2px transparent; } }
+@media (prefers-reduced-motion: reduce) { .aas-mc--flash { animation: none; } }
+
+/* The count badge opens the conversation as a branch under its list row */
+button.aas-row__tw { flex: none; margin-left: 0; border: 0; font-family: inherit; cursor: pointer; line-height: inherit; }
+button.aas-row__tw:hover { background: color-mix(in srgb, var(--aas-accent-text) 22%, var(--aas-accent-bg)); }
+.aas-row__chev { display: inline-block; margin-left: 3px; transition: transform .15s; }
+.aas-row__tw[aria-expanded="true"] .aas-row__chev { transform: rotate(90deg); }
+.aas-tree { padding: 2px 0 8px; border-bottom: 1px solid var(--aas-line); background: var(--aas-panel-2); }
+.aas-tree__day { padding: 8px 14px 3px 46px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--aas-muted); }
+.aas-tree__leaf {
+  position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 1px 8px; align-items: center;
+  width: 100%; padding: 5px 14px 5px 46px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.aas-tree__leaf::before { content: ""; position: absolute; left: 27px; top: 0; bottom: 0; width: 2px; background: var(--aas-line); }
+.aas-tree__leaf::after { content: ""; position: absolute; left: 27px; top: 16px; width: 14px; height: 2px; background: var(--aas-line); }
+.aas-tree__leaf:hover { background: color-mix(in srgb, var(--aas-accent-bg) 60%, transparent); }
+.aas-tree__leaf:focus-visible { outline: 2px solid var(--aas-accent-text); outline-offset: -2px; }
+.aas-tree__leaf .aas-av { width: 22px; height: 22px; border-radius: 7px; font-size: 9px; }
+.aas-tree__who { font-size: var(--aas-t-sm); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aas-tree__leaf.unread .aas-tree__who { font-weight: 700; color: var(--aas-unread); }
+.aas-tree__when { display: inline-flex; gap: 4px; align-items: center; font-size: 11px; color: var(--aas-muted); font-variant-numeric: tabular-nums; }
+.aas-tree__snip { grid-column: 2 / 4; font-size: 12px; color: var(--aas-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ═══ Phone / Fold cover screen (< 600px): one pane ════════════════════════ */
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }

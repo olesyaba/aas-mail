@@ -267,8 +267,28 @@ function avatar(p) {
   const name = (p?.name || '').replace(/["']/g, '').trim(), addr = (p?.address || '').toLowerCase();
   const words = name.split(/[\s,.]+/).filter(w => /^[\p{L}]/u.test(w));
   const ini = (words.length ? words.slice(0, 2).map(w => w[0]) : [(addr || '?')[0]]).join('').toUpperCase();
-  let h = 0; for (const ch of addr || name) h = (h * 31 + ch.codePointAt(0)) >>> 0;
-  return `<span class="aas-av" style="--h:${h % 360}" aria-hidden="true">${esc(ini)}</span>`;
+  return `<span class="aas-av" style="--h:${hueOf(p)}" aria-hidden="true">${esc(ini)}</span>`;
+}
+const hueOf = p => { let h = 0; for (const ch of (p?.address || '').toLowerCase() || (p?.name || '').replace(/["']/g, '').trim()) h = (h * 31 + ch.codePointAt(0)) >>> 0; return h % 360; };
+/** Letters by calendar day, in the order given (oldest-first timeline or newest-first
+ *  tree); `quiet` = whole days without letters before this day. */
+function dayGroups(list, at) {
+  const out = [];
+  for (const x of list) {
+    const day = String(at(x) || '').slice(0, 10), last = out[out.length - 1];
+    if (last && last.day === day) { last.items.push(x); continue; }
+    const apart = last ? Math.abs(Math.round((new Date(day + 'T00:00') - new Date(last.day + 'T00:00')) / 864e5)) : 0;
+    out.push({day, quiet: Math.max(0, apart - 1), items: [x]});
+  }
+  return out;
+}
+/** «Сегодня», «Вчера», «пт, 4 сент.», «ср, 31 дек. 2025». */
+function dayHead(day, now = new Date()) {
+  const d = new Date(day + 'T00:00'); if (isNaN(d)) return '';
+  const days = Math.round((startOfDay(now) - d) / 864e5);
+  if (days === 0) return 'Сегодня';
+  if (days === 1) return 'Вчера';
+  return `${RU_WD_SHORT[d.getDay()]}, ${d.getDate()} ${RU_MON[d.getMonth()]}${d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : ''}`;
 }
 /** Stroke icons (one set, 1.8 px) instead of emoji and text glyphs. */
 const ICONS = {
@@ -1266,6 +1286,7 @@ function renderList(hasMore) {
     more.innerHTML = '<button class="aas-btn">Ещё</button>'; more.firstChild.onclick = () => loadListGuarded(false); frag.appendChild(more);
   }
   box.appendChild(frag);
+  paintTree();
   if (!box.querySelector('.aas-row[tabindex="0"]')) { const f = box.querySelector('.aas-row'); if (f) f.tabIndex = 0; }
   syncBulkBar(groups.length);
   paintListHead();
@@ -1294,7 +1315,7 @@ function rowEl(g) {
   el.innerHTML = `${ico}<div class="aas-row__lead">${avatar(m.from)}
       <label class="aas-row__chk" title="Выбрать"><input type="checkbox" aria-label="Выбрать письмо" ${selectedKeys.has(g.key) ? 'checked' : ''}></label></div>
     <div class="aas-row__main"><div class="aas-row__top">
-      <span class="aas-row__from">${esc(senders)}${n > 1 ? `<span class="cnt">${n}</span>` : ''}</span>
+      <span class="aas-row__from">${esc(senders)}</span>${n > 1 ? `<button type="button" class="cnt aas-row__tw" aria-expanded="${g.key === treeKey}" title="Показать письма цепочки" aria-label="Письма цепочки: ${n}">${n}<span class="aas-row__chev" aria-hidden="true">›</span></button>` : ''}
       ${g.items.some(x => x.has_attachments) ? `<span class="aas-row__clip" title="Есть вложения">${icon('clip', 13)}</span>` : ''}
       <span class="aas-row__date" title="${esc(m.received || '')}">${esc(fmtWhen(m.received))}</span></div>
     <div class="aas-row__subj">${esc((prefs.threads ? m.thread_topic || m.subject : m.subject) || '(без темы)')}${catChips(g.items.flatMap(x => x.categories || []))}</div>
@@ -1314,6 +1335,12 @@ function rowEl(g) {
     e.stopPropagation();
     const read = e.currentTarget.dataset.read === '1';
     await markGroupsRead([g.key], read);
+  });
+  el.querySelector('.aas-row__tw')?.addEventListener('click', e => {
+    e.stopPropagation();
+    if (treeKey === g.key) { treeKey = null; return paintTree(); }
+    treeKey = g.key;
+    if (curKey === g.key) paintTree(); else openGroup(g);
   });
   el.onclick = () => openGroup(g);
   // Drag onto a folder: the whole selection if this row is in it, else just this row.
@@ -1386,7 +1413,7 @@ function openGroup(g) {
   document.querySelectorAll('.aas-row').forEach(r => { const on = r.dataset.key === g.key;
     r.classList.toggle('on', on); r.tabIndex = on ? 0 : -1; r.setAttribute('aria-selected', String(on)); });
   const subject = g.items[0].thread_topic || g.items[0].subject || '(без темы)';
-  cards = []; midOpen = false;
+  cards = []; if (treeKey !== g.key) treeKey = null;
   // Every action stays on screen at any width: labels fold into icons (container
   // query in app.css) instead of the row scrolling sideways with a hidden scrollbar.
   const tb = (a, ic, label, cls = '') => `<button class="aas-btn ${cls}" data-a="${a}" title="${label}" aria-label="${label}">${icon(ic)}<span class="lbl">${label}</span></button>`;
@@ -1406,7 +1433,8 @@ function openGroup(g) {
   layoutCards();
   const last = cards[cards.length - 1];
   cards.filter(c => c === last || !c.m.is_read).slice(-5).forEach(c => toggleCard(c, true));
-  layoutCards();  // open flags are set: unread letters in the middle stay unfolded
+  const land = () => cards.length > 2 && cards.find(c => c.open)?.el.scrollIntoView({block: 'start'});
+  land();  // a long timeline opens on its first unread / the newest letter, not on the oldest row
   $('#rtools').onclick = guard(toolbar);
   $('#mv').onchange = guard(async e => {
     if (!e.target.value) return;
@@ -1418,7 +1446,7 @@ function openGroup(g) {
     if (token !== openToken) return;
     let added = 0;
     j.items.forEach(m => { if (!cardOf(m.item_id)) { addCard(m); added++; } });
-    if (added) layoutCards();
+    if (added) { layoutCards(); land(); }
   }).catch(() => {});
   paintPane();
 }
@@ -1476,24 +1504,43 @@ function addCard(m) {
   head.onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === head) { e.preventDefault(); toggleCard(c); } };
   cards.push(c);
 }
-/* Long conversations: the first letter, «ещё N писем», and the last two stay visible;
-   the closed ones in between fold away until asked for (or «Развернуть все»). */
-let midOpen = false;
+/* Long conversations as a timeline: every letter is a one-line row on an axis, its dot in
+   the sender's avatar hue; sticky day headings and «тишина N дн.» between far-apart days. */
 function layoutCards() {
   cards.sort((a, b) => (a.m.received || '').localeCompare(b.m.received || ''));
-  const host = $('#cards'); cards.forEach(c => host.appendChild(c.el));
-  host.querySelector('.aas-mc-more')?.remove();
-  const mid = midOpen ? [] : cards.slice(1, -2).filter(c => !c.open);
-  cards.forEach(c => c.el.classList.toggle('aas-mc--folded', mid.includes(c)));
-  if (mid.length >= 2) {
-    const row = document.createElement('div'); row.className = 'aas-mc-more';
-    const b = document.createElement('button'); b.type = 'button';
-    b.textContent = `ещё ${mid.length} ${plural(mid.length, 'письмо', 'письма', 'писем')}`;
-    b.onclick = () => { midOpen = true; layoutCards(); };
-    row.appendChild(b); host.insertBefore(row, mid[0].el);
-  } else mid.forEach(c => c.el.classList.remove('aas-mc--folded'));
+  const host = $('#cards'), tl = cards.length > 2;
+  host.replaceChildren(); host.classList.toggle('aas-tl', tl);
+  for (const g of dayGroups(cards, c => c.m.received)) {
+    if (tl && g.quiet >= 2) host.insertAdjacentHTML('beforeend', `<div class="aas-tl-gap">тишина ${g.quiet} дн.</div>`);
+    if (tl) host.insertAdjacentHTML('beforeend', `<div class="aas-tl-day"><b>${esc(dayHead(g.day))}</b> · ${g.items.length} ${plural(g.items.length, 'письмо', 'письма', 'писем')}</div>`);
+    g.items.forEach(c => { c.el.style.setProperty('--h', hueOf(c.m.from)); host.appendChild(c.el); });
+  }
   const people = new Set(cards.map(c => who(c.m.from)).filter(Boolean)).size;
   $('#cmeta').textContent = cards.length > 1 ? `${cards.length} ${plural(cards.length, 'письмо', 'письма', 'писем')}, ${people} ${plural(people, 'участник', 'участника', 'участников')}` : '';
+  paintTree();
+}
+/* The open conversation as a branch under its list row (newest first, by day).
+   Opened by the count badge; one branch at a time; a leaf scrolls the reader to its letter. */
+let treeKey = null;
+function paintTree() {
+  const box = $('#rows'); if (!box) return;
+  box.querySelector('.aas-tree')?.remove();
+  box.querySelectorAll('.aas-row__tw').forEach(b => b.setAttribute('aria-expanded', String(b.closest('.aas-row').dataset.key === treeKey)));
+  const row = treeKey && treeKey === curKey && box.querySelector(`.aas-row[data-key="${CSS.escape(treeKey)}"]`);
+  if (!row || cards.length < 2) return;
+  const tree = document.createElement('div'); tree.className = 'aas-tree'; tree.setAttribute('role', 'group'); tree.setAttribute('aria-label', 'Письма цепочки');
+  tree.innerHTML = dayGroups([...cards].reverse(), c => c.m.received).map(g => `<div class="aas-tree__day">${esc(dayHead(g.day))}</div>` +
+    g.items.map(c => `<button type="button" class="aas-tree__leaf${c.m.is_read ? '' : ' unread'}" data-id="${esc(c.m.item_id)}">
+      ${avatar(c.m.from)}<span class="aas-tree__who">${esc(who(c.m.from))}</span>
+      <span class="aas-tree__when">${c.m.has_attachments ? icon('clip', 12) : ''}${esc(String(c.m.received || '').slice(11, 16))}</span>
+      <span class="aas-tree__snip">${esc(cleanPreview(c.m.preview))}</span></button>`).join('')).join('');
+  tree.onclick = async e => {
+    const c = cardOf(e.target.closest('.aas-tree__leaf')?.dataset.id); if (!c) return;
+    await toggleCard(c, true);  // scroll once the body is in, so the letter does not shift under the jump
+    c.el.scrollIntoView({block: 'start'});
+    c.el.classList.remove('aas-mc--flash'); void c.el.offsetWidth; c.el.classList.add('aas-mc--flash');
+  };
+  row.after(tree);
 }
 const toggleCard = guard(async (c, force) => {
   const open = force ?? !c.open;
@@ -1520,6 +1567,7 @@ async function loadCard(c) {
     // Redraw the row so its read dot flips too (AAS-24-07), not only the bold style.
     const row = document.querySelector(`.aas-row[data-key="${CSS.escape(curKey || '')}"]`);
     if (row && curGroup) row.replaceWith(rowEl(curGroup));
+    paintTree();
     if (curGroup && !curGroup.items.some(x => !x.is_read)) flipReadButton(true);
     recountOpenFolder();
   }
@@ -1722,7 +1770,7 @@ async function toolbar(e) {
   const a = e.target.closest?.('[data-a]')?.dataset.a; if (!a) return;
   const last = cards[cards.length - 1];
   if (a === 'reply' || a === 'replyall' || a === 'fwd') return act(a, last);
-  if (a === 'all') { midOpen = true; layoutCards(); for (const c of cards) await toggleCard(c, true); return; }
+  if (a === 'all') { for (const c of cards) await toggleCard(c, true); return; }
   if (a === 'del') { await api('mail', {action: 'delete', item_ids: curGroup.items.map(m => m.item_id)}); afterRemove(curGroup); toast('Перемещено в «Удалённые»'); }
   if (a === 'unread') {
     await api('mail', {action: 'mark_read', item_ids: curGroup.items.map(m => m.item_id), read: false});
