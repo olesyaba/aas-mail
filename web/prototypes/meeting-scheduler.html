@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="navy-orange">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AAS mail · прототип: планирование встреч</title>
+<link rel="stylesheet" href="../ui-kit/fonts.css">
+<link rel="stylesheet" href="../ui-kit/tokens.css">
+<style>
+/* Meeting scheduler for big groups: 4 throwaway variants (2026-09-29).
+   A: grid by people · B: week heatmap · C: best options first · D: time poll.
+   Free/busy is mocked at Exchange's own grain: one code per 30 min
+   (0 free, 1 tentative, 2 busy, 3 out of office, 4 no data). */
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: var(--aas-font); font-size: var(--aas-t-md);
+  background: var(--aas-bg); color: var(--aas-text); -webkit-font-smoothing: antialiased;
+  --busy: #e0627a; --tent: #d9a441; --free: #4fb38a;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.root { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* —— top bar —— */
+.bar { flex: none; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--aas-line); background: var(--aas-panel-2); }
+.bar b { font-size: var(--aas-t-lg); color: var(--aas-accent-text); }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--aas-r-md); background: var(--aas-bg); border: 1px solid var(--aas-line); }
+.seg button { padding: 6px 12px; border: 0; border-radius: 7px; background: none; color: var(--aas-muted); white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--aas-accent); color: var(--aas-on-accent); font-weight: 600; }
+.seg.sm button { padding: 3px 10px; font-size: var(--aas-t-sm); }
+.hint { color: var(--aas-muted); font-size: var(--aas-t-sm); }
+.bar .hint { flex: 1 1 300px; }
+
+/* —— layout —— */
+.shell { flex: 1; min-height: 0; display: grid; grid-template-columns: 420px 1fr; }
+.form { overflow: auto; padding: 16px 18px 90px; border-right: 1px solid var(--aas-line); background: var(--aas-panel-2); }
+.main { overflow: auto; padding: 16px 20px 90px; position: relative; }
+.foot {
+  position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 10px; align-items: center; justify-content: flex-end;
+  padding: 12px 20px; border-top: 1px solid var(--aas-line); background: color-mix(in srgb, var(--aas-panel) 94%, transparent); backdrop-filter: blur(8px);
+}
+.foot .sum { margin-right: auto; font-size: var(--aas-t-sm); color: var(--aas-muted); }
+.foot .sum b { color: var(--aas-text); }
+@media (max-width: 980px) {
+  .shell { grid-template-columns: 1fr; overflow: auto; }
+  .form, .main { overflow: visible; }
+  .form { border-right: 0; border-bottom: 1px solid var(--aas-line); padding-bottom: 20px; }
+}
+
+/* —— form —— */
+.f { margin-bottom: 14px; }
+.f > label, .lbl { display: block; font-size: var(--aas-t-sm); color: var(--aas-muted); margin-bottom: 5px; }
+.in, textarea.in, select.in {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--aas-line); border-radius: var(--aas-r-control);
+  background: var(--aas-panel); outline: none;
+}
+.in:focus { border-color: var(--aas-accent-text); box-shadow: var(--aas-focus-ring); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: var(--aas-r-md);
+  border: 1px solid var(--aas-line); background: var(--aas-panel); white-space: nowrap;
+}
+.btn:hover { border-color: var(--aas-line-strong); }
+.btn:active { transform: translateY(1px); }
+.btn.pri { background: var(--aas-accent); border-color: var(--aas-accent); color: var(--aas-on-accent); font-weight: 600; }
+.btn.sm { padding: 4px 9px; font-size: var(--aas-t-sm); }
+.btn.ghost { border-color: transparent; background: none; color: var(--aas-accent-text); padding-inline: 4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* people */
+.who-in { position: relative; }
+.sugg { position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 4px); border: 1px solid var(--aas-line); border-radius: var(--aas-r-md); background: var(--aas-panel); box-shadow: var(--aas-shadow); overflow: hidden; }
+.sugg button { display: flex; gap: 10px; align-items: center; width: 100%; padding: 8px 10px; border: 0; background: none; text-align: left; }
+.sugg button:hover, .sugg button.on { background: var(--aas-accent-bg); }
+.sugg small { color: var(--aas-muted); display: block; }
+.grp { margin-top: 10px; }
+.grp-h { display: flex; align-items: center; gap: 8px; font-size: var(--aas-t-sm); color: var(--aas-muted); margin-bottom: 6px; }
+.grp-h b { color: var(--aas-text); font-weight: 600; }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 3px; border-radius: var(--aas-r-pill);
+  border: 1px solid var(--aas-line); background: var(--aas-panel); font-size: var(--aas-t-sm); max-width: 100%;
+}
+.pill.opt { border-style: dashed; }
+.pill .x { border: 0; background: none; color: var(--aas-muted); padding: 0 2px; }
+.pill .st { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.pill.dl { padding-right: 8px; }
+.av { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-size: 9px; font-weight: 700; flex: none;
+  background: color-mix(in oklch, oklch(0.62 0.09 var(--h, 20)) 30%, var(--aas-panel)); color: color-mix(in oklch, oklch(0.75 0.1 var(--h, 20)) 80%, var(--aas-text)); }
+.dlbox { margin-top: 6px; padding: 8px; border: 1px solid var(--aas-line); border-radius: var(--aas-r-md); background: var(--aas-panel); }
+.dlbox .chips { max-height: 132px; overflow: auto; }
+
+/* agenda */
+.ag { display: grid; grid-template-columns: 1fr 64px 120px 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
+.ag .in { padding: 6px 8px; }
+.ag .del { border: 0; background: none; color: var(--aas-muted); }
+.agsum { font-size: var(--aas-t-sm); margin-top: 4px; }
+.agsum.bad { color: var(--aas-danger); }
+
+/* —— shared right-side bits —— */
+h2 { margin: 0 0 4px; font-size: 1.1rem; }
+.sub { color: var(--aas-muted); font-size: var(--aas-t-sm); margin-bottom: 14px; }
+.toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: var(--aas-t-sm); color: var(--aas-muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
+.sw-busy { background: var(--busy); } .sw-tent { background: repeating-linear-gradient(135deg, var(--tent) 0 3px, transparent 3px 6px); border: 1px solid var(--tent); }
+.sw-oof { background: repeating-linear-gradient(45deg, #8b7fd1 0 3px, transparent 3px 6px); border: 1px solid #8b7fd1; } .sw-nod { background: var(--aas-line); }
+.sw-free { background: color-mix(in srgb, var(--free) 35%, transparent); }
+
+/* A — grid by people */
+.pg { display: grid; grid-template-columns: 240px 1fr; border: 1px solid var(--aas-line); border-radius: var(--aas-r-lg); overflow: hidden; background: var(--aas-panel); }
+.pg-names, .pg-cells { min-width: 0; }
+.pg-cells { overflow-x: auto; position: relative; }
+.pg-hrs, .pg-row { display: grid; grid-template-columns: repeat(20, minmax(26px, 1fr)); height: 30px; }
+.pg-hrs { position: sticky; top: 0; background: var(--aas-panel-2); border-bottom: 1px solid var(--aas-line); font-size: 11px; color: var(--aas-muted); }
+.pg-hrs span { padding: 8px 0 0 3px; border-left: 1px solid var(--aas-line); }
+.pg-hrs span:nth-child(even) { border-left-style: dotted; color: transparent; }
+.pg-name { height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: var(--aas-t-sm); white-space: nowrap; overflow: hidden; border-bottom: 1px solid color-mix(in srgb, var(--aas-line) 50%, transparent); }
+.pg-name .tz { margin-left: auto; font-size: 11px; color: var(--aas-muted); }
+.pg-name.head, .pg-hrs.head { background: var(--aas-panel-2); font-weight: 600; }
+.pg-name.g { color: var(--aas-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; background: var(--aas-bg); }
+.pg-name.g button { border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; padding: 0; }
+.pg-row { border-bottom: 1px solid color-mix(in srgb, var(--aas-line) 50%, transparent); }
+.pg-row.g { background: var(--aas-bg); }
+.pg-row i { margin: 5px 0; border-left: 1px solid color-mix(in srgb, var(--aas-line) 60%, transparent); }
+.c0 { } .c1 { background: repeating-linear-gradient(135deg, var(--tent) 0 3px, transparent 3px 6px); }
+.c2 { background: var(--busy); } .c3 { background: repeating-linear-gradient(45deg, #8b7fd1 0 3px, transparent 3px 6px); } .c4 { background: var(--aas-line); }
+.pg-row.sumrow i { margin: 3px 0; }
+.pg-sel { position: absolute; top: 30px; bottom: 0; border: 2px solid var(--aas-accent); border-radius: 6px; background: color-mix(in srgb, var(--aas-accent) 10%, transparent); cursor: grab; pointer-events: auto; }
+.pg-sel::after { content: attr(data-t); position: absolute; top: -24px; left: -2px; padding: 2px 6px; border-radius: 5px; background: var(--aas-accent); color: var(--aas-on-accent); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.pg-click { position: absolute; inset: 30px 0 0 0; cursor: crosshair; }
+
+/* B — heatmap */
+.hm { display: grid; grid-template-columns: 54px repeat(5, minmax(0, 1fr)); gap: 3px; }
+.hm .dh { text-align: center; font-size: var(--aas-t-sm); color: var(--aas-muted); padding-bottom: 4px; }
+.hm .dh b { display: block; font-size: 1rem; color: var(--aas-text); }
+.hm .dh.best b { color: var(--aas-accent-text); }
+.hm .tm { font-size: 11px; color: var(--aas-muted); text-align: right; padding-right: 6px; line-height: 26px; }
+.hm .tm.half { color: transparent; }
+.hc {
+  position: relative; height: 26px; border: 0; border-radius: 5px; padding: 0 8px; text-align: left; font-size: 11px;
+  background: color-mix(in srgb, var(--busy) calc(var(--r) * 70%), var(--aas-panel)); color: var(--aas-text);
+  font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 6px;
+}
+.hc.zero { background: color-mix(in srgb, var(--free) 28%, var(--aas-panel)); }
+.hc.oof::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: repeating-linear-gradient(45deg, #8b7fd1 0 2px, transparent 2px 7px); opacity: .55; pointer-events: none; }
+.hc.off { background: var(--aas-bg); color: var(--aas-muted); }
+.hc.sel { outline: 2px solid var(--aas-accent); outline-offset: 1px; z-index: 1; }
+.hc.selmid { outline: 2px solid var(--aas-accent); outline-offset: 1px; }
+.hc:hover { filter: brightness(1.15); }
+.hc .ok { font-weight: 700; }
+.tip {
+  position: fixed; z-index: 20; max-width: 280px; padding: 10px 12px; border-radius: var(--aas-r-md); pointer-events: none;
+  background: var(--aas-panel); border: 1px solid var(--aas-line-strong); box-shadow: var(--aas-shadow); font-size: var(--aas-t-sm);
+}
+.tip b { display: block; margin-bottom: 4px; }
+.tip div { color: var(--aas-muted); }
+
+/* C — best options */
+.cons { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px 14px; padding: 12px 14px; border: 1px solid var(--aas-line); border-radius: var(--aas-r-lg); background: var(--aas-panel); margin-bottom: 16px; }
+.chk { display: flex; gap: 8px; align-items: center; font-size: var(--aas-t-sm); }
+.chk input { accent-color: var(--aas-accent); width: 16px; height: 16px; }
+.bo {
+  display: grid; grid-template-columns: 26px 150px 1fr auto; gap: 12px; align-items: center; width: 100%;
+  padding: 12px 14px; margin-bottom: 8px; border: 1px solid var(--aas-line); border-radius: var(--aas-r-lg); background: var(--aas-panel); text-align: left;
+}
+.bo:hover { border-color: var(--aas-line-strong); }
+.bo.on { border-color: var(--aas-accent); box-shadow: inset 0 0 0 1px var(--aas-accent); }
+.bo .rk { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 12px; background: var(--aas-bg); color: var(--aas-muted); }
+.bo.on .rk { background: var(--aas-accent); color: var(--aas-on-accent); }
+.bo .when b { display: block; }
+.bo .when span { font-size: var(--aas-t-sm); color: var(--aas-muted); }
+.bo .why { font-size: var(--aas-t-sm); color: var(--aas-muted); line-height: 1.45; }
+.bo .why strong { color: var(--aas-text); font-weight: 600; }
+.bo .fit { font-size: var(--aas-t-sm); font-weight: 600; white-space: nowrap; }
+.bo .room { display: inline-flex; gap: 4px; align-items: center; margin-top: 3px; font-size: 12px; color: var(--aas-muted); }
+.more-grid { margin-top: 18px; }
+
+/* D — poll */
+.pollgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 1250px) { .pollgrid { grid-template-columns: 1fr; } }
+.card { border: 1px solid var(--aas-line); border-radius: var(--aas-r-lg); background: var(--aas-panel); padding: 14px; }
+.card h3 { margin: 0 0 10px; font-size: var(--aas-t-lg); }
+.pchoice { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid color-mix(in srgb, var(--aas-line) 60%, transparent); font-size: var(--aas-t-sm); }
+.pchoice:last-child { border-bottom: 0; }
+.letter { border-radius: var(--aas-r-md); background: #fff; color: #1f2328; padding: 14px 16px; font-size: 13px; line-height: 1.5; }
+.letter .vb { display: flex; gap: 6px; margin: 4px 0 10px; }
+.letter .vb span { padding: 3px 10px; border-radius: 6px; border: 1px solid #cfd4da; font-size: 12px; }
+.votes { width: 100%; border-collapse: collapse; font-size: var(--aas-t-sm); }
+.votes th, .votes td { padding: 7px 6px; text-align: left; }
+.votes th { color: var(--aas-muted); font-weight: 500; }
+.votes tr + tr td { border-top: 1px solid color-mix(in srgb, var(--aas-line) 60%, transparent); }
+.votes .n { font-variant-numeric: tabular-nums; }
+.votes tr.win td { background: var(--aas-accent-bg); }
+.votes tr.win td:first-child { border-radius: 8px 0 0 8px; } .votes tr.win td:last-child { border-radius: 0 8px 8px 0; }
+.stack { display: flex; height: 8px; border-radius: 4px; overflow: hidden; min-width: 120px; gap: 2px; }
+.stack i { display: block; }
+
+/* modal (preview / tracking) */
+.veil { position: fixed; inset: 0; z-index: 30; background: rgb(0 0 0 / 45%); display: grid; place-items: center; padding: 16px; }
+.sheet { width: min(720px, 100%); max-height: 88dvh; overflow: auto; border-radius: var(--aas-r-lg); background: var(--aas-panel); border: 1px solid var(--aas-line); box-shadow: var(--aas-shadow); padding: 18px 20px; }
+.sheet h3 { margin: 0 0 4px; }
+.sheet .acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.rsp { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+.rsp button { padding: 10px; border-radius: var(--aas-r-md); border: 1px solid var(--aas-line); background: var(--aas-bg); text-align: left; }
+.rsp button[aria-pressed="true"] { border-color: var(--aas-accent); }
+.rsp b { display: block; font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.rsp span { font-size: var(--aas-t-sm); color: var(--aas-muted); }
+.plist { columns: 2 220px; font-size: var(--aas-t-sm); }
+.plist div { display: flex; gap: 8px; align-items: center; padding: 4px 0; break-inside: avoid; }
+.plist em { font-style: normal; color: var(--aas-muted); margin-left: auto; font-size: 12px; }
+.toast { position: fixed; z-index: 40; left: 50%; bottom: 76px; transform: translateX(-50%); padding: 9px 14px; border-radius: var(--aas-r-md); background: var(--aas-panel); border: 1px solid var(--aas-line-strong); box-shadow: var(--aas-shadow); font-size: var(--aas-t-sm); }
+.warn { color: var(--aas-warning-text); }
+[hidden] { display: none !important; }
+@media (prefers-reduced-motion: no-preference) { .bo, .hc, .btn { transition: border-color .15s, filter .15s, transform .1s; } }
+</style>
+</head>
+<body class="theme-bank">
+<div class="root">
+  <div class="bar">
+    <b>Новая встреча</b>
+    <div class="seg" role="group" aria-label="Вариант">
+      <button data-v="C" aria-pressed="true">C · Лучшие варианты</button>
+      <button data-v="B" aria-pressed="false">B · Тепловая карта</button>
+      <button data-v="A" aria-pressed="false">A · По людям</button>
+      <button data-v="D" aria-pressed="false">D · Опрос</button>
+    </div>
+    <div class="hint" id="hint"></div>
+  </div>
+
+  <div class="shell">
+    <!-- shared meeting form -->
+    <div class="form">
+      <div class="f"><label for="ttl">Тема</label><input class="in" id="ttl" value="Ретро по релизу 1.2"></div>
+      <div class="f"><span class="lbl">Длительность</span>
+        <div class="seg sm" id="dur" role="group" aria-label="Длительность">
+          <button data-d="1" aria-pressed="false">30 мин</button><button data-d="2" aria-pressed="true">1 ч</button>
+          <button data-d="3" aria-pressed="false">1,5 ч</button><button data-d="4" aria-pressed="false">2 ч</button></div></div>
+
+      <div class="f"><label for="who">Участники</label>
+        <div class="who-in"><input class="in" id="who" placeholder="Имя, почта или список рассылки" autocomplete="off">
+          <div class="sugg" id="sugg" hidden></div></div>
+        <div class="hint" style="margin-top:4px">Enter добавит обязательным, Shift+Enter опциональным. Попробуйте «b2b» или «перег».</div>
+        <div id="groups"></div>
+      </div>
+
+      <div class="f"><label for="loc">Ссылка на встречу</label>
+        <div class="row2" style="grid-template-columns:1fr auto"><input class="in" id="loc" value="https://telemost.yandex.ru/j/5528190417">
+          <select class="in" id="links" style="width:auto"><option>Мои ссылки…</option><option>Telemost · личная</option><option>KTalk · команда</option></select></div></div>
+
+      <div class="f"><span class="lbl">Повестка</span>
+        <div class="chips" style="margin-bottom:8px">
+          <button class="btn sm" data-tpl="retro">Шаблон «Ретро»</button><button class="btn sm" data-tpl="demo">«Демо»</button><button class="btn sm" data-tpl="daily">«Дейли»</button></div>
+        <div id="agenda"></div>
+        <button class="btn ghost sm" id="agadd">+ пункт</button>
+        <div class="agsum" id="agsum"></div>
+      </div>
+
+      <div class="f"><label for="note">Описание для участников</label>
+        <textarea class="in" id="note" rows="3">Разбираем, что получилось, что нет, и что меняем в процессе к следующему релизу. Доска для заметок будет в ссылке.</textarea></div>
+      <div class="f"><span class="lbl">Вложения</span><button class="btn sm">Прикрепить файл</button> <span class="hint">retro-board.pdf, 1,2 МБ</span></div>
+
+      <div class="f">
+        <div class="row2">
+          <div><label class="lbl" for="rep">Повторять</label><select class="in" id="rep"><option>Не повторять</option><option>Каждую неделю</option><option>Каждые 2 недели</option><option>Каждый месяц</option></select></div>
+          <div><label class="lbl" for="rem">Напомнить</label><select class="in" id="rem"><option>За 5 мин</option><option selected>За 15 мин</option><option>За 1 ч</option><option>Не напоминать</option></select></div>
+        </div>
+      </div>
+      <label class="chk"><input type="checkbox"> Ответ не требуется (информационная встреча)</label>
+      <label class="chk" style="margin-top:6px"><input type="checkbox" checked> Разрешить предлагать другое время</label>
+      <label class="chk" style="margin-top:6px"><input type="checkbox"> Скрыть список участников друг от друга</label>
+    </div>
+
+    <!-- variant area -->
+    <div class="main" id="main"></div>
+  </div>
+
+  <div class="foot">
+    <div class="sum" id="fsum"></div>
+    <button class="btn" id="prev">Предпросмотр приглашения</button>
+    <button class="btn pri" id="send">Отправить приглашение</button>
+  </div>
+</div>
+<div class="tip" id="tip" hidden></div>
+<div id="modal"></div>
+
+<script>
+/* ---------- mock directory ---------- */
+const FIRST = ['Мария', 'Дмитрий', 'Екатерина', 'Алексей', 'Ирина', 'Сергей', 'Анна', 'Павел', 'Ольга', 'Никита', 'Юлия', 'Артём', 'Дарья', 'Игорь', 'Вера', 'Тимур', 'Полина', 'Роман', 'Софья', 'Глеб', 'Алина', 'Максим', 'Ксения', 'Степан', 'Лариса', 'Владислав', 'Марина', 'Кирилл', 'Нина', 'Фёдор'];
+const LAST = ['Соколова', 'Орлов', 'Белова', 'Петров', 'Ковалёва', 'Морозов', 'Лебедева', 'Зайцев', 'Громова', 'Гурьев', 'Нестерова', 'Власов', 'Алиева', 'Кравцов', 'Шубина', 'Мирзоев', 'Тихонова', 'Ларионов', 'Руденко', 'Жуков', 'Фомина', 'Исаев', 'Дёмина', 'Сорокин', 'Ефимова', 'Бойко', 'Панова', 'Чеканов', 'Грекова', 'Мамаджанов'];
+const TZ = {5: '+4 ч', 11: '+4 ч', 19: '+2 ч'};           // people outside Moscow: their clock is shifted
+const hue = s => { let h = 0; for (const ch of s) h = (h * 31 + ch.codePointAt(0)) >>> 0; return h % 360; };
+const P = FIRST.map((f, i) => ({ id: 'p' + i, name: `${f} ${LAST[i]}`, short: `${LAST[i]} ${f[0]}.`, ini: f[0] + LAST[i][0], tz: TZ[i] || '' }));
+const ROOMS = [
+  { id: 'r0', name: 'Переговорная «Байкал», 12 мест', short: 'Байкал · 12', room: true, ini: 'Б' },
+  { id: 'r1', name: 'Переговорная «Эльбрус», 30 мест', short: 'Эльбрус · 30', room: true, ini: 'Э' },
+  { id: 'r2', name: 'Переговорная «Ладога», 8 мест', short: 'Ладога · 8', room: true, ini: 'Л' },
+];
+const DL = { id: 'dl0', name: 'Команда B2B Альфа Селлер', members: P.slice(8, 26).map(p => p.id), dl: true };
+const ALL = [...P, ...ROOMS];
+const byId = id => ALL.find(x => x.id === id);
+
+/* ---------- mock free/busy: Mon 5 – Fri 9 Oct, 09:00–19:00, 20 half-hours a day ---------- */
+const DAYS = [{ d: 5, wd: 'Пн' }, { d: 6, wd: 'Вт' }, { d: 7, wd: 'Ср' }, { d: 8, wd: 'Чт' }, { d: 9, wd: 'Пт' }];
+const SL = 20;
+const tOf = s => `${String(9 + Math.floor(s / 2)).padStart(2, '0')}:${s % 2 ? '30' : '00'}`;
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const FB = {};
+ALL.forEach((x, i) => {
+  const r = rng(i * 7919 + 17), busyP = x.room ? .25 : i < 8 ? .26 : .12;
+  FB[x.id] = DAYS.map((_, di) => {
+    const a = Array(SL).fill(0);
+    for (let s = 0; s < SL;) {
+      const lunch = s >= 8 && s < 10;
+      if (r() < (lunch ? busyP + .25 : busyP)) { const len = 1 + Math.floor(r() * 3), c = r() < .18 ? 1 : 2; for (let k = 0; k < len && s < SL; k++) a[s++] = c; }
+      else s++;
+    }
+    return a;
+  });
+});
+FB.p3[3] = Array(SL).fill(3); FB.p3[4] = Array(SL).fill(3);   // Алексей Петров: вне офиса Чт–Пт
+FB.p21 = FB.p21.map(d => d.map(() => 4));                     // внешний адрес: занятость не отдаётся
+// Keep a clean window so the ranking has a real winner: Wed 11:00–12:00.
+['p0', 'p1', 'p2', 'p4', 'p5', 'p6', 'p7', 'r1'].forEach(id => { FB[id][2][4] = 0; FB[id][2][5] = 0; });
+
+/* ---------- meeting state ---------- */
+const S = {
+  v: 'C', dur: 2,
+  req: ['p0', 'p1', 'p2', 'p4', 'p5', 'p6', 'p7'], opt: ['p3', 'p27', 'p28'], dls: [{ ...DL, open: false, role: 'req' }], rooms: ['r1'],
+  pick: { day: 2, s: 4 }, aDay: 2, collapsed: {},
+  cons: { notBefore10: true, lunch: true, friLate: true, tz: true, room: true, range: 'week' },
+  agenda: [], poll: new Set(), sent: false, filter: 'none',
+};
+const reqPeople = () => [...new Set([...S.req, ...S.dls.filter(d => d.role === 'req').flatMap(d => d.members)])];
+const optPeople = () => S.opt.filter(id => !reqPeople().includes(id));
+const everyone = () => [...reqPeople(), ...optPeople()];
+
+/* ---------- scoring ---------- */
+const codeAt = (id, day, s) => FB[id]?.[day]?.[s] ?? 4;
+const worst = (id, day, s, n) => { let w = 0; for (let k = 0; k < n; k++) { const c = codeAt(id, day, s + k); if (c === 2 || c === 3) return c; if (c === 1) w = Math.max(w, 1); if (c === 4 && w === 0) w = 4; } return w; };
+function slotInfo(day, s, n = S.dur) {
+  const req = reqPeople(), opt = optPeople();
+  const busy = ids => ids.filter(id => [2, 3].includes(worst(id, day, s, n)));
+  const tent = ids => ids.filter(id => worst(id, day, s, n) === 1);
+  const rb = busy(req), ob = busy(opt), rt = tent(req), nd = req.filter(id => worst(id, day, s, n) === 4);
+  const oof = [...rb, ...ob].filter(id => worst(id, day, s, n) === 3);
+  const rooms = ROOMS.filter(r => worst(r.id, day, s, n) === 0);
+  const pen = [];
+  if (S.cons.notBefore10 && s < 2) pen.push('раньше 10:00');
+  if (S.cons.lunch && s < 10 && s + n > 8) pen.push('задевает обед');
+  if (S.cons.friLate && day === 4 && s + n > 14) pen.push('пятница после 16:00');
+  const tzOut = S.cons.tz ? req.filter(id => byId(id).tz === '+4 ч' && s + n > 12) : [];   // 19:00 for them
+  if (tzOut.length) pen.push(`у ${tzOut.length} чел. в Новосибирске позже 19:00`);
+  if (S.cons.room && !rooms.length) pen.push('нет свободной переговорки');
+  const score = rb.length * 10 + rt.length * 3 + ob.length * 2 + pen.length * 6 + (s + n > SL ? 99 : 0);
+  return { rb, ob, rt, nd, oof, rooms, pen, score, req, opt };
+}
+function best(k = 6) {
+  const out = [];
+  DAYS.forEach((_, day) => { for (let s = 0; s + S.dur <= SL; s++) out.push({ day, s, ...slotInfo(day, s) }); });
+  out.sort((a, b) => a.score - b.score || a.day - b.day || a.s - b.s);
+  const picked = [];
+  for (const o of out) { if (picked.every(p => p.day !== o.day || Math.abs(p.s - o.s) >= S.dur)) picked.push(o); if (picked.length === k) break; }
+  return picked;
+}
+const when = (day, s, n = S.dur) => `${DAYS[day].wd}, ${DAYS[day].d} окт. · ${tOf(s)}–${tOf(s + n)}`;
+const names = (ids, max = 3) => { const n = ids.map(id => byId(id).short); return n.length > max ? n.slice(0, max).join(', ') + ` и ещё ${n.length - max}` : n.join(', '); };
+const plural = (n, a, b, c) => { const d = n % 10, h = n % 100; return d === 1 && h !== 11 ? a : d >= 2 && d <= 4 && (h < 12 || h > 14) ? b : c; };
+const av = x => `<span class="av" style="--h:${hue(x.name)}">${x.ini}</span>`;
+const $ = s => document.querySelector(s);
+
+/* ---------- form: people ---------- */
+const stDot = id => { const c = worst(id, S.pick.day, S.pick.s, S.dur); const col = { 0: 'var(--free)', 1: 'var(--tent)', 2: 'var(--busy)', 3: '#8b7fd1', 4: 'var(--aas-line-strong)' }[c];
+  const t = { 0: 'свободен', 1: 'под вопросом', 2: 'занят', 3: 'вне офиса', 4: 'нет данных' }[c]; return `<span class="st" style="background:${col}" title="${t} в выбранное время"></span>`; };
+const pill = (id, role) => { const x = byId(id); return `<span class="pill ${role === 'opt' ? 'opt' : ''}">${av(x)}${x.room ? x.short : x.short}${stDot(id)}<button class="x" data-rm="${id}" data-role="${role}" aria-label="Убрать ${x.name}">×</button></span>`; };
+function renderGroups() {
+  const req = S.req.map(id => pill(id, 'req')).join('');
+  const dls = S.dls.map((d, i) => {
+    const busy = d.members.filter(id => [2, 3].includes(worst(id, S.pick.day, S.pick.s, S.dur))).length;
+    return `<span class="pill dl"><span class="av" style="--h:200">DL</span>${d.name} · ${d.members.length}
+      <button class="x" data-dl="${i}" title="Показать участников">${d.open ? '▴' : '▾'}</button><button class="x" data-rmdl="${i}" aria-label="Убрать список">×</button></span>
+      ${d.open ? `<div class="dlbox"><div class="hint" style="margin-bottom:6px">Список раскрыт: ${d.members.length} чел., в выбранное время заняты ${busy}. Можно убрать лишних или сделать их опциональными.</div>
+        <div class="chips">${d.members.map(id => pill(id, 'dl' + i)).join('')}</div></div>` : ''}`;
+  }).join('');
+  $('#groups').innerHTML = `
+    <div class="grp"><div class="grp-h"><b>Обязательные</b> ${reqPeople().length}</div><div class="chips">${req}${dls}</div></div>
+    <div class="grp"><div class="grp-h"><b>Опциональные</b> ${optPeople().length}</div><div class="chips">${S.opt.map(id => pill(id, 'opt')).join('') || '<span class="hint">нет</span>'}</div></div>
+    <div class="grp"><div class="grp-h"><b>Переговорки</b></div><div class="chips">${S.rooms.map(id => pill(id, 'room')).join('')}
+      <button class="btn sm" data-roomfind>Подобрать свободную</button></div></div>
+    <div class="grp"><div class="grp-h"><b>Недавние</b></div><div class="chips">${['p9', 'p12', 'p17', 'p28'].map(id => { const x = byId(id); return `<button class="pill" data-add="${id}">${av(x)}${x.short}</button>`; }).join('')}</div></div>`;
+}
+function suggest(q) {
+  q = q.trim().toLowerCase(); const box = $('#sugg');
+  if (!q) { box.hidden = true; return; }
+  const hits = [];
+  if ('команда b2b альфа селлер список рассылки'.includes(q) || q.startsWith('b2b')) hits.push({ id: DL.id, name: DL.name, sub: `список рассылки · ${DL.members.length} чел.`, ini: 'DL' });
+  ALL.filter(x => x.name.toLowerCase().includes(q) && !everyone().includes(x.id) && !S.rooms.includes(x.id)).slice(0, 5)
+    .forEach(x => hits.push({ id: x.id, name: x.name, sub: x.room ? 'переговорная' : `${x.name.split(' ')[0].toLowerCase()}.${x.id}@alfabank.ru`, ini: x.ini }));
+  box.innerHTML = hits.map((h, i) => `<button data-add="${h.id}" class="${i ? '' : 'on'}"><span class="av" style="--h:${hue(h.name)}">${h.ini}</span><span>${h.name}<small>${h.sub}</small></span></button>`).join('') || '<div class="hint" style="padding:8px 10px">Никого не нашла. Можно вписать почту целиком.</div>';
+  box.hidden = false;
+}
+function addPerson(id, optional) {
+  if (id === DL.id) { if (!S.dls.length) S.dls.push({ ...DL, open: true, role: 'req' }); }
+  else if (byId(id)?.room) { if (!S.rooms.includes(id)) S.rooms.push(id); }
+  else if (!everyone().includes(id)) (optional ? S.opt : S.req).push(id);
+  $('#who').value = ''; $('#sugg').hidden = true; render();
+}
+
+/* ---------- form: agenda ---------- */
+const TPL = {
+  retro: [['Что получилось', 15, 'p0'], ['Что не получилось', 15, 'p1'], ['Что меняем к следующему релизу', 20, 'p2'], ['Ответственные и сроки', 10, 'p0']],
+  demo: [['Показ фичи', 20, 'p4'], ['Вопросы', 10, 'p0'], ['Решение о запуске', 10, 'p1']],
+  daily: [['Вчера / сегодня / блокеры', 10, ''], ['Разбор блокеров', 5, '']],
+};
+S.agenda = TPL.retro.map(a => [...a]);
+function renderAgenda() {
+  const ppl = reqPeople().slice(0, 12);
+  $('#agenda').innerHTML = S.agenda.map((a, i) => `<div class="ag">
+    <input class="in" data-ag="${i}" data-k="0" value="${a[0]}" aria-label="Пункт ${i + 1}">
+    <input class="in" data-ag="${i}" data-k="1" type="number" min="5" step="5" value="${a[1]}" aria-label="Минут">
+    <select class="in" data-ag="${i}" data-k="2" aria-label="Ответственный"><option value="">Кто ведёт</option>${ppl.map(id => `<option value="${id}" ${a[2] === id ? 'selected' : ''}>${byId(id).short}</option>`).join('')}</select>
+    <button class="del" data-agdel="${i}" aria-label="Удалить пункт">×</button></div>`).join('');
+  paintAgSum();
+}
+function paintAgSum() {
+  const sum = S.agenda.reduce((t, a) => t + (+a[1] || 0), 0), len = S.dur * 30, el = $('#agsum');
+  el.className = 'agsum' + (sum > len ? ' bad' : '');
+  el.textContent = sum > len ? `Пункты занимают ${sum} мин, а встреча ${len}. Сократите повестку или продлите встречу.` : `${sum} из ${len} мин расписано${sum < len ? `, ${len - sum} мин в запасе` : ''}.`;
+}
+
+/* ---------- variants ---------- */
+const HINTS = {
+  C: 'Сначала готовые варианты с объяснением, кто и почему не сможет. Ограничения меняют рейтинг сразу. Сетка ниже по желанию.',
+  B: 'Неделя целиком: в ячейке число занятых обязательных, цвет усиливает, штриховка = отпуск. Наведение покажет, кто именно.',
+  A: 'Строка на человека, получасы дня. Тяните рамку или кликайте по времени. Списки рассылки сворачиваются в одну строку.',
+  D: 'Когда занятость недоступна (Seller, внешние, 50+ человек): отправьте 3–5 вариантов на голосование и выберите победителя.',
+};
+function renderC() {
+  const list = best(6);
+  const c = S.cons;
+  const box = (k, t) => `<label class="chk"><input type="checkbox" data-con="${k}" ${c[k] ? 'checked' : ''}> ${t}</label>`;
+  return `<h2>Лучшие варианты</h2><div class="sub">${reqPeople().length} обязательных, ${optPeople().length} опциональных, ${S.dur * 30} мин, 5–9 октября. Проверено по занятости Exchange.</div>
+    <div class="cons">${box('notBefore10', 'Не раньше 10:00')}${box('lunch', 'Не трогать обед 13–14')}${box('friLate', 'Не в пятницу после 16:00')}${box('tz', 'Учитывать часовые пояса')}${box('room', 'Нужна переговорка')}
+      <label class="chk">Период <select class="in" style="width:auto;padding:3px 6px" data-con="range"><option value="week">эта неделя</option><option>2 недели</option><option>до конца месяца</option></select></label></div>
+    ${list.map((o, i) => {
+      const on = o.day === S.pick.day && o.s === S.pick.s;
+      const free = o.req.length - o.rb.length;
+      const parts = [];
+      parts.push(o.rb.length ? `Заняты обязательные: <strong>${names(o.rb)}</strong>` : `<strong>Все ${o.req.length} обязательных свободны</strong>`);
+      if (o.rt.length) parts.push(`под вопросом: ${names(o.rt, 2)}`);
+      if (o.ob.length) parts.push(`опциональные заняты: ${names(o.ob, 2)}`);
+      if (o.oof.length) parts.push(`в отпуске: ${names(o.oof, 2)}`);
+      if (o.nd.length) parts.push(`нет данных: ${names(o.nd, 2)}`);
+      if (o.pen.length) parts.push(`<span class="warn">${o.pen.join(', ')}</span>`);
+      return `<button class="bo ${on ? 'on' : ''}" data-pick="${o.day},${o.s}">
+        <span class="rk">${i + 1}</span>
+        <span class="when"><b>${DAYS[o.day].wd}, ${DAYS[o.day].d} окт.</b><span>${tOf(o.s)}–${tOf(o.s + S.dur)}</span>
+          ${o.rooms.length ? `<span class="room">${o.rooms[o.rooms.length - 1].short} свободна</span>` : ''}</span>
+        <span class="why">${parts.join('; ')}</span>
+        <span class="fit">${free} / ${o.req.length}</span></button>`;
+    }).join('')}
+    <div class="more-grid"><button class="btn sm" data-v="B">Открыть тепловую карту недели</button> <button class="btn sm" data-v="A">Посмотреть по людям</button></div>`;
+}
+function renderB() {
+  const req = reqPeople().length;
+  const dayBest = DAYS.map((_, d) => Math.min(...Array.from({ length: SL - S.dur + 1 }, (_, s) => slotInfo(d, s).rb.length)));
+  const top = Math.min(...dayBest);
+  const all = []; DAYS.forEach((_, d) => { for (let s = 0; s + S.dur <= SL; s++) { const o = slotInfo(d, s); all.push(o.rb.length + (S.filter === 'opt' ? o.ob.length : 0)); } });
+  const lo = Math.min(...all), hi = Math.max(...all);
+  let h = `<h2>Тепловая карта недели</h2><div class="sub">Число в ячейке: сколько из ${req} обязательных заняты, если начать в это время и идти ${S.dur * 30} мин.</div>
+    <div class="toolbar"><div class="legend"><span><i class="sw-free"></i>все свободны</span><span><i class="sw-busy"></i>чем темнее, тем больше занятых</span><span><i class="sw-oof"></i>кто-то в отпуске</span></div>
+    <span style="margin-left:auto" class="seg sm" role="group" aria-label="Кого учитывать"><button data-hf="none" aria-pressed="${S.filter === 'none'}">Только обязательные</button><button data-hf="opt" aria-pressed="${S.filter === 'opt'}">+ опциональные</button></span></div>
+    <div class="hm"><div></div>${DAYS.map((d, i) => `<div class="dh ${dayBest[i] === top ? 'best' : ''}">${d.wd}<b>${d.d}</b></div>`).join('')}`;
+  for (let s = 0; s < SL; s++) {
+    h += `<div class="tm ${s % 2 ? 'half' : ''}">${tOf(s)}</div>`;
+    DAYS.forEach((_, d) => {
+      if (s + S.dur > SL) { h += `<button class="hc off" disabled>…</button>`; return; }
+      const o = slotInfo(d, s); const n = o.rb.length + (S.filter === 'opt' ? o.ob.length : 0), tot = req + (S.filter === 'opt' ? o.opt.length : 0);
+      const inSel = d === S.pick.day && s >= S.pick.s && s < S.pick.s + S.dur;
+      h += `<button class="hc ${n ? '' : 'zero'} ${o.oof.some(id => S.filter === 'opt' || o.req.includes(id)) ? 'oof' : ''} ${inSel ? 'sel' : ''}" style="--r:${hi > lo ? .08 + .92 * (n - lo) / (hi - lo) : 0}" data-pick="${d},${s}" data-tip="${d},${s}"
+        aria-label="${when(d, s)}: заняты ${n} из ${tot}">${n ? `${n}<span style="opacity:.7">/${tot}</span>` : '<span class="ok">все</span>'}${o.pen.length ? ' <span class="warn" aria-hidden="true">!</span>' : ''}</button>`;
+    });
+  }
+  return h + '</div>';
+}
+function renderA() {
+  const d = S.aDay, rows = [];
+  const grp = (key, title, ids, extra = '') => {
+    if (!ids.length) return;
+    const col = S.collapsed[key];
+    rows.push({ g: true, key, title: `${col ? '▸' : '▾'} ${title} · ${ids.length}${extra}`, ids });
+    if (!col) ids.forEach(id => rows.push({ id }));
+  };
+  grp('req', 'Обязательные', S.req);
+  S.dls.filter(x => x.role === 'req').forEach((x, i) => grp('dl' + i, x.name, x.members.filter(id => !S.req.includes(id))));
+  grp('opt', 'Опциональные', optPeople());
+  grp('room', 'Переговорки', S.rooms);
+  const sumCodes = Array.from({ length: SL }, (_, s) => { const b = reqPeople().filter(id => [2, 3].includes(codeAt(id, d, s))).length; return b; });
+  const reqN = reqPeople().length;
+  const names = [`<div class="pg-name head">${DAYS[d].wd}, ${DAYS[d].d} окт.</div>`, `<div class="pg-name head">Все обязательные</div>`];
+  const cells = [`<div class="pg-hrs">${Array.from({ length: SL }, (_, s) => `<span>${tOf(s)}</span>`).join('')}</div>`,
+    `<div class="pg-row sumrow">${sumCodes.map(b => `<i style="background:${b ? `color-mix(in srgb, var(--busy) ${Math.min(90, 20 + b / reqN * 200)}%, transparent)` : 'color-mix(in srgb, var(--free) 35%, transparent)'}" title="заняты ${b} из ${reqN}"></i>`).join('')}</div>`];
+  rows.forEach(r => {
+    if (r.g) {
+      names.push(`<div class="pg-name g"><button data-col="${r.key}">${r.title}</button></div>`);
+      const agg = Array.from({ length: SL }, (_, s) => r.ids.filter(id => [2, 3].includes(codeAt(id, d, s))).length);
+      cells.push(`<div class="pg-row g">${S.collapsed[r.key] ? agg.map(b => `<i style="background:${b ? `color-mix(in srgb, var(--busy) ${Math.min(90, 15 + b / r.ids.length * 180)}%, transparent)` : 'transparent'}" title="заняты ${b} из ${r.ids.length}"></i>`).join('') : '<i></i>'.repeat(SL)}</div>`);
+    } else {
+      const x = byId(r.id);
+      names.push(`<div class="pg-name">${av(x)}${x.room ? x.short : x.name}${x.tz ? `<span class="tz">${x.tz}</span>` : ''}</div>`);
+      cells.push(`<div class="pg-row">${FB[r.id][d].map(c => `<i class="c${c}"></i>`).join('')}</div>`);
+    }
+  });
+  const on = S.pick.day === d;
+  return `<h2>По людям</h2><div class="sub">Строки с группами сворачиваются. Серая строка «Все обязательные» показывает, где свободно у всех.</div>
+    <div class="toolbar"><div class="seg sm" role="group" aria-label="День">${DAYS.map((x, i) => `<button data-aday="${i}" aria-pressed="${i === d}">${x.wd} ${x.d}</button>`).join('')}</div>
+      <div class="legend"><span><i class="sw-busy"></i>занят</span><span><i class="sw-tent"></i>под вопросом</span><span><i class="sw-oof"></i>вне офиса</span><span><i class="sw-nod"></i>нет данных</span></div></div>
+    <div class="pg"><div class="pg-names">${names.join('')}</div>
+      <div class="pg-cells" id="pgc">${cells.join('')}<div class="pg-click" id="pgclick"></div>
+        ${on ? `<div class="pg-sel" id="pgsel" style="left:${S.pick.s / SL * 100}%;width:${S.dur / SL * 100}%" data-t="${tOf(S.pick.s)}–${tOf(S.pick.s + S.dur)}"></div>` : ''}</div></div>`;
+}
+function renderD() {
+  if (!S.poll.size) best(4).forEach(o => S.poll.add(`${o.day},${o.s}`));
+  const opts = [...S.poll].map(k => k.split(',').map(Number)).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cand = best(8);
+  const tot = everyone().length;
+  const votes = opts.map(([d, s], i) => { const r = rng(d * 31 + s); const yes = Math.round(tot * (.45 + r() * .4)), maybe = Math.round((tot - yes) * r() * .6); return { d, s, yes, maybe, no: Math.max(0, Math.round((tot - yes - maybe) * .5)) }; });
+  const answered = Math.round(tot * .72), win = votes.reduce((a, b) => (b.yes + b.maybe * .5 > a.yes + a.maybe * .5 ? b : a), votes[0]);
+  return `<h2>Опрос по времени</h2><div class="sub">Для групп, где занятость не видна: Seller (Stalwart), внешние участники, большие рассылки.</div>
+    <div class="pollgrid">
+      <div class="card"><h3>Варианты в опросе</h3>
+        ${cand.map(o => { const k = `${o.day},${o.s}`; return `<label class="pchoice"><input type="checkbox" data-poll="${k}" ${S.poll.has(k) ? 'checked' : ''}> <b>${when(o.day, o.s)}</b><span class="hint" style="margin-left:auto">${o.rb.length ? `заняты ${o.rb.length}` : 'все свободны'}</span></label>`; }).join('')}
+        <div class="row2" style="margin-top:10px"><div><span class="lbl">Собрать ответы до</span><select class="in"><option>Пт, 2 окт., 18:00</option><option>Пн, 5 окт., 12:00</option></select></div>
+          <div><span class="lbl">Когда все ответят</span><select class="in"><option>Создать встречу сама</option><option>Спросить меня</option></select></div></div></div>
+      <div class="card"><h3>Так увидят участники</h3><div class="letter"><b>${$('#ttl').value}</b><br>Выберите удобное время, отметьте все подходящие варианты.<br><br>
+        ${opts.map(([d, s]) => `${when(d, s)}<div class="vb"><span>Подходит</span><span>Если нужно</span><span>Не могу</span></div>`).join('')}
+        <span style="color:#66707a;font-size:12px">Ответ уходит одним письмом, приложение соберёт голоса само.</span></div></div>
+      <div class="card" style="grid-column:1/-1"><h3>Ответы: ${answered} из ${tot}</h3>
+        <table class="votes"><tr><th>Время</th><th>Подходит</th><th>Если нужно</th><th>Не могу</th><th></th><th></th></tr>
+        ${votes.map(v => `<tr class="${v === win ? 'win' : ''}"><td><b>${when(v.d, v.s)}</b></td><td class="n">${v.yes}</td><td class="n">${v.maybe}</td><td class="n">${v.no}</td>
+          <td><span class="stack" aria-hidden="true"><i style="flex:${v.yes};background:var(--free)"></i><i style="flex:${v.maybe};background:var(--tent)"></i><i style="flex:${v.no};background:var(--busy)"></i></span></td>
+          <td>${v === win ? `<button class="btn sm pri" data-pick="${v.d},${v.s}" data-win>Назначить</button>` : `<button class="btn sm" data-pick="${v.d},${v.s}">Выбрать</button>`}</td></tr>`).join('')}
+        </table><div class="hint" style="margin-top:8px">Не ответили ${tot - answered}. <button class="btn ghost sm" data-remind>Напомнить им</button></div></div>
+    </div>`;
+}
+
+/* ---------- render ---------- */
+function render() {
+  document.querySelectorAll('.bar .seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === S.v));
+  document.querySelectorAll('#dur button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.d === S.dur));
+  $('#hint').textContent = HINTS[S.v];
+  renderGroups();
+  const keep = $('#main').scrollTop;
+  $('#main').innerHTML = { A: renderA, B: renderB, C: renderC, D: renderD }[S.v]();
+  $('#main').scrollTop = keep;
+  const o = slotInfo(S.pick.day, S.pick.s);
+  $('#fsum').innerHTML = `<b>${when(S.pick.day, S.pick.s)}</b> · свободны ${o.req.length - o.rb.length} из ${o.req.length} обязательных${o.rooms.some(r => S.rooms.includes(r.id)) ? `, ${byId(S.rooms[0]).short} свободна` : S.rooms.length ? ', <span class="warn">переговорка занята</span>' : ''}`;
+  paintAgSum();
+  bindDrag();
+}
+function bindDrag() {
+  const click = $('#pgclick'), sel = $('#pgsel'), cellsEl = $('#pgc'); if (!click) return;
+  const slotAt = x => { const r = cellsEl.getBoundingClientRect(); return Math.max(0, Math.min(SL - S.dur, Math.floor((x - r.left + cellsEl.scrollLeft) / (cellsEl.scrollWidth / SL)))); };
+  click.onclick = e => { S.pick = { day: S.aDay, s: slotAt(e.clientX) }; render(); };
+  if (sel) sel.onpointerdown = e => {
+    sel.setPointerCapture(e.pointerId); const off = slotAt(e.clientX) - S.pick.s;
+    sel.onpointermove = m => { const s = Math.max(0, Math.min(SL - S.dur, slotAt(m.clientX) - off)); if (s !== S.pick.s) { S.pick.s = s; sel.style.left = s / SL * 100 + '%'; sel.dataset.t = `${tOf(s)}–${tOf(s + S.dur)}`; } };
+    sel.onpointerup = () => { sel.onpointermove = null; render(); };
+  };
+}
+function toast(t) { const el = document.createElement('div'); el.className = 'toast'; el.setAttribute('role', 'status'); el.textContent = t; document.body.appendChild(el); setTimeout(() => el.remove(), 2600); }
+
+/* ---------- preview + tracking ---------- */
+function preview() {
+  const o = slotInfo(S.pick.day, S.pick.s);
+  $('#modal').innerHTML = `<div class="veil" data-close><div class="sheet" role="dialog" aria-label="Предпросмотр приглашения">
+    <h3>Так приглашение увидят участники</h3><div class="hint" style="margin-bottom:12px">${everyone().length} адресатов, из них ${optPeople().length} опциональных, плюс ${S.rooms.length} переговорка.</div>
+    <div class="letter"><b style="font-size:15px">${$('#ttl').value}</b><br>${when(S.pick.day, S.pick.s)} (Москва)<br>${S.rooms.map(id => byId(id).name).join(', ')} · <a href="#">${$('#loc').value}</a><br><br>
+      <b>Повестка</b><br>${S.agenda.map((a, i) => `${i + 1}. ${a[0]}, ${a[1]} мин${a[2] ? ` (${byId(a[2]).short})` : ''}`).join('<br>')}<br><br>${$('#note').value}
+      <div class="vb" style="margin-top:12px"><span>Принять</span><span>Под вопросом</span><span>Отклонить</span><span>Предложить другое время</span></div></div>
+    ${o.rb.length ? `<p class="warn">В это время заняты ${o.rb.length} обязательных: ${names(o.rb, 5)}.</p>` : ''}
+    <div class="acts"><button class="btn" data-close>Вернуться</button><button class="btn pri" id="send2">Отправить</button></div></div></div>`;
+}
+let rspFilter = 'none';
+function tracking() {
+  const ids = everyone(), r = rng(99);
+  const st = Object.fromEntries(ids.map(id => { const c = worst(id, S.pick.day, S.pick.s, S.dur); const x = r(); return [id, c === 3 ? 'no' : c === 2 ? (x < .6 ? 'no' : 'tent') : x < .55 ? 'yes' : x < .68 ? 'tent' : x < .74 ? 'no' : 'none']; }));
+  const L = { yes: 'Приняли', tent: 'Под вопросом', no: 'Отклонили', none: 'Не ответили' };
+  const cnt = k => ids.filter(id => st[id] === k).length;
+  const shown = rspFilter === 'none' ? ids.filter(id => st[id] === 'none') : ids.filter(id => st[id] === rspFilter);
+  $('#modal').innerHTML = `<div class="veil" data-close><div class="sheet" role="dialog" aria-label="Ответы участников">
+    <h3>${$('#ttl').value}</h3><div class="hint">${when(S.pick.day, S.pick.s)} · отправлено ${ids.length} участникам</div>
+    <div class="rsp">${Object.keys(L).map(k => `<button data-rsp="${k}" aria-pressed="${rspFilter === k}"><b>${cnt(k)}</b><span>${L[k]}</span></button>`).join('')}</div>
+    <div class="lbl">${L[rspFilter]}: ${shown.length}</div>
+    <div class="plist">${shown.map(id => { const x = byId(id); const why = st[id] === 'no' && worst(id, S.pick.day, S.pick.s, S.dur) === 3 ? 'в отпуске' : st[id] === 'no' ? 'пересечение' : reqPeople().includes(id) ? 'обязательный' : 'опциональный'; return `<div>${av(x)}${x.name}<em>${why}</em></div>`; }).join('')}</div>
+    <div class="acts">${rspFilter === 'none' ? `<button class="btn" data-remind>Напомнить не ответившим (${cnt('none')})</button>` : ''}
+      ${cnt('no') ? `<button class="btn" data-v="C" data-close>Перенести: подобрать время заново</button>` : ''}<button class="btn pri" data-close>Готово</button></div></div></div>`;
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click', e => {
+  const t = e.target.closest('button, [data-close], input[type=checkbox]');
+  if (!t) { if (!e.target.closest('.who-in')) $('#sugg').hidden = true; return; }
+  const d = t.dataset;
+  if (d.close !== undefined && (e.target === t || t.tagName === 'BUTTON')) { $('#modal').innerHTML = ''; if (!d.v) return; }
+  if (d.v) { S.v = d.v; $('#main').scrollTop = 0; return render(); }
+  if (d.d) { S.dur = +d.d; S.pick.s = Math.min(S.pick.s, SL - S.dur); return render(); }
+  if (d.pick) { const [day, s] = d.pick.split(',').map(Number); S.pick = { day, s }; S.aDay = day; if (d.win !== undefined) toast(`Встреча назначена на ${when(day, s)}, приглашения ушли`); return render(); }
+  if (d.add) return addPerson(d.add, e.shiftKey);
+  if (d.rm) { const id = d.rm, role = d.role;
+    if (role === 'req') S.req = S.req.filter(x => x !== id); else if (role === 'opt') S.opt = S.opt.filter(x => x !== id); else if (role === 'room') S.rooms = S.rooms.filter(x => x !== id);
+    else { const dl = S.dls[+role.slice(2)]; dl.members = dl.members.filter(x => x !== id); }
+    return render(); }
+  if (d.dl) { S.dls[+d.dl].open = !S.dls[+d.dl].open; return render(); }
+  if (d.rmdl) { S.dls.splice(+d.rmdl, 1); return render(); }
+  if (d.roomfind !== undefined) { const free = slotInfo(S.pick.day, S.pick.s).rooms; if (free.length) { S.rooms = [free[free.length - 1].id]; toast(`${free[free.length - 1].name}: свободна в это время`); } else toast('В это время все переговорки заняты'); return render(); }
+  if (d.col) { S.collapsed[d.col] = !S.collapsed[d.col]; return render(); }
+  if (d.aday) { S.aDay = +d.aday; return render(); }
+  if (d.hf) { S.filter = d.hf; return render(); }
+  if (d.con) { S.cons[d.con] = t.checked; return render(); }
+  if (d.poll) { t.checked ? S.poll.add(d.poll) : S.poll.delete(d.poll); if (S.poll.size > 5) { S.poll.delete(d.poll); t.checked = false; toast('В опросе не больше 5 вариантов'); } return render(); }
+  if (d.tpl) { S.agenda = TPL[d.tpl].map(a => [...a]); return renderAgenda(); }
+  if (d.agdel) { S.agenda.splice(+d.agdel, 1); return renderAgenda(); }
+  if (t.id === 'agadd') { S.agenda.push(['', 10, '']); return renderAgenda(); }
+  if (t.id === 'prev') return preview();
+  if (t.id === 'send' || t.id === 'send2') { S.sent = true; rspFilter = 'none'; return tracking(); }
+  if (d.rsp) { rspFilter = d.rsp; return tracking(); }
+  if (d.remind !== undefined) return toast('Напоминание отправлено тем, кто не ответил');
+});
+document.addEventListener('change', e => { const d = e.target.dataset; if (d.con === 'range') S.cons.range = e.target.value; });
+document.addEventListener('input', e => {
+  const d = e.target.dataset;
+  if (d.ag) { S.agenda[+d.ag][+d.k] = d.k === '1' ? +e.target.value : e.target.value; paintAgSum(); }
+  if (e.target.id === 'who') suggest(e.target.value);
+});
+$('#who').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return; e.preventDefault();
+  const b = $('#sugg button.on'); if (b) addPerson(b.dataset.add, e.shiftKey);
+});
+// Heatmap hover: who exactly is busy
+document.addEventListener('mouseover', e => {
+  const c = e.target.closest('[data-tip]'), tip = $('#tip');
+  if (!c) { tip.hidden = true; return; }
+  const [d, s] = c.dataset.tip.split(',').map(Number), o = slotInfo(d, s);
+  tip.innerHTML = `<b>${when(d, s)}</b>${o.rb.length ? `<div>Заняты: ${names(o.rb, 6)}</div>` : '<div>Все обязательные свободны</div>'}${o.ob.length ? `<div>Опциональные: ${names(o.ob, 4)}</div>` : ''}${o.oof.length ? `<div>В отпуске: ${names(o.oof)}</div>` : ''}${o.pen.length ? `<div class="warn">${o.pen.join(', ')}</div>` : ''}<div>${o.rooms.length ? `Свободно: ${o.rooms.map(r => r.short).join(', ')}` : 'Переговорки заняты'}</div>`;
+  const r = c.getBoundingClientRect(); tip.style.left = Math.min(innerWidth - 300, r.right + 8) + 'px'; tip.style.top = Math.max(8, r.top - 10) + 'px'; tip.hidden = false;
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#modal').innerHTML = ''; });
+
+const hv = location.hash.slice(1); if ('ABCD'.includes(hv || '-')) S.v = hv;
+{ const b = best(1)[0]; S.pick = { day: b.day, s: b.s }; S.aDay = b.day; }
+renderAgenda(); render();
+if (location.hash === '#track') tracking();
+if (location.hash === '#preview') preview();
+</script>
+</body>
+</html>
