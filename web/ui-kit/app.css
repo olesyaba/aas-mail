@@ -1258,6 +1258,12 @@ kbd {
 /* Event card and invitation: answer first, as one segmented control */
 .aas-evwhen { display: flex; align-items: center; gap: 6px; font-weight: 500; }
 .aas-evtop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* Reply / reply all / forward on the meeting card: quiet ghost buttons with the mail icons,
+   a step below the RSVP segment and the primary «Подключиться». */
+.aas-evmail { display: flex; flex-wrap: wrap; gap: 2px; margin-left: -10px; }
+.aas-evmail .aas-btn { color: var(--aas-muted); }
+.aas-evmail .aas-btn:hover:not(:disabled) { color: var(--aas-text); background: var(--aas-panel-2); border-color: transparent; }
+.aas-evmail .aas-btn:focus-visible { outline: 2px solid var(--aas-accent-text); outline-offset: 1px; }
 .aas-evtop #evjoin { margin-left: auto; }
 .aas-rsvpseg {
   display: inline-flex;

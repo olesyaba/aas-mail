@@ -457,9 +457,11 @@ function mountScheduler(box) {
     const known = new Set([...(prefs.rooms || []).flatMap(r => [r.address, r.name]),
       ...ppl.filter(p => p.role === 'room' || p.role === 'cand').map(p => p.address)]
       .map(a => String(a || '').toLowerCase()).filter(Boolean));
-    const unres = (S.data.unresolved || []).map(u => u.query)
-      .filter(q => q && !known.has(String(q).toLowerCase()));
+    const open = (S.data.unresolved || []).filter(u => u.query && !known.has(String(u.query).toLowerCase()));
+    // Several matches in the directory is not «not found»: ask to pick the person instead.
+    const many = open.filter(u => u.count > 1).map(u => u.query), unres = open.filter(u => !(u.count > 1)).map(u => u.query);
     return `<div class="aas-sched__cons">${ck('not_before_10', 'Не раньше 10:00')}${ck('lunch', 'Не трогать обед 13–14')}${ck('fri_late', 'Не в пятницу после 16:00')}${ppl.some(p => p.role === 'room') || (prefs.rooms || []).length ? ck('room', 'Нужна свободная переговорка') : ''}</div>
+      ${many.length ? `<div class="aas-avline hint">${avDot('warn')}В каталоге несколько человек: ${esc(many.join(', '))}. Выберите нужного из подсказки — пока их занятость не учтена.</div>` : ''}
       ${unres.length ? `<div class="aas-avline hint">${avDot('')}Не нашла в каталоге: ${esc(unres.join(', '))}. Их занятость не учтена.</div>` : ''}
       ${list.length ? list.map((o, i) => {
         const st = slotDate(o.day, o.s), en = new Date(+st + cu.ms), room = o.rooms[0];
@@ -552,7 +554,7 @@ function mountScheduler(box) {
     let body;
     if ($('#eall')?.checked) body = empty('Для события на весь день время подбирать не нужно.');
     else if (!invited(roleList())) body = empty('Добавьте участников — покажу свободное время.');
-    else if (S.err) body = `<div class="aas-sched__empty">Занятость участников недоступна: ${esc(S.err)}. <button type="button" class="aas-linkbtn" data-retry>Повторить</button></div><div class="aas-sched__own"></div>`;
+    else if (S.err) body = `<div class="aas-sched__empty">Занятость участников недоступна: ${esc(S.err.replace(/[.\s]+$/, ''))}. <button type="button" class="aas-linkbtn" data-retry>Повторить</button></div><div class="aas-sched__own"></div>`;
     else if (!S.data) body = `<div class="aas-sched__skel" aria-busy="true" aria-label="Загружаю занятость">${'<i></i>'.repeat(5)}</div>`;
     else body = S.tab === 'grid' ? gridHtml() : bestHtml();
     box.innerHTML = head + body;
@@ -3151,6 +3153,14 @@ function eventView(e) {
     return `<button class="aas-btn ${on ? 'on' : ''}" data-r="${code}" aria-pressed="${on}" ${on ? 'title="Ваш текущий ответ"' : ''}>${on ? icon('check', 14) : ''}${label}</button>`;
   };
   const link = e._join ?? joinURL(e.location, e.body);
+  // Writing about the meeting: the same actions and icons as under a letter, kept quiet
+  // (ghost) so they never compete with the answer (Принять / Отклонить) or «Подключиться».
+  const others = att.filter(a => a.address && a.address.toLowerCase() !== me.toLowerCase());
+  const mailActs = [
+    ...(!iAmOrg && orgAddr ? [['reply', 'replyOne', 'Ответить', 'Письмо организатору, без ответа на приглашение']] : []),
+    ...(others.length > 1 || (iAmOrg && others.length) ? [['replyall', 'replyAll', 'Ответить всем', 'Письмо всем участникам']] : []),
+    ...(e.meeting_status !== 'cancelled' ? [['fwd', 'fwd', 'Переслать', 'Переслать приглашение в календарь']] : []),
+  ];
   const el = openModal(`<h3>${esc(evTitle(e))}${e.is_recurring ? '<span class="aas-pill">серия</span>' : ''}${canRespond ? '<span class="aas-pill">встреча</span>' : ''}${e.meeting_status === 'cancelled' ? '<span class="aas-pill aas-pill--cancel">отменена</span>' : ''}</h3>
     ${(e.categories || []).length ? `<div class="f aas-cats">${catChips(e.categories)}</div>` : ''}
     <div class="f aas-evwhen">${icon('clock', 14)} ${esc(fmtRange(e.s, e.e, e.is_all_day))}${e.is_recurring ? ', повторяется' : ''}</div>
@@ -3158,6 +3168,8 @@ function eventView(e) {
       ${link ? `<a class="aas-btn aas-btn--primary" id="evjoin" href="${esc(link)}" target="_blank" rel="noopener noreferrer" title="Открыть ссылку встречи в браузере: ${esc(link)}">Подключиться</a>` : ''}</div>` : ''}
     ${canRespond && !['accepted', 'tentative', 'declined'].includes(my) ? '<div class="hint aas-hint-tight">Вы ещё не ответили организатору</div>' : ''}
     ${canRespond ? rsvpNoteHtml() : ''}
+    ${mailActs.length ? `<div class="f aas-evmail" role="group" aria-label="Написать по встрече">${mailActs.map(([m, ic, label, tip]) =>
+      `<button type="button" class="aas-btn aas-btn--ghost aas-btn--sm" data-mail="${m}" title="${tip}">${icon(ic, 14)}${label}</button>`).join('')}</div>` : ''}
     <dl class="f aas-evfacts">
       ${e.location ? `<dt>Где</dt><dd>${linkify(esc(e.location))}</dd>` : ''}
       ${e.organizer ? `<dt>Организатор</dt><dd>${esc(whoFull(e.organizer))}</dd>` : ''}
@@ -3166,11 +3178,9 @@ function eventView(e) {
     ${e.body ? `<div class="f"><label>Описание</label>${evBodyHtml(e.body)}</div>` : ''}
     <div class="aas-modal__hacts"><button type="button" class="aas-btn aas-btn--ghost aas-btn--icon" id="evmore" aria-haspopup="menu" title="Ещё" aria-label="Ещё действия">${icon('more')}</button><button type="button" class="aas-btn aas-btn--ghost aas-btn--icon" id="evclose" title="Закрыть (Esc)" aria-label="Закрыть">${icon('x')}</button></div>`);
   $('#evclose').onclick = closeModal;
-  // Rare actions live behind «•••»: the card is for reading and answering.
+  // Rare actions live behind «•••»: the card is for reading, answering and writing.
+  el.querySelectorAll('[data-mail]').forEach(b => b.onclick = () => eventMailForm(e, b.dataset.mail));
   $('#evmore').onclick = () => openMenu($('#evmore'), [
-    {label: 'Ответить письмом', run: () => eventMailForm(e, 'reply')},
-    {label: 'Ответить всем письмом', run: () => eventMailForm(e, 'replyall')},
-    {label: 'Переслать приглашение…', run: () => eventMailForm(e, 'fwd')},
     {label: 'Изменить', run: () => eventForm(e)},
     {label: iAmOrg && isMeeting ? 'Отменить встречу' : 'Удалить', danger: true, run: removeEvent},
   ]);
