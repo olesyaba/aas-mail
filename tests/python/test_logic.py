@@ -1127,6 +1127,25 @@ class ThrottleAndAuthTest(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertGreater(a.unread_sweep_ts, time.time() + webapp._SWEEP_BACKOFF_S - 5)
 
+class AttendeeTypesTest(unittest.TestCase):
+    def test_roles_become_attendee_types(self):
+        from outlook_activesync_mcp.wbxml import find, find_all, text_of
+        webapp._patch_attendee_types()
+        webapp._ATT.types = {"opt@x.ru": "optional", "room@x.ru": "resource"}
+        try:
+            node = cal_cmd._attendees_block(["a@x.ru", "Opt@x.ru", {"address": "room@x.ru", "name": "Байкал"}])
+        finally:
+            webapp._ATT.types = {}
+        codes = [text_of(find(x, "Calendar", "AttendeeType")) for x in find_all(node, "Calendar", "Attendee")]
+        self.assertEqual(codes, ["1", "2", "3"])
+
+    def test_call_scopes_roles_to_one_request(self):
+        seen = {}
+        with mock.patch.object(webapp, "_call_locked", lambda *args: seen.update(webapp._ATT.types) or {"ok": True}):
+            webapp.call(make_acct(), "events", {"action": "create", "attendees": ["o@x.ru"],
+                                                "attendee_types": {"O@x.ru": "optional", "b@x.ru": "boss"}})
+        self.assertEqual(seen, {"o@x.ru": "optional"})
+        self.assertEqual(getattr(webapp._ATT, "types", {}), {})
 
 if __name__ == "__main__":
     unittest.main()

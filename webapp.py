@@ -635,6 +635,7 @@ def call(a: Acct, domain: str, params: dict) -> dict:
     mod = mods.get(domain)
     action = params.pop("action", None)
     cache_only = bool(params.pop("cache_only", False))
+    roles = params.pop("attendee_types", None) if domain == "events" else None
     if domain == "mail" and action == "list" and cache_only:
         return mail_cached_list(a, params)
     if mod is None or not action:
@@ -669,8 +670,11 @@ def call(a: Acct, domain: str, params: dict) -> dict:
     if not backend.lock.acquire(timeout=LOCK_WAIT_WRITE_S if write else LOCK_WAIT_S):
         return _busy_answer(a, domain, action, params)
     try:
+        _ATT.types = ({str(k).lower(): v for k, v in roles.items() if v in _ATT_TYPE_CODE}
+                      if isinstance(roles, dict) else {})
         return _call_locked(a, backend, mod, domain, action, params)
     finally:
+        _ATT.types = {}
         backend.lock.release()
 
 
@@ -2031,7 +2035,8 @@ def _cal_after_write(a: Acct, params: dict, res: dict) -> None:
             if params.get("end"):
                 patch["end"] = str(params["end"]).replace("T", " ")[:16]
             if params.get("attendees") is not None:
-                patch["attendees"] = [{"address": x} for x in params["attendees"]]
+                patch["attendees"] = [{"address": x, "type": (params.get("attendee_types") or {}).get(x, "required")}
+                                      for x in params["attendees"]]
             overrides[iid] = (now, {**overrides.get(iid, (0, {}))[1], **patch})
         elif action == "create" and params.get("start"):
             made = (res.get("items") or [{}])[0]
@@ -2045,7 +2050,7 @@ def _cal_after_write(a: Acct, params: dict, res: dict) -> None:
                 "busy_status": "busy", "is_recurring": bool(params.get("repeat")),
                 "meeting_status": "meeting" if att else "appointment", "response_type": "organizer",
                 "organizer": {"name": a.name, "address": a.email},
-                "attendees": [{"address": x} for x in att],
+                "attendees": [{"address": x, "type": (params.get("attendee_types") or {}).get(x, "required")} for x in att],
             })
     if action in ("create", "update"):
         cal_refresh_bg(a, force=True)  # converge on the server's version in the background
@@ -3201,6 +3206,42 @@ def _patch_calendar_attendees():
     mapping.parse_event = wrapped
 
 
+# Roles for the attendees of the one events create/update running on this thread:
+# {address (lower case): "optional" | "resource"}. Set by call() under the account
+# lock, read by the patched _attendees_block (thread-local: two accounts may write at once).
+_ATT = threading.local()
+_ATT_TYPE_CODE = {"optional": "2", "resource": "3"}
+
+
+def _patch_attendee_types():
+    """Upstream writes every attendee as Required (AttendeeType 1): honour the
+    roles the editor sends in ``attendee_types`` (optional → 2, room → 3), so
+    Outlook shows «необязательный» and the room books itself."""
+    try:
+        from outlook_activesync_mcp.commands import calendar
+        from outlook_activesync_mcp.wbxml import el
+    except ImportError:
+        return
+    if getattr(calendar._attendees_block, "_eas_types_patched", False):
+        return
+
+    def block(attendees):
+        roles = getattr(_ATT, "types", None) or {}
+        people = []
+        for a in attendees:
+            email = a if isinstance(a, str) else (a.get("address") or a.get("email"))
+            name = email if isinstance(a, str) else (a.get("name") or email)
+            people.append(el("Calendar", "Attendee",
+                             el("Calendar", "AttendeeEmail", text=email),
+                             el("Calendar", "AttendeeName", text=name),
+                             el("Calendar", "AttendeeType",
+                                text=_ATT_TYPE_CODE.get(roles.get(str(email).lower(), ""), "1"))))
+        return el("Calendar", "Attendees", *people)
+
+    block._eas_types_patched = True  # type: ignore[attr-defined]
+    calendar._attendees_block = block
+
+
 def _patch_event_update_attendees():
     """Upstream events/update ignores ``attendees``. Extend Sync Change so the
     organizer can add/remove people and Exchange re-sends the invite."""
@@ -3653,6 +3694,7 @@ def main():
     _patch_moveitems_status()
     _patch_calendar_attendees()
     _patch_event_update_attendees()
+    _patch_attendee_types()
     _patch_message_date()
     _patch_unreachable_fail_fast()  # last: wraps the other command patches
     _write_runtime_token()
