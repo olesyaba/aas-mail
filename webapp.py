@@ -44,7 +44,7 @@ MAX_BODY = 40 * 1024 * 1024
 # Product identity (About page + UI chrome).
 APP_META = {
     "name": "AAS mail",
-    "version": "1.2.27",
+    "version": "1.2.28",
     "description": "Локальный клиент почты и календаря Alfa / Alfa-Seller поверх Exchange ActiveSync.",
     "contact_mm": "@olesya_ba",
     "thanks_intro": "Спасибо за тест-рейды и светлые идеи:",
@@ -647,6 +647,8 @@ def call(a: Acct, domain: str, params: dict) -> dict:
         return folder_create(a, params.get("name") or "", params.get("parent_id") or "0")
     if domain == "events" and action == "respond":
         return respond_event(a, params)
+    if domain == "events" and action == "forward":
+        return forward_event(a, params)
     if domain == "folders" and action == "delete":
         return folder_delete(a, params.get("folder_id") or "")
     if domain == "folders" and action == "list":
@@ -1461,22 +1463,29 @@ def send_invites(a: Acct, p: dict, attendees: list[str]) -> list[str]:
         return (t or "").replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\r", "").replace("\n", "\\n")
 
     day = bool(p.get("all_day"))
+    uid = (p.get("uid") or "").strip() or f"{uuid.uuid4()}@eas-mail"
+    note = (p.get("note") or "").strip()
+    desc = ((note + "\n\n") if note else "") + (p.get("body") or "")
     lines = ["BEGIN:VCALENDAR", "PRODID:-//eas-mail//RU", "VERSION:2.0", "METHOD:REQUEST", "BEGIN:VEVENT",
-             f"UID:{uuid.uuid4()}@eas-mail", f"DTSTAMP:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
+             f"UID:{uid}", f"DTSTAMP:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
              f"DTSTART{';VALUE=DATE' if day else ''}:{utc(p['start'])}", f"DTEND{';VALUE=DATE' if day else ''}:{utc(p['end'])}",
              f"SUMMARY:{esc(p.get('subject') or '(без темы)')}", f"ORGANIZER;CN={esc(a.name)}:mailto:{me}"]
     if p.get("location"):
         lines.append(f"LOCATION:{esc(p['location'])}")
-    if p.get("body"):
-        lines.append(f"DESCRIPTION:{esc(p['body'])}")
+    if desc:
+        lines.append(f"DESCRIPTION:{esc(desc)}")
     lines += [f"ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:{x}" for x in to]
     lines += ["SEQUENCE:0", "STATUS:CONFIRMED", "END:VEVENT", "END:VCALENDAR"]
     m = EmailMessage()
     m["From"], m["To"] = me, ", ".join(to)
     m["Subject"] = "Приглашение: " + (p.get("subject") or "(без темы)")
     m["Date"], m["Message-ID"] = formatdate(localtime=True), make_msgid(domain="eas-mail")
-    m.set_content(f"{a.name} приглашает вас на встречу «{p.get('subject') or ''}»\n{p['start'].replace('T', ' ')} – {p['end'].replace('T', ' ')}\n"
-                  + (f"\n{p['location']}\n" if p.get("location") else "") + (f"\n{p['body']}\n" if p.get("body") else ""))
+    plain = ((note + "\n\n") if note else "") + (
+        f"{a.name} приглашает вас на встречу «{p.get('subject') or ''}»\n"
+        f"{p['start'].replace('T', ' ')} – {p['end'].replace('T', ' ')}\n"
+        + (f"\n{p['location']}\n" if p.get("location") else "")
+        + (f"\n{p['body']}\n" if p.get("body") else ""))
+    m.set_content(plain)
     m.add_alternative("\r\n".join(lines) + "\r\n", subtype="calendar", params={"method": "REQUEST", "charset": "UTF-8"})
     _send_mime(a, m.as_bytes())
     return to
@@ -2927,11 +2936,113 @@ def _reply_to(client, *, item_id=None, body="", to=None, cc=None, reply_all=Fals
     return envelope("reply", [item])
 
 
+def _event_invite_payload(ev: dict, *, note: str = "") -> dict:
+    """Fields `send_invites` needs, taken from a cached calendar row."""
+    start = str(ev.get("start") or "").replace(" ", "T")[:16]
+    end = str(ev.get("end") or start).replace(" ", "T")[:16]
+    return {
+        "subject": ev.get("subject") or "",
+        "start": start, "end": end,
+        "location": ev.get("location") or "",
+        "body": ev.get("body") or "",
+        "all_day": bool(ev.get("is_all_day")),
+        "note": note,
+    }
+
+
+def _uniq_emails(addrs: list[str]) -> list[str]:
+    seen, out = set(), []
+    for x in addrs:
+        a = (x or "").strip()
+        k = a.lower()
+        if not a or "@" not in a or k in seen:
+            continue
+        seen.add(k)
+        out.append(a)
+    return out
+
+
+def forward_event(a: Acct, params: dict) -> dict:
+    """Forward a meeting as an iMIP invitation to the addresses the user picks.
+
+    Organizer: add people on the server (Exchange notifies; Seller also gets a
+    METHOD:REQUEST mail). Attendee: send a new invitation from yourself with the
+    same time/place — Outlook-style «переслать встречу»."""
+    item_id = params.get("item_id") or ""
+    to = _uniq_emails([x for x in (params.get("to") or []) if isinstance(x, str)])
+    note = str(params.get("body") or "").strip()
+    if not item_id:
+        return {"ok": False, "action": "forward", "count": 0, "items": [], "error": "bad_request",
+                "message": "не указана встреча"}
+    if not to:
+        return {"ok": False, "action": "forward", "count": 0, "items": [], "error": "bad_request",
+                "message": "Укажите получателя"}
+    if time.time() < a.send_down_until:
+        return {"ok": False, "action": "forward", "count": 0, "items": [], "error": "send_down",
+                "message": str(_send_down_error(a))}
+    ev = _cal_item(a, item_id=item_id)
+    if not ev:
+        return {"ok": False, "action": "forward", "count": 0, "items": [], "error": "not_found",
+                "message": "встреча не найдена в календаре — обновите календарь"}
+    payload = _event_invite_payload(ev, note=note)
+    if not payload["start"] or not payload["end"]:
+        return {"ok": False, "action": "forward", "count": 0, "items": [], "error": "bad_request",
+                "message": "у встречи нет времени — переслать нельзя"}
+    me = (a.email or "").lower()
+    org = ((ev.get("organizer") or {}).get("address") or "").lower()
+    i_am_org = ev.get("response_type") == "organizer" or (bool(org) and org == me)
+    new_to = [x for x in to if x.lower() != me]
+    if not new_to:
+        return {"ok": False, "action": "forward", "count": 0, "items": [], "error": "bad_request",
+                "message": "Укажите получателя кроме себя"}
+
+    if i_am_org:
+        existing = [x.get("address") for x in (ev.get("attendees") or []) if x.get("address")]
+        have = {x.lower() for x in existing}
+        only_new = [x for x in new_to if x.lower() not in have]
+        merged = _uniq_emails([*existing, *new_to])
+        types = {((x.get("address") or "").lower()): (x.get("type") or "required")
+                 for x in (ev.get("attendees") or []) if x.get("address")}
+        for x in only_new:
+            types.setdefault(x.lower(), "required")
+        upd = call(a, "events", {"action": "update", "item_id": item_id, "attendees": merged,
+                                 "attendee_types": types})
+        if not upd.get("ok", True):
+            return {**upd, "action": "forward"}
+        # Seller does not mail invites on update; Bank/Exchange does.
+        sent = send_invites(a, payload, only_new) if a.green and only_new else []
+        return {"ok": True, "action": "forward", "count": len(only_new) or len(new_to),
+                "via": "update" + ("+mail" if sent else ""),
+                "items": [{"item_id": item_id, "to": only_new or new_to, "sent": sent}]}
+
+    try:
+        sent = send_invites(a, payload, new_to)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "action": "forward", "count": 0, "items": [],
+                "error": type(e).__name__, "message": _friendly_error(a, "mail", "send", e)}
+    return {"ok": True, "action": "forward", "count": len(sent), "via": "mail",
+            "items": [{"item_id": item_id, "to": sent, "sent": sent}]}
+
+
+def _trash_invite_mail(a: Acct, item_id: str) -> bool:
+    """After RSVP, move the invitation letter to Deleted (Outlook does the same)."""
+    if not item_id:
+        return False
+    try:
+        r = call(a, "mail", {"action": "delete", "item_ids": [item_id]})
+        ok = r.get("ok", True) and not r.get("error")
+        if not ok:
+            log.info("[%s] invite %s not moved to Deleted: %s", a.id, item_id[:24], r.get("message") or r.get("error"))
+        return bool(ok)
+    except Exception as e:  # noqa: BLE001 — answer already sent; trash is best-effort
+        log.info("[%s] invite %s not moved to Deleted: %s", a.id, item_id[:24], e)
+        return False
+
+
 def respond_event(a: Acct, params: dict) -> dict:
     """RSVP from the calendar (web/tray). Exchange's MeetingResponse first; if the
     server refuses it (status 2/3 were seen live), answer the organizer by mail so
     the answer still goes through instead of an error."""
-    from outlook_activesync_mcp.commands import calendar
     item_id, response = params.get("item_id") or "", str(params.get("response") or "").lower()
     if response not in _RSVP_WORD:
         return {"ok": False, "action": "respond", "count": 0, "items": [], "error": "bad_request",
@@ -2968,11 +3079,11 @@ def respond_event(a: Acct, params: dict) -> dict:
 def invite_respond(a: Acct, item_id: str, response: str, note: str = "") -> dict:
     """Accept / tentative / decline an invitation right from the mail. Exchange's
     MeetingResponse (updates your calendar and notifies the organizer) first; if the
-    server can't do it, fall back to a standard iTIP reply by mail."""
+    server can't do it, fall back to a standard iTIP reply by mail. On success the
+    invitation letter is moved to Deleted, like in Outlook."""
     response = str(response or "").lower()
     if response not in ("accept", "tentative", "decline"):
         return {"ok": False, "error": "bad_request", "message": "ответ: accept, tentative или decline"}
-    from outlook_activesync_mcp.commands import calendar
     backend = a.get()
 
     note = str(note or "").strip()
@@ -2995,9 +3106,13 @@ def invite_respond(a: Acct, item_id: str, response: str, note: str = "") -> dict
             log.info("[%s] MeetingResponse on %s failed: %s", a.id, target[:12], e)
             return False
 
-    if meeting_response(item_id):  # the invitation letter itself
+    def done(via: str, **extra) -> dict:
         cal_refresh_bg(a)
-        return {"ok": True, "via": "server"}
+        trashed = _trash_invite_mail(a, item_id)
+        return {"ok": True, "via": via, "trashed": trashed, **extra}
+
+    if meeting_response(item_id):  # the invitation letter itself
+        return done("server")
     # Same meeting in the calendar (matched by iCalendar UID) — Exchange accepts
     # answers on the calendar item even when it refuses them on the letter.
     try:
@@ -3006,8 +3121,7 @@ def invite_respond(a: Acct, item_id: str, response: str, note: str = "") -> dict
         invite = None
     ev = _cal_item(a, uid=invite["uid"]) if invite and invite.get("uid") else None
     if ev and meeting_response(ev["item_id"]):
-        cal_refresh_bg(a)
-        return {"ok": True, "via": "server"}
+        return done("server")
     res = {"message": "сервер не принял ответ"}
     try:
         org = _send_imip_reply(a, item_id, response, note)
@@ -3015,7 +3129,7 @@ def invite_respond(a: Acct, item_id: str, response: str, note: str = "") -> dict
         return {"ok": False, "error": "respond_failed", "message": res.get("message") or str(e)}
     if ev:
         _rsvp_remember(a, ev["item_id"], response)
-    return {"ok": True, "via": "mail", "organizer": org}
+    return done("mail", organizer=org)
 
 
 def render_message(a: Acct, item_id: str, has_att: bool = False) -> dict:

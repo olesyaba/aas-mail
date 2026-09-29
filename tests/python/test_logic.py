@@ -698,14 +698,17 @@ class InvitationInMailTest(unittest.TestCase):
 
     def test_respond_via_server(self):
         with mock.patch.object(cal_cmd, "handle", return_value={"ok": True, "items": [{}]}) as h, \
-             mock.patch.object(webapp, "cal_refresh_bg"):
+             mock.patch.object(webapp, "cal_refresh_bg"), \
+             mock.patch.object(webapp, "_trash_invite_mail", return_value=True) as trash:
             r = webapp.invite_respond(self.a, "14:1", "accept")
-        self.assertEqual(r, {"ok": True, "via": "server"})
+        self.assertEqual((r["ok"], r["via"], r["trashed"]), (True, "server", True))
         self.assertEqual(h.call_args.kwargs["item_id"], "14:1")
+        trash.assert_called_once_with(self.a, "14:1")
 
     def test_falls_back_to_itip_reply_by_mail(self):
         from outlook_activesync_mcp.errors import EasStatusError
-        with mock.patch.object(cal_cmd, "handle", side_effect=EasStatusError("MeetingResponse", 2, "x")):
+        with mock.patch.object(cal_cmd, "handle", side_effect=EasStatusError("MeetingResponse", 2, "x")), \
+             mock.patch.object(webapp, "_trash_invite_mail", return_value=True):
             r = webapp.invite_respond(self.a, "14:1", "tentative")
         self.assertEqual((r["ok"], r["via"], r["organizer"]), (True, "mail", "VDGrekova@alfabank.ru"))
         sent = webapp.parse_raw(self.a.backend.sent[0])
@@ -718,6 +721,56 @@ class InvitationInMailTest(unittest.TestCase):
 
     def test_bad_response_rejected(self):
         self.assertEqual(webapp.invite_respond(self.a, "14:1", "maybe")["error"], "bad_request")
+
+    def test_rsvp_moves_invite_mail_to_deleted(self):
+        with mock.patch.object(cal_cmd, "handle", return_value={"ok": True, "items": [{}]}), \
+             mock.patch.object(webapp, "cal_refresh_bg"), \
+             mock.patch.object(webapp, "call", return_value={"ok": True, "action": "delete"}) as call:
+            r = webapp.invite_respond(self.a, "14:1", "decline")
+        self.assertTrue(r["trashed"])
+        call.assert_called_once_with(self.a, "mail", {"action": "delete", "item_ids": ["14:1"]})
+
+
+class ForwardEventTest(unittest.TestCase):
+    def setUp(self):
+        today = date.today()
+        self.a = make_acct(email="me@bank.test")
+        self.a.cal.update(
+            loaded=True, ts=time.time(),
+            range=(today - timedelta(days=7), today + timedelta(days=60)),
+            items=[{"item_id": "20:9", "uid": "meet-1", "subject": "План",
+                    "start": "2026-10-01 10:00", "end": "2026-10-01 11:00",
+                    "start_iso": "2026-10-01T07:00:00Z", "location": "Байкал",
+                    "body": "повестка", "response_type": "accepted",
+                    "organizer": {"name": "Org", "address": "org@bank.test"},
+                    "attendees": [{"address": "me@bank.test", "type": "required"}]}])
+
+    def test_attendee_forward_sends_imip(self):
+        r = webapp.forward_event(self.a, {"item_id": "20:9", "to": ["x@y.test", "me@bank.test"],
+                                          "body": "посмотри, пожалуйста"})
+        self.assertEqual((r["ok"], r["via"], r["items"][0]["to"]), (True, "mail", ["x@y.test"]))
+        raw = self.a.backend.sent[0].decode("utf-8", "replace")
+        self.assertIn("METHOD:REQUEST", raw)
+        self.assertIn("посмотри, пожалуйста", raw)
+        self.assertIn("SUMMARY:План", raw)
+
+    def test_forward_needs_recipients(self):
+        r = webapp.forward_event(self.a, {"item_id": "20:9", "to": []})
+        self.assertEqual(r["error"], "bad_request")
+
+    def test_organizer_adds_attendees_and_seller_mails(self):
+        self.a.green = True
+        self.a.cal["items"][0]["response_type"] = "organizer"
+        self.a.cal["items"][0]["organizer"] = {"address": "me@bank.test", "name": "Me"}
+        with mock.patch.object(webapp, "call", return_value={"ok": True, "action": "update"}) as call:
+            r = webapp.forward_event(self.a, {"item_id": "20:9", "to": ["new@y.test"]})
+        self.assertTrue(r["ok"])
+        self.assertIn("mail", r["via"])
+        self.assertEqual(call.call_args.args[1], "events")
+        self.assertEqual(call.call_args.args[2]["action"], "update")
+        self.assertIn("new@y.test", call.call_args.args[2]["attendees"])
+        self.assertEqual(r["items"][0]["sent"], ["new@y.test"])
+        self.assertIn("METHOD:REQUEST", self.a.backend.sent[0].decode("utf-8", "replace"))
 
 
 class RsvpFallbackTest(unittest.TestCase):
@@ -781,9 +834,10 @@ class RsvpFallbackTest(unittest.TestCase):
                 raise EasStatusError("MeetingResponse", 2, "x")
             return {"ok": True, "items": [{}]}
 
-        with mock.patch.object(cal_cmd, "handle", side_effect=handle), mock.patch.object(webapp, "cal_refresh_bg"):
+        with mock.patch.object(cal_cmd, "handle", side_effect=handle), mock.patch.object(webapp, "cal_refresh_bg"), \
+             mock.patch.object(webapp, "_trash_invite_mail", return_value=True):
             r = webapp.invite_respond(self.a, "14:1", "accept")
-        self.assertEqual(r, {"ok": True, "via": "server"})
+        self.assertEqual((r["ok"], r["via"], r["trashed"]), (True, "server", True))
         self.assertEqual(seen, ["14:1", self.occ], "letter first, then the same meeting in the calendar by UID")
         self.assertEqual(self.a.backend.sent, [])
 

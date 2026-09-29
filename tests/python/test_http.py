@@ -311,13 +311,15 @@ class UiContractTest(unittest.TestCase):
                 continue
             if (domain, action) == ("events", "list"):
                 continue  # served by cal_events (start/end), limit is advisory
+            if (domain, action) == ("events", "forward"):
+                continue  # webapp.forward_event (iMIP / update attendees)
             if (domain, action) == ("people", "schedule"):
                 continue  # served by webapp._schedule (batched availability)
             fn = calendar._update if (domain, action) == ("events", "update") else upstream_handler(domain, action)
             self.assertIsNotNone(fn, f"{domain}/{action} has no upstream handler")
             named = {n for n, p in inspect.signature(fn).parameters.items()
                      if p.kind is p.KEYWORD_ONLY or (p.kind is p.POSITIONAL_OR_KEYWORD and n != "client")}
-            unknown = keys - named - {"mime_invite", "cache_only", "note", "to", "cc", "attendee_types"}  # app-level, handled in webapp
+            unknown = keys - named - {"mime_invite", "cache_only", "note", "to", "cc", "attendee_types", "body"}  # app-level, handled in webapp
             self.assertFalse(unknown, f"{domain}/{action}: UI sends {sorted(unknown)} not accepted by upstream")
             checked += 1
         self.assertGreater(checked, 15)

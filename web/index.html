@@ -1915,8 +1915,20 @@ function bindInviteCard(mb, c) {
       const note = (box.querySelector('.aas-rsvpnote textarea')?.value || '').trim();
       const r = await api('invite', {item_id: c.m.item_id, response: resp, ...(note ? {note} : {})});
       c.rsvp = {resp, via: r.via}; show(resp, r.via);
-      toast(RSVP_DONE[resp]);
+      toast(r.trashed === false ? RSVP_DONE[resp] : RSVP_DONE[resp] + ' · письмо в «Удалённые»');
       loadCal();
+      // Invitation letter left the inbox (server moved it to Deleted).
+      if (r.trashed !== false && curGroup && curGroup.items.some(m => m.item_id === c.m.item_id)) {
+        if (curGroup.items.length === 1) afterRemove(curGroup);
+        else {
+          const gone = new Set([c.m.item_id]);
+          allItems = allItems.filter(m => !gone.has(m.item_id));
+          curGroup.items = curGroup.items.filter(m => !gone.has(m.item_id));
+          cards = cards.filter(x => x.m.item_id !== c.m.item_id);
+          c.el?.remove();
+          renderList(!!nextCursor); recountOpenFolder();
+        }
+      }
     } catch (e) { box.querySelectorAll('[data-rsvp]').forEach(x => x.disabled = false); throw e; }
   }));
 }
@@ -3057,6 +3069,73 @@ function showMoreEvents(list) {
   el.querySelectorAll('[data-i]').forEach(b => b.onclick = () => eventView(list[+b.dataset.i]));
   $('#evmclose').onclick = closeModal;
 }
+/** Outlook-style «-----Исходная встреча-----» block under a reply about the meeting. */
+function eventQuoteText(e) {
+  const lines = ['-----Исходная встреча-----'];
+  if (e.organizer) lines.push('От: ' + whoFull(e.organizer));
+  lines.push('Когда: ' + fmtRange(e.s, e.e, e.is_all_day));
+  if (e.location) lines.push('Где: ' + e.location);
+  const people = (e.attendees || []).map(a => whoFull(a)).filter(Boolean);
+  if (people.length) lines.push('Кому: ' + people.join('; '));
+  lines.push('Тема: ' + (evTitle(e) || '(без темы)'));
+  if (e.body) lines.push('', String(e.body).trim());
+  return lines.join('\n');
+}
+function eventQuoteHtml(e) {
+  return `<div class="f aas-quote"><div class="aas-quote__hdr">
+      ${e.organizer ? `<div><b>От:</b> ${esc(whoFull(e.organizer))}</div>` : ''}
+      <div><b>Когда:</b> ${esc(fmtRange(e.s, e.e, e.is_all_day))}</div>
+      ${e.location ? `<div><b>Где:</b> ${esc(e.location)}</div>` : ''}
+      <div><b>Тема:</b> ${esc(evTitle(e) || '')}</div></div>
+    ${e.body ? `<div class="aas-quote__body">${esc(String(e.body).trim())}</div>` : ''}</div>`;
+}
+/** Reply / reply-all as plain mail, or forward as an iMIP invitation (recipients pick To). */
+function eventMailForm(e, mode) {
+  const me = ((accounts.find(a => a.id === (e._acct || ACCT)) || {}).email || '').toLowerCase();
+  const uniq = list => { const seen = new Set(); return (list || []).filter(p => {
+    const k = (p?.address || '').toLowerCase();
+    if (!k || k === me || seen.has(k)) return false; seen.add(k); return true;
+  }); };
+  const org = e.organizer?.address ? [e.organizer] : [];
+  const att = (e.attendees || []).filter(a => a.address);
+  const toSeed = mode === 'fwd' ? [] : mode === 'replyall' ? uniq([...org, ...att]) : uniq(org);
+  const title = mode === 'fwd' ? 'Переслать приглашение' : mode === 'replyall' ? 'Ответить всем письмом' : 'Ответить письмом';
+  const subj = (mode === 'fwd' ? 'Fwd: ' : 'Re: ') + (evTitle(e) || '(без темы)');
+  openModal(`<h3>${title}</h3>
+    <div class="acts2"><button class="aas-btn" id="emcancel">Отмена</button><button class="aas-btn aas-btn--primary" id="emsend">Отправить</button></div>
+    <div class="aas-modal__scroll">
+    <div class="f"><label for="emto">Кому</label><div class="aas-people"><input type="text" id="emto" value="${esc(toSeed.length ? toSeed.map(formatPerson).join(', ') + ', ' : '')}" placeholder="фамилия или email"></div>
+      <div class="hint">${mode === 'fwd' ? 'Получатели получат приглашение в календарь.' : 'Обычное письмо, без ответа «Принять / Отклонить».'}</div></div>
+    ${mode === 'replyall' ? `<div class="f"><label for="emcc">Копия</label><div class="aas-people"><input type="text" id="emcc" placeholder="фамилия или email"></div></div>` : ''}
+    <div class="f"><label>Тема</label><div>${esc(subj)}</div></div>
+    <div class="f"><label>Текст</label><textarea id="embody" rows="8"></textarea></div>
+    ${mode === 'fwd' ? '' : eventQuoteHtml(e)}
+    </div>`);
+  $('#embody').value = sigBlock(mode === 'fwd' ? 'fwd' : 'reply');
+  for (const id of ['#emto', '#emcc']) { const el = $(id); if (el) bindPeopleInput(el); }
+  $('#emcancel').onclick = closeModal;
+  $('#emsend').onclick = guard(async () => {
+    const btn = $('#emsend'); btn.disabled = true; btn.textContent = 'Отправка…';
+    try {
+      const to = splitAddrs($('#emto').value).map(addrOnly).filter(Boolean);
+      if (!to.length) throw new Error('Укажите получателя');
+      const body = $('#embody').value;
+      const acct = e._acct || ACCT;
+      if (mode === 'fwd') {
+        await api('events', {action: 'forward', item_id: e.item_id, to, body}, acct);
+        rememberAddrsFromFields($('#emto').value);
+        closeModal(); toast('Приглашение отправлено'); loadCal();
+      } else {
+        const cc = splitAddrs($('#emcc')?.value || '').map(addrOnly).filter(Boolean);
+        await api('mail', {action: 'send', to, cc, subject: subj, body: body + '\n\n' + eventQuoteText(e)}, acct);
+        rememberAddrsFromFields($('#emto').value, $('#emcc')?.value || '');
+        closeModal(); toast('Отправлено');
+      }
+    } finally { btn.disabled = false; btn.textContent = 'Отправить'; }
+  });
+  (mode === 'fwd' ? $('#emto') : $('#embody')).focus();
+  if (mode !== 'fwd') { const ta = $('#embody'); ta.setSelectionRange(0, 0); }
+}
 function eventView(e) {
   const att = e.attendees || [];
   const me = (accounts.find(a => a.id === ACCT) || {}).email || '';
@@ -3089,6 +3168,9 @@ function eventView(e) {
   $('#evclose').onclick = closeModal;
   // Rare actions live behind «•••»: the card is for reading and answering.
   $('#evmore').onclick = () => openMenu($('#evmore'), [
+    {label: 'Ответить письмом', run: () => eventMailForm(e, 'reply')},
+    {label: 'Ответить всем письмом', run: () => eventMailForm(e, 'replyall')},
+    {label: 'Переслать приглашение…', run: () => eventMailForm(e, 'fwd')},
     {label: 'Изменить', run: () => eventForm(e)},
     {label: iAmOrg && isMeeting ? 'Отменить встречу' : 'Удалить', danger: true, run: removeEvent},
   ]);

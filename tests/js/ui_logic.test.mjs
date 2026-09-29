@@ -519,6 +519,22 @@ test('evTitle drops the FW:/RE: of a forwarded invitation', () => {
   assert.equal(evTitle({}), '(без темы)');
 });
 
+test('eventQuoteText builds Outlook-style appointment block for mail reply', () => {
+  const {eventQuoteText} = load(['eventQuoteText']);
+  const e = {
+    s: new Date(2026, 9, 1, 10, 0), e: new Date(2026, 9, 1, 11, 0), is_all_day: false,
+    subject: 'План', location: 'Байкал', body: 'повестка',
+    organizer: {name: 'Org', address: 'org@bank.test'},
+    attendees: [{name: 'Me', address: 'me@bank.test'}],
+  };
+  const t = eventQuoteText(e);
+  assert.match(t, /^-----Исходная встреча-----/);
+  assert.match(t, /От: Org <org@bank\.test>/);
+  assert.match(t, /Где: Байкал/);
+  assert.match(t, /Тема: План/);
+  assert.match(t, /повестка/);
+});
+
 test('fmtRange: one wording for meeting times, year only when not this one', () => {
   const {fmtRange} = load(['fmtRange']);
   const now = new Date(2026, 8, 25, 12);
