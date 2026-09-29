@@ -11,6 +11,10 @@ if [ -z "${DEVELOPER_DIR:-}" ]; then
     export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
   fi
 fi
+# Xcode 26+/SDK 27: bare swiftc without SDKROOT fails (@State macros / stdlib for -target macos12).
+if [ -z "${SDKROOT:-}" ] && [ -n "${DEVELOPER_DIR:-}" ]; then
+  export SDKROOT="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null || true)"
+fi
 
 APP_NAME="${APP_NAME:-AAS mail}"
 APP="${APP_DIR:-$HOME/Applications}/${APP_NAME}.app"
@@ -23,7 +27,9 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 # Deployment target must match LSMinimumSystemVersion below — without it swiftc
 # targets the build machine's macOS and the app silently needs that version.
 MACOS_MIN="${MACOS_MIN:-12.0}"
-swiftc -O -target "$(uname -m)-apple-macos${MACOS_MIN}" *.swift -o "$APP/Contents/MacOS/EASMail" \
+SWIFTC_SDK=()
+[ -n "${SDKROOT:-}" ] && SWIFTC_SDK=(-sdk "$SDKROOT")
+swiftc -O "${SWIFTC_SDK[@]}" -target "$(uname -m)-apple-macos${MACOS_MIN}" *.swift -o "$APP/Contents/MacOS/EASMail" \
   -framework Cocoa -framework WebKit -framework SwiftUI -framework Combine -framework UserNotifications
 
 [ -f AppIcon.icns ] || python3 make_icon.py
