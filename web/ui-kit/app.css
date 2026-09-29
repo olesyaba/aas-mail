@@ -557,6 +557,32 @@ body.green #folders {
   .aas-sched { border-left: 0; padding-left: 0; border-top: 1px solid var(--aas-line); padding-top: 14px; }
 }
 
+.aas-sched__tabs { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+.aas-sched__tabs [role="tab"] { border: 0; background: none; padding: 6px 10px; border-radius: var(--aas-r-md); color: var(--aas-muted); font: inherit; font-weight: 600; cursor: pointer; }
+.aas-sched__tabs [role="tab"][aria-selected="true"] { background: var(--aas-accent-bg); color: var(--aas-accent-text); }
+.aas-sched__tabs [role="tab"]:focus-visible { outline: 2px solid var(--aas-accent-text); outline-offset: 2px; }
+.aas-sched__wk { min-width: 96px; text-align: center; font-size: var(--aas-t-sm); color: var(--aas-muted); font-variant-numeric: tabular-nums; }
+.aas-sched__cons { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 10px; font-size: var(--aas-t-sm); }
+.aas-sched__cons input { accent-color: var(--aas-accent); }
+.aas-sched__empty { padding: 28px 8px; text-align: center; color: var(--aas-muted); }
+.aas-sched__own { margin-top: 4px; }
+.aas-sched__skel i { display: block; height: 56px; margin-bottom: 8px; border-radius: var(--aas-r-md);
+  background: linear-gradient(90deg, var(--aas-panel-2), var(--aas-line), var(--aas-panel-2)); background-size: 200% 100%; animation: aas-skel 1.2s linear infinite; }
+@keyframes aas-skel { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .aas-sched__skel i { animation: none; } }
+.aas-bo { display: grid; grid-template-columns: 24px 124px minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%;
+  margin-bottom: 6px; padding: 10px 12px; border: 1px solid var(--aas-line); border-radius: var(--aas-r-md);
+  background: var(--aas-panel); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.aas-bo:hover { border-color: var(--aas-line-strong); }
+.aas-bo:focus-visible { outline: 2px solid var(--aas-accent-text); outline-offset: 2px; }
+.aas-bo.on { border-color: var(--aas-accent-text); box-shadow: inset 0 0 0 1px var(--aas-accent-text); }
+.aas-bo__rk { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--aas-panel-2); color: var(--aas-muted); }
+.aas-bo.on .aas-bo__rk { background: var(--aas-accent); color: var(--aas-on-accent); }
+.aas-bo__when { display: grid; font-size: var(--aas-t-sm); color: var(--aas-muted); }
+.aas-bo__when b { font-size: var(--aas-t-md); color: var(--aas-text); }
+.aas-bo__why { font-size: var(--aas-t-sm); line-height: 1.4; color: var(--aas-muted); }
+.aas-bo__fit { font-size: var(--aas-t-sm); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
 /* Dragged modal: no backdrop, page underneath stays scrollable/clickable. */
 #ov.floating {
   background: transparent;

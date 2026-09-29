@@ -15,7 +15,7 @@
 - Free/busy code per 30 min: `0` free, `1` tentative, `2` busy, `3` out of office, `4` no data; `people/schedule` strings are `days × 48` codes from local midnight of `start`.
 - Batch size 20 addresses per `ResolveRecipients`; at most 200 addresses; `days` 1..7 (UI uses 5, Mon–Fri); cache 120 s.
 - Attendee types on the wire: required `1`, optional `2`, resource `3`; UI sends `attendees` (strings, unchanged) + `attendee_types: {address: "optional"|"resource"}`.
-- Score: busy required 10, tentative required 3, busy optional 2, each broken constraint 6; up to 6 options, not overlapping within a day.
+- Order: fewer busy required, then fewer broken constraints, then fewer tentative required, then fewer busy optional (ruling in Task 5); up to 6 options, not overlapping within a day.
 - Constraints (keys in `prefs.sched_cons`): `not_before_10`, `lunch` (13–14), `fri_late` (Friday after 16:00), `room`.
 - `prefs.rooms`: up to 30 `{name, address}`.
 - Colour is never the only signal: busy = fill, tentative / out of office = hatching, no data = grey + legend.

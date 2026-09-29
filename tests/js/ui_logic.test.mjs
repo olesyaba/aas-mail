@@ -733,3 +733,12 @@ test('agenda: numbered text block, empty rows skipped', () => {
   assert.equal(agendaText([]), '');
   assert.equal(AGENDA_TPL.retro.length, 4);
 });
+
+test('scheduler: one person away outranks nobody, however many are tentative', () => {
+  const {rankSlots} = load(['rankSlots']);
+  const day = w => '0'.repeat(18) + w;
+  const tent = Array.from({length: 5}, (_, i) => ({address: `t${i}@x`, role: 'req', fb: day('11' + '00')}));
+  const away = {address: 'a@x', role: 'req', fb: day('00' + '33')};
+  const r = plain(rankSlots({people: [...tent, away], days: 1, dur: 2, ws: 9, we: 11, k: 2}));
+  assert.deepEqual(r.map(o => o.s), [0, 2]);   // 5 tentative at 09:00 beats one away at 10:00
+});

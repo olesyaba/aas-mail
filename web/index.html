@@ -296,9 +296,10 @@ function dayHead(day, now = new Date()) {
 const fbSlice = (fb, day, ws, we) => Array.from({length: (we - ws) * 2}, (_, i) => String(fb || '')[day * 48 + ws * 2 + i] || '4');
 /** Meeting starts for «Лучшие варианты». people: [{address, role: 'req'|'opt'|'room'|'cand', fb}];
  *  `cand` = a saved room that is not invited: it only says which room is free. `s`/`dur` are
- *  half-hours from ws:00, `day` counts from Monday. Score: busy required 10, tentative
- *  required 3, busy optional 2, each broken constraint 6. Up to k starts, not overlapping
- *  within a day. */
+ *  half-hours from ws:00, `day` counts from Monday. Order, strictly: fewer busy required,
+ *  then fewer broken constraints, then fewer tentative required, then fewer busy optional
+ *  (so «все свободны, 5 под вопросом» beats «один в отпуске»). Up to k starts, not
+ *  overlapping within a day. */
 function rankSlots({people, days = 5, dur = 2, ws = 9, we = 18, cons = {}, k = 6, past = () => false}) {
   const n = (we - ws) * 2, out = [];
   const invited = people.filter(p => p.role === 'room'), cand = people.filter(p => p.role === 'cand');
@@ -322,7 +323,7 @@ function rankSlots({people, days = 5, dur = 2, ws = 9, we = 18, cons = {}, k = 6
       if (cons.fri_late && day === 4 && end > 16) o.pen.push('пятница после 16:00');
       const need = invited.length ? invited : cons.room ? cand : [];
       if (need.length && !need.some(r => o.rooms.includes(r.address))) o.pen.push(invited.length ? 'переговорка занята' : 'нет свободной переговорки');
-      o.score = o.reqBusy.length * 10 + o.reqTent.length * 3 + o.optBusy.length * 2 + o.pen.length * 6;
+      o.score = o.reqBusy.length * 1e6 + o.pen.length * 1e4 + o.reqTent.length * 100 + o.optBusy.length;
       out.push(o);
     }
   }
@@ -355,6 +356,128 @@ function agendaText(items) {
   const rows = (items || []).filter(a => String(a.t || '').trim())
     .map((a, i) => `${i + 1}. ${String(a.t).trim()}${+a.m ? ` — ${+a.m} мин` : ''}${a.who ? ` (${a.who})` : ''}`);
   return rows.length ? 'Повестка:\n' + rows.join('\n') : '';
+}
+/* ---------- meeting scheduler (event editor, right side) ----------
+   Reads the editor's fields, fetches a Mon–Fri week of free/busy for everyone
+   (people/schedule) and writes the chosen start back into «Начало/Конец». */
+function mountScheduler(box) {
+  const S = {tab: 'best', wk: null, data: null, err: '', tok: 0, key: '', gday: 0, fold: {}};
+  const ws = () => prefs.work_start ?? 9, we = () => prefs.work_end ?? 18;
+  const cons = () => ({not_before_10: true, lunch: true, fri_late: true, room: true, ...(prefs.sched_cons || {})});
+  const monday = d => { const x = startOfDay(d), wd = (x.getDay() + 6) % 7; x.setDate(x.getDate() + (wd > 4 ? 7 - wd : -wd)); return x; };
+  const slotDate = (day, s) => new Date(S.wk.getFullYear(), S.wk.getMonth(), S.wk.getDate() + day, ws(), s * 30);
+  const hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const roleList = () => {
+    const pick = (id, role) => splitAddrs($(id)?.value).map(addrOnly).filter(Boolean).map(address => ({address, role}));
+    const seen = new Set();
+    return [...pick('#eatt', 'req'), ...pick('#eopt', 'opt'), ...pick('#eroom', 'room'),
+      ...(prefs.rooms || []).map(r => ({address: r.address, role: 'cand'}))]
+      .filter(p => { const k = p.address.toLowerCase(); return !seen.has(k) && seen.add(k); });
+  };
+  const people = () => {
+    const by = new Map((S.data?.items || []).map(i => [String(i.address || '').toLowerCase(), i]));
+    return roleList().map(p => { const i = by.get(p.address.toLowerCase()); return {...p, name: i?.name || p.address, fb: i?.freebusy || ''}; });
+  };
+  const cur = () => {
+    const st = new Date($('#est').value), en = new Date($('#een').value);
+    return isNaN(st) ? null : {st, dur: Math.max(1, Math.round(((isNaN(en) ? st : en) - st) / 18e5))};
+  };
+  const slotOf = d => {
+    const day = Math.round((startOfDay(d) - S.wk) / 864e5), s = (d.getHours() - ws()) * 2 + Math.floor(d.getMinutes() / 30);
+    return day >= 0 && day < 5 && s >= 0 && s < (we() - ws()) * 2 ? {day, s} : null;
+  };
+  const setSlot = (day, s) => {
+    const c = cur(), st = slotDate(day, s);
+    $('#est').value = isoLocal(st); $('#een').value = isoLocal(new Date(+st + (c ? c.dur : 2) * 18e5));
+    $('#modal').dataset.dirty = '1'; S.gday = day; paint();
+  };
+  const empty = t => `<div class="aas-sched__empty">${esc(t)}</div>`;
+
+  async function load() {
+    const c = cur(); if (!S.wk) S.wk = monday(c ? c.st : new Date());
+    const p0 = c && slotOf(c.st); if (p0) S.gday = p0.day;
+    const ppl = roleList();
+    if (!ppl.some(p => p.role !== 'cand')) { S.data = null; S.err = ''; S.key = ''; return paint(); }
+    const key = ppl.map(p => p.address.toLowerCase()).join(',') + '|' + isoDay(S.wk);
+    if (key === S.key && (S.data || S.err)) return paint();
+    S.key = key; S.data = null; S.err = ''; const tok = ++S.tok; paint();
+    try {
+      const j = await api('people', {action: 'schedule', who: ppl.map(p => p.address), start: isoDay(S.wk), days: 5});
+      if (tok === S.tok) S.data = j;
+    } catch (x) { if (tok === S.tok) S.err = x.message || 'ошибка сервера'; }
+    if (tok === S.tok) paint();
+  }
+  function retime() {
+    const c = cur();
+    if (c && S.wk && +monday(c.st) !== +S.wk) { S.wk = monday(c.st); return load(); }
+    const p = c && S.wk && slotOf(c.st); if (p) S.gday = p.day;
+    paint();
+  }
+  // Seller has no free/busy for others: at least the user's own conflicts.
+  async function ownCheck() {
+    const c = cur(), slot = box.querySelector('.aas-sched__own'); if (!c || !slot) return;
+    const en = new Date(+c.st + c.dur * 18e5);
+    try {
+      const l = await api('events', {action: 'list', start: isoDay(c.st), end: isoDay(new Date(+en + 864e5)), limit: 300});
+      const hit = (l.items || []).filter(e => { const es = new Date(e.start_iso), ee = e.end ? localDate(e.end) : es; return es < en && ee > c.st && e.busy_status !== 'free'; });
+      slot.innerHTML = hit.length ? hit.map(e => `<div class="aas-avline">${avDot('bad')}У вас пересечение: ${esc(evTitle(e))} (${esc(fmtRange(new Date(e.start_iso)))})</div>`).join('')
+        : `<div class="aas-avline">${avDot('ok')}У вас в это время свободно</div>`;
+    } catch (_) { /* the message above already says what is missing */ }
+  }
+  function bestHtml() {
+    const c = cons(), ppl = people(), cu = cur(), now = new Date();
+    const nameOf = a => ppl.find(p => p.address.toLowerCase() === a.toLowerCase())?.name || a;
+    const req = ppl.filter(p => p.role === 'req').length;
+    const list = cu ? rankSlots({people: ppl, days: 5, dur: cu.dur, ws: ws(), we: we(), cons: c, k: 6, past: (d, s) => slotDate(d, s) < now}) : [];
+    const at = cu && slotOf(cu.st);
+    const ck = (k, t) => `<label class="chk"><input type="checkbox" data-con="${k}" ${c[k] ? 'checked' : ''}> ${t}</label>`;
+    const unres = (S.data.unresolved || []).map(u => u.query).filter(Boolean);
+    return `<div class="aas-sched__cons">${ck('not_before_10', 'Не раньше 10:00')}${ck('lunch', 'Не трогать обед 13–14')}${ck('fri_late', 'Не в пятницу после 16:00')}${ppl.some(p => p.role === 'room' || p.role === 'cand') ? ck('room', 'Нужна свободная переговорка') : ''}</div>
+      ${unres.length ? `<div class="aas-avline hint">${avDot('')}Не нашла в каталоге: ${esc(unres.join(', '))}. Их занятость не учтена.</div>` : ''}
+      ${list.length ? list.map((o, i) => {
+        const st = slotDate(o.day, o.s), en = new Date(+st + cu.dur * 18e5), room = o.rooms[0];
+        const on = at && at.day === o.day && at.s === o.s;
+        return `<button type="button" class="aas-bo${on ? ' on' : ''}" data-pick="${o.day},${o.s}" data-room="${esc(room || '')}">
+          <span class="aas-bo__rk">${i + 1}</span>
+          <span class="aas-bo__when"><b>${RU_WD_SHORT[st.getDay()]}, ${st.getDate()} ${RU_MON[st.getMonth()]}</b><span>${hm(st)}–${hm(en)}</span>${room ? `<span>${esc(nameOf(room))} свободна</span>` : ''}</span>
+          <span class="aas-bo__why">${esc(explainSlot(o, nameOf))}</span>
+          <span class="aas-bo__fit" title="Свободны обязательные">${req - o.reqBusy.length} / ${req}</span></button>`;
+      }).join('') : empty('На этой неделе подходящего времени нет — попробуйте следующую неделю или снимите ограничения.')}`;
+  }
+  function paint() {
+    const c = cur(); if (!S.wk) S.wk = monday(c ? c.st : new Date());
+    const fri = new Date(S.wk.getFullYear(), S.wk.getMonth(), S.wk.getDate() + 4);
+    const tab = (id, t) => `<button type="button" role="tab" data-tab="${id}" aria-selected="${S.tab === id}">${t}</button>`;
+    const head = `<div class="aas-sched__tabs" role="tablist">${tab('best', 'Лучшие варианты')}${typeof gridHtml === 'function' ? tab('grid', 'По людям') : ''}
+      <span class="aas-spacer"></span><button type="button" class="aas-btn aas-btn--sm" data-wk="-1" aria-label="Предыдущая неделя">‹</button>
+      <span class="aas-sched__wk">${S.wk.getDate()}–${fri.getDate()} ${RU_MON[fri.getMonth()]}</span>
+      <button type="button" class="aas-btn aas-btn--sm" data-wk="1" aria-label="Следующая неделя">›</button></div>`;
+    let body;
+    if ($('#eall')?.checked) body = empty('Для события на весь день время подбирать не нужно.');
+    else if (!roleList().some(p => p.role !== 'cand')) body = empty('Добавьте участников — покажу свободное время.');
+    else if (S.err) body = `<div class="aas-sched__empty">Занятость участников недоступна: ${esc(S.err)}. <button type="button" class="aas-linkbtn" data-retry>Повторить</button></div><div class="aas-sched__own"></div>`;
+    else if (!S.data) body = `<div class="aas-sched__skel" aria-busy="true" aria-label="Загружаю занятость">${'<i></i>'.repeat(5)}</div>`;
+    else body = S.tab === 'grid' && typeof gridHtml === 'function' ? gridHtml() : bestHtml();
+    box.innerHTML = head + body;
+    if (S.err) ownCheck();
+    if (S.tab === 'grid' && typeof bindGrid === 'function') bindGrid();
+  }
+  box.onclick = e => {
+    const b = e.target.closest('button'); if (!b) return; const d = b.dataset;
+    if (d.tab) { S.tab = d.tab; return paint(); }
+    if (d.wk) { S.wk = new Date(S.wk.getFullYear(), S.wk.getMonth(), S.wk.getDate() + 7 * +d.wk); return load(); }
+    if (d.retry !== undefined) { S.key = ''; return load(); }
+    if (d.pick) {
+      const [day, s] = d.pick.split(',').map(Number), f = $('#eroom');
+      const saved = (prefs.rooms || []).find(r => r.address === d.room);
+      if (saved && !f.value.trim()) f.value = formatPerson(saved) + ', ';   // «подобрать»: the free saved room
+      return setSlot(day, s);
+    }
+    if (d.gday) { S.gday = +d.gday; return paint(); }
+    if (d.fold) { S.fold[d.fold] = !S.fold[d.fold]; return paint(); }
+  };
+  box.onchange = e => { const k = e.target.dataset.con; if (k) { savePrefs({sched_cons: {...cons(), [k]: e.target.checked}}); paint(); } };
+  return {load, retime};
 }
 /** Stroke icons (one set, 1.8 px) instead of emoji and text glyphs. */
 const ICONS = {
@@ -2966,6 +3089,12 @@ function eventForm(e, opts = {}) {
     const st = new Date($('#est').value), en = new Date($('#een').value);
     if (!isNaN(st) && (isNaN(en) || en <= st)) $('#een').value = isoLocal(new Date(st.getTime() + 30 * 6e4));
   });
+  const sched = mountScheduler($('#sched'));
+  let schedT;
+  const reload = () => { clearTimeout(schedT); schedT = setTimeout(sched.load, 450); };
+  ['#eatt', '#eopt', '#eroom'].forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, reload)));
+  ['#est', '#een', '#eall'].forEach(id => $(id)?.addEventListener('change', sched.retime));
+  sched.load();
   $('#ecancel').onclick = closeModal;
   $('#esave').onclick = guard(async () => {
     const all = $('#eall').checked; let mimeFailed = false;
