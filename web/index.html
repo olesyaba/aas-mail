@@ -394,6 +394,7 @@ function mountScheduler(box) {
   const empty = t => `<div class="aas-sched__empty">${esc(t)}</div>`;
 
   async function load() {
+    if (!box.isConnected) return;  // the editor was closed while a reload was pending
     const c = cur(); if (!S.wk) S.wk = monday(c ? c.st : new Date());
     const p0 = c && slotOf(c.st); if (p0) S.gday = p0.day;
     const ppl = roleList();
@@ -444,11 +445,58 @@ function mountScheduler(box) {
           <span class="aas-bo__fit" title="Свободны обязательные">${req - o.reqBusy.length} / ${req}</span></button>`;
       }).join('') : empty('На этой неделе подходящего времени нет — попробуйте следующую неделю или снимите ограничения.')}`;
   }
+  function gridHtml() {
+    const ppl = people(), n = (we() - ws()) * 2, d = S.gday, cu = cur(), at = cu && slotOf(cu.st);
+    const req = ppl.filter(p => p.role === 'req');
+    const row = p => fbSlice(p.fb, d, ws(), we()).map(c => `<i class="aas-pg__c aas-pg__c--${c}"></i>`).join('');
+    const sum = Array.from({length: n}, (_, s) => {
+      const b = req.filter(p => /[23]/.test(fbSlice(p.fb, d, ws(), we())[s])).length;
+      return `<i class="aas-pg__c aas-pg__c--sum" style="--r:${b ? .3 + .7 * b / req.length : 0}" title="Заняты ${b} из ${req.length}"></i>`;
+    }).join('');
+    let names = '<div class="aas-pg__n"></div><div class="aas-pg__n aas-pg__n--head">Все обязательные</div>';
+    let rows = `<div class="aas-pg__r aas-pg__r--hdr">${Array.from({length: n}, (_, s) => `<span>${s % 2 ? '' : pad(ws() + s / 2) + ':00'}</span>`).join('')}</div><div class="aas-pg__r">${sum}</div>`;
+    [['req', 'Обязательные'], ['opt', 'Опциональные'], ['room', 'Переговорки']].forEach(([role, title]) => {
+      const g = ppl.filter(p => p.role === role); if (!g.length) return;
+      names += `<button type="button" class="aas-pg__n aas-pg__n--grp" data-fold="${role}" aria-expanded="${!S.fold[role]}">${S.fold[role] ? '▸' : '▾'} ${title} · ${g.length}</button>`;
+      rows += '<div class="aas-pg__r aas-pg__r--grp"></div>';
+      if (!S.fold[role]) g.forEach(p => {
+        names += `<div class="aas-pg__n" title="${esc(p.address)}">${avatar({name: p.name, address: p.address})}<span>${esc(p.name)}</span></div>`;
+        rows += `<div class="aas-pg__r">${row(p)}</div>`;
+      });
+    });
+    const days = Array.from({length: 5}, (_, i) => { const x = slotDate(i, 0); return `<button type="button" data-gday="${i}" class="${i === d ? 'on' : ''}" aria-pressed="${i === d}">${RU_WD_SHORT[x.getDay()]} ${x.getDate()}</button>`; }).join('');
+    const en = cu && new Date(+cu.st + cu.dur * 18e5);
+    const frame = at && at.day === d ? `<div class="aas-pg__sel" tabindex="0" role="slider" aria-label="Время встречи, стрелки двигают на 30 минут"
+      aria-valuenow="${at.s}" aria-valuemin="0" aria-valuemax="${n - cu.dur}" aria-valuetext="${hm(cu.st)}–${hm(en)}"
+      style="left:${at.s / n * 100}%;width:${cu.dur / n * 100}%"></div>` : '';
+    return `<div class="aas-pg__bar"><span class="aas-seg aas-seg--sm">${days}</span>
+        <span class="aas-pg__legend"><span><i class="aas-pg__c--2"></i>занят</span><span><i class="aas-pg__c--1"></i>под вопросом</span><span><i class="aas-pg__c--3"></i>вне офиса</span><span><i class="aas-pg__c--4"></i>нет данных</span></span></div>
+      <div class="aas-pg" style="--n:${n}"><div class="aas-pg__names">${names}</div><div class="aas-pg__grid">${rows}<div class="aas-pg__hit"></div>${frame}</div></div>`;
+  }
+  function bindGrid() {
+    const grid = box.querySelector('.aas-pg__grid'), cu = cur(); if (!grid || !cu) return;
+    const n = (we() - ws()) * 2, max = Math.max(0, n - cu.dur);
+    const sAt = x => { const r = grid.getBoundingClientRect(); return Math.max(0, Math.min(max, Math.floor((x - r.left) / r.width * n))); };
+    grid.querySelector('.aas-pg__hit').onclick = e => setSlot(S.gday, sAt(e.clientX));
+    const sel = grid.querySelector('.aas-pg__sel'); if (!sel) return;
+    const at = slotOf(cu.st);
+    sel.onpointerdown = e => {
+      sel.setPointerCapture(e.pointerId);
+      const off = sAt(e.clientX) - at.s; let last = at.s;
+      sel.onpointermove = m => { const s = Math.max(0, Math.min(max, sAt(m.clientX) - off)); if (s !== last) { last = s; sel.style.left = s / n * 100 + '%'; } };
+      sel.onpointerup = () => { sel.onpointermove = null; if (last !== at.s) setSlot(S.gday, last); };
+    };
+    sel.onkeydown = e => {
+      const k = {ArrowLeft: -1, ArrowRight: 1}[e.key]; if (!k) return;
+      e.preventDefault(); setSlot(S.gday, Math.max(0, Math.min(max, at.s + k))); box.querySelector('.aas-pg__sel')?.focus();
+    };
+  }
   function paint() {
+    if (!box.isConnected) return;  // a late free/busy answer after the editor closed
     const c = cur(); if (!S.wk) S.wk = monday(c ? c.st : new Date());
     const fri = new Date(S.wk.getFullYear(), S.wk.getMonth(), S.wk.getDate() + 4);
     const tab = (id, t) => `<button type="button" role="tab" data-tab="${id}" aria-selected="${S.tab === id}">${t}</button>`;
-    const head = `<div class="aas-sched__tabs" role="tablist">${tab('best', 'Лучшие варианты')}${typeof gridHtml === 'function' ? tab('grid', 'По людям') : ''}
+    const head = `<div class="aas-sched__tabs" role="tablist">${tab('best', 'Лучшие варианты')}${tab('grid', 'По людям')}
       <span class="aas-spacer"></span><button type="button" class="aas-btn aas-btn--sm" data-wk="-1" aria-label="Предыдущая неделя">‹</button>
       <span class="aas-sched__wk">${S.wk.getDate()}–${fri.getDate()} ${RU_MON[fri.getMonth()]}</span>
       <button type="button" class="aas-btn aas-btn--sm" data-wk="1" aria-label="Следующая неделя">›</button></div>`;
@@ -457,10 +505,10 @@ function mountScheduler(box) {
     else if (!roleList().some(p => p.role !== 'cand')) body = empty('Добавьте участников — покажу свободное время.');
     else if (S.err) body = `<div class="aas-sched__empty">Занятость участников недоступна: ${esc(S.err)}. <button type="button" class="aas-linkbtn" data-retry>Повторить</button></div><div class="aas-sched__own"></div>`;
     else if (!S.data) body = `<div class="aas-sched__skel" aria-busy="true" aria-label="Загружаю занятость">${'<i></i>'.repeat(5)}</div>`;
-    else body = S.tab === 'grid' && typeof gridHtml === 'function' ? gridHtml() : bestHtml();
+    else body = S.tab === 'grid' ? gridHtml() : bestHtml();
     box.innerHTML = head + body;
     if (S.err) ownCheck();
-    if (S.tab === 'grid' && typeof bindGrid === 'function') bindGrid();
+    if (S.tab === 'grid' && S.data && !S.err) bindGrid();
   }
   box.onclick = e => {
     const b = e.target.closest('button'); if (!b) return; const d = b.dataset;
@@ -3061,6 +3109,9 @@ function eventForm(e, opts = {}) {
     <div class="f"><label for="eroom">Переговорка</label><div class="aas-people"><input type="text" id="eroom" placeholder="найдите по названию, например «Байкал»" value="${esc(attOf('resource'))}"></div>
       ${(prefs.rooms || []).length ? `<div class="aas-slots">${prefs.rooms.map((r, i) => `<button type="button" class="aas-btn aas-btn--sm" data-room="${i}">${esc(r.name || r.address)}</button>`).join('')}</div>` : ''}
       <div class="hint">Подсказки из недавних и каталога — Enter/Tab подставляют.</div></div>
+    <div class="f"><label>Повестка</label>
+      <div class="aas-slots"><button type="button" class="aas-btn aas-btn--sm" data-tpl="retro">Ретро</button><button type="button" class="aas-btn aas-btn--sm" data-tpl="demo">Демо</button><button type="button" class="aas-btn aas-btn--sm" data-tpl="daily">Дейли</button></div>
+      <div id="eag"></div><button type="button" class="aas-linkbtn" id="eagadd">+ пункт</button><div class="hint" id="eagsum"></div></div>
     <div class="f"><label>Описание</label>
       <textarea id="ebody" rows="4">${esc(e?.body || '')}</textarea></div>
     ${editing || !(accounts.find(a => a.id === ACCT) || {}).green ? '' : `<div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="emime" checked> Разослать участникам приглашения письмом</label>
@@ -3095,6 +3146,31 @@ function eventForm(e, opts = {}) {
   ['#eatt', '#eopt', '#eroom'].forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, reload)));
   ['#est', '#een', '#eall'].forEach(id => $(id)?.addEventListener('change', sched.retime));
   sched.load();
+  // Agenda: rows with minutes and an owner; they open the description on save.
+  const AG = [];
+  const agWho = () => [...splitAddrs($('#eatt').value), ...splitAddrs($('#eopt').value)]
+    .map(x => x.replace(/\s*<[^>]*>\s*$/, '').replace(/^"|"$/g, '').trim()).filter(Boolean);
+  const agSum = () => {
+    const sum = AG.reduce((t, a) => t + (+a.m || 0), 0), st = new Date($('#est').value), en = new Date($('#een').value);
+    const len = Math.max(0, Math.round((en - st) / 6e4) || 0), el = $('#eagsum');
+    el.classList.toggle('aas-warn', sum > len);
+    el.textContent = !AG.length ? '' : sum > len ? `Пункты занимают ${sum} мин, а встреча ${len}. Сократите повестку или продлите встречу.` : `${sum} из ${len} мин расписано.`;
+  };
+  const agPaint = () => {
+    const who = agWho();
+    $('#eag').innerHTML = AG.map((a, i) => `<div class="aas-ag">
+      <input type="text" data-ag="${i}" data-k="t" value="${esc(a.t)}" placeholder="Пункт" aria-label="Пункт ${i + 1}">
+      <input type="number" data-ag="${i}" data-k="m" value="${+a.m || ''}" min="0" step="5" aria-label="Минут">
+      <select data-ag="${i}" data-k="who" aria-label="Кто ведёт"><option value="">Кто ведёт</option>${[...new Set([a.who, ...who].filter(Boolean))].map(p => `<option ${p === a.who ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select>
+      <button type="button" class="aas-btn aas-btn--sm" data-agdel="${i}" aria-label="Убрать пункт">×</button></div>`).join('');
+    agSum();
+  };
+  $('#eag').addEventListener('input', ev => { const d = ev.target.dataset; if (d.ag) { AG[+d.ag][d.k] = ev.target.value; agSum(); } });
+  $('#eag').addEventListener('change', ev => { const d = ev.target.dataset; if (d.ag) AG[+d.ag][d.k] = ev.target.value; });
+  $('#eag').addEventListener('click', ev => { const b = ev.target.closest('[data-agdel]'); if (b) { AG.splice(+b.dataset.agdel, 1); agPaint(); } });
+  $('#eagadd').onclick = () => { AG.push({t: '', m: 10, who: ''}); agPaint(); $('#eag').querySelector(`[data-ag="${AG.length - 1}"]`)?.focus(); };
+  $('#modal').querySelectorAll('[data-tpl]').forEach(b => b.onclick = () => { AG.splice(0, AG.length, ...AGENDA_TPL[b.dataset.tpl].map(([t, m]) => ({t, m, who: ''}))); agPaint(); });
+  ['#est', '#een'].forEach(id => $(id).addEventListener('change', agSum));
   $('#ecancel').onclick = closeModal;
   $('#esave').onclick = guard(async () => {
     const all = $('#eall').checked; let mimeFailed = false;
@@ -3103,6 +3179,7 @@ function eventForm(e, opts = {}) {
     const p = {subject: $('#esub').value, location: $('#eloc').value, body: $('#ebody').value, all_day: all,
       start: all ? isoDay(st) + 'T00:00' : isoLocal(st), end: all ? isoDay(new Date(Math.max(en2, st).getTime() + (en2 <= st ? 864e5 : 0))) + 'T00:00' : isoLocal(en2)};
     if (all && p.end <= p.start) p.end = isoDay(new Date(st.getTime() + 864e5)) + 'T00:00';
+    const ag = agendaText(AG); if (ag) p.body = ag + (p.body.trim() ? '\n\n' + p.body : '');
     const addrs = id => splitAddrs($(id).value).map(addrOnly).filter(Boolean);
     const req = addrs('#eatt'), opt = addrs('#eopt'), rooms = addrs('#eroom');
     const att = [...new Set([...req, ...opt, ...rooms])];
