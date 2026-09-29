@@ -311,6 +311,8 @@ class UiContractTest(unittest.TestCase):
                 continue
             if (domain, action) == ("events", "list"):
                 continue  # served by cal_events (start/end), limit is advisory
+            if (domain, action) == ("people", "schedule"):
+                continue  # served by webapp._schedule (batched availability)
             fn = calendar._update if (domain, action) == ("events", "update") else upstream_handler(domain, action)
             self.assertIsNotNone(fn, f"{domain}/{action} has no upstream handler")
             named = {n for n, p in inspect.signature(fn).parameters.items()

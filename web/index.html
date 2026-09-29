@@ -325,7 +325,7 @@ function fmtRange(s, e, allDay = false, now = new Date()) {
 const icon = (name, size = 16) => `<svg class="aas-ic" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
 /* ---------- preferences (kept on the server) ---------- */
-let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 1, cal_view: 'week', links: [], favorite_folders: [], theme: 'system', mail_sound: 'notice14', mail_window: 5, mail_window_seller: 5, mail_sort: 'date_desc', mail_sort_seller: 'date_desc', update_mode: 'auto', unified_cal: false};
+let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 1, cal_view: 'week', links: [], favorite_folders: [], theme: 'system', mail_sound: 'notice14', mail_window: 5, mail_window_seller: 5, mail_sort: 'date_desc', mail_sort_seller: 'date_desc', update_mode: 'auto', unified_cal: false, rooms: [], sched_cons: {not_before_10: true, lunch: true, fri_late: true, room: true}};
 /* Period and order are per-account (Bank ⇄ Seller keep their own): main on the base
    key, the Seller mailbox on the *_seller key — same split as signature/signature2. */
 const winKeyFor = a => a === 'main' ? 'mail_window' : 'mail_window_seller';

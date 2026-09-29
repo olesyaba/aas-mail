@@ -653,6 +653,8 @@ def call(a: Acct, domain: str, params: dict) -> dict:
         return folders_list(a, refresh=bool(params.get("refresh")))
     if domain == "people" and action == "find_free_slots":
         return _free_slots(a, params)
+    if domain == "people" and action == "schedule":
+        return _schedule(a, params)
     # GAL Search is slow (~0.5–2s); compose autocomplete fires on every pause.
     # Cache identical queries briefly so retyping / To+Cc sharing a prefix is free.
     if domain == "people" and action == "find":
@@ -821,6 +823,53 @@ def _free_slots(a: Acct, params: dict) -> dict:
 
     items = [x for x in res.get("items") or [] if fits(x)][:want]
     return {**res, "items": items, "count": len(items), "work_start": ws, "work_end": we}
+
+
+_SCHED_CACHE: dict[tuple, tuple[float, dict]] = {}
+_SCHED_BATCH = 20
+
+
+def _schedule(a: Acct, params: dict) -> dict:
+    """Free/busy of everyone in a meeting for `days` days from local midnight of
+    `start`: 48 codes a day per person (0 free, 1 tentative, 2 busy, 3 away,
+    4 no data). One ResolveRecipients per 20 addresses, so big invitations stay
+    under the server's recipient cap; cached 2 min so re-ranking, tab and
+    constraint changes never hit Exchange again."""
+    from datetime import datetime, timedelta
+    fail = lambda err, msg: {"ok": False, "action": "schedule", "count": 0, "items": [], "error": err, "message": msg}
+    who = list(dict.fromkeys(str(x).strip() for x in (params.get("who") or []) if str(x).strip()))[:200]
+    days = max(1, min(int(params.get("days") or 5), 7))
+    try:
+        d0 = datetime.strptime(str(params.get("start") or "")[:10], "%Y-%m-%d")
+    except ValueError:
+        return fail("bad_request", "start: нужна дата YYYY-MM-DD")
+    key = (a.id, tuple(sorted(w.lower() for w in who)), d0.date().isoformat(), days)
+    hit = _SCHED_CACHE.get(key)
+    if hit and time.time() - hit[0] < 120:
+        return hit[1]
+    fmt = "%Y-%m-%dT%H:%M"
+    start, end = d0.strftime(fmt), (d0 + timedelta(days=days)).strftime(fmt)
+    items, unresolved = [], []
+    if who:
+        backend = a.get()
+        with backend.lock:
+            from outlook_activesync_mcp.commands import people
+            for i in range(0, len(who), _SCHED_BATCH):
+                try:
+                    backend._pace()
+                    r = people.handle(backend.client, "availability", who=who[i:i + _SCHED_BATCH], start=start, end=end)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("[%s] people/schedule failed: %s", a.id, e)
+                    return fail(getattr(e, "code", None) or type(e).__name__, str(e))
+                items += r.get("items") or []
+                unresolved += r.get("unresolved") or []
+    n = days * 48
+    out = [{"address": x.get("address"), "name": x.get("name"),
+            "freebusy": (str(x.get("freebusy") or "") + "4" * n)[:n]} for x in items]
+    res = {"ok": True, "action": "schedule", "count": len(out), "items": out, "unresolved": unresolved,
+           "start": d0.date().isoformat(), "days": days}
+    _SCHED_CACHE[key] = (time.time(), res)
+    return res
 
 
 _WARM_FRESH_S = 120
@@ -2305,6 +2354,9 @@ DEFAULT_PREFS = {
     "update_mode": "auto",
     # Working day for «Свободно у всех» suggestions (local hours).
     "work_start": 9, "work_end": 18,
+    # Meeting scheduler: saved rooms ({name, address}) and the «Лучшие варианты» constraints.
+    "rooms": [],
+    "sched_cons": {"not_before_10": True, "lunch": True, "fri_late": True, "room": True},
     # Unified view: month + day agenda as a rail beside the mail.
     "unified_cal": False,
 }
@@ -2377,6 +2429,11 @@ def update_prefs(patch: dict) -> dict:
                 continue
             if k in ("work_start", "work_end") and not 0 <= v <= 24:
                 continue
+            if k == "rooms":
+                v = [{"name": str(x.get("name", ""))[:120], "address": str(x.get("address", ""))[:200]}
+                     for x in v[:30] if isinstance(x, dict) and "@" in str(x.get("address", ""))]
+            if k == "sched_cons":
+                v = {c: bool(v.get(c, d)) for c, d in DEFAULT_PREFS["sched_cons"].items()}
             if k == "links":
                 v = [{"name": str(x.get("name", ""))[:80], "url": str(x.get("url", ""))[:500]}
                      for x in v[:30] if isinstance(x, dict) and str(x.get("url", "")).startswith(("http://", "https://"))]

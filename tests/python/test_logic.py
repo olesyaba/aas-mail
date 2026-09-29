@@ -41,6 +41,12 @@ class PrefsTest(unittest.TestCase):
         self.assertEqual(webapp.load_prefs(), out)
         self.assertEqual(os.stat(webapp.PREFS_PATH).st_mode & 0o777, 0o600)
 
+    def test_scheduler_prefs(self):
+        out = webapp.update_prefs({"rooms": [{"name": "Байкал", "address": "baikal@x.ru"}, {"name": "x", "address": "nope"}, 5],
+                                   "sched_cons": {"lunch": False, "evil": 1}})
+        self.assertEqual(out["rooms"], [{"name": "Байкал", "address": "baikal@x.ru"}])
+        self.assertEqual(out["sched_cons"], {"not_before_10": True, "lunch": False, "fri_late": True, "room": True})
+
     def test_corrupt_file_falls_back(self):
         webapp.PREFS_PATH.write_text("{not json")
         self.assertEqual(webapp.load_prefs(), webapp.DEFAULT_PREFS)
@@ -1146,6 +1152,40 @@ class AttendeeTypesTest(unittest.TestCase):
                                                 "attendee_types": {"O@x.ru": "optional", "b@x.ru": "boss"}})
         self.assertEqual(seen, {"o@x.ru": "optional"})
         self.assertEqual(getattr(webapp._ATT, "types", {}), {})
+
+class ScheduleTest(unittest.TestCase):
+    def setUp(self):
+        webapp._SCHED_CACHE.clear()
+
+    def test_batches_of_20_pads_and_caches(self):
+        calls = []
+
+        def handle(client, action, who=None, start=None, end=None, **_):
+            calls.append((action, list(who), start, end))
+            return {"items": [{"address": w, "name": w.upper(), "freebusy": "02"} for w in who if w != "ghost"],
+                    "unresolved": [{"query": "ghost", "count": 0}] if "ghost" in who else []}
+
+        a = make_acct()
+        who = [f"u{i}@x.ru" for i in range(45)] + ["ghost"]
+        with mock.patch.object(people_cmd, "handle", handle):
+            r = webapp._schedule(a, {"who": who, "start": "2026-10-05", "days": 5})
+        self.assertEqual([len(c[1]) for c in calls], [20, 20, 6])
+        self.assertEqual(calls[0][0], "availability")
+        self.assertEqual(calls[0][2:], ("2026-10-05T00:00", "2026-10-10T00:00"))
+        self.assertEqual(r["count"], 45)
+        self.assertEqual(len(r["items"][0]["freebusy"]), 240)
+        self.assertTrue(r["items"][0]["freebusy"].startswith("024"))
+        self.assertEqual(r["unresolved"], [{"query": "ghost", "count": 0}])
+        with mock.patch.object(people_cmd, "handle", side_effect=AssertionError("must be cached")):
+            self.assertIs(webapp._schedule(a, {"who": list(reversed(who)), "start": "2026-10-05"}), r)
+
+    def test_bad_start_and_server_error(self):
+        self.assertFalse(webapp._schedule(make_acct(), {"who": ["a@x.ru"], "start": "завтра"})["ok"])
+        with mock.patch.object(people_cmd, "handle", side_effect=RuntimeError("no availability")):
+            r = webapp._schedule(make_acct(), {"who": ["a@x.ru"], "start": "2026-10-05"})
+        self.assertFalse(r["ok"])
+        self.assertIn("no availability", r["message"])
+
 
 if __name__ == "__main__":
     unittest.main()
