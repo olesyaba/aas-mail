@@ -113,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             self?.createEventFromTray(day: day, hour: hour, minute: minute)
         }
         showMessage("Запуск…")
+        stopOrphanServer()
         if !portOpen() { startServer() }
         Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] t in
             guard let self = self else { t.invalidate(); return }
@@ -188,6 +189,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let minuteArg = minute.map(String.init) ?? "0"
         web.evaluateJavaScript(
             "typeof eventForm==='function' && (showView('cal'), eventForm(null, {day: \(dayArg), hour: \(hourArg), minute: \(minuteArg)}))")
+    }
+
+    /// A server left behind by a crash or a forced quit (pkill never runs
+    /// applicationWillTerminate) still holds the port, and this app would talk to
+    /// it — the OLD backend after an update. It runs from our own bundle and we are
+    /// only starting now, so it is an orphan: stop it. A dev build keeps a server
+    /// started by hand.
+    func stopOrphanServer() {
+        let py = (projectDir as NSString).appendingPathComponent("python/bin/python3")
+        guard FileManager.default.isExecutableFile(atPath: py) else { return }
+        let pattern = py + " -s webapp.py"
+        func run(_ tool: String, _ args: [String]) -> Int32 {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: tool)
+            p.arguments = args
+            p.standardOutput = FileHandle.nullDevice
+            p.standardError = FileHandle.nullDevice
+            do { try p.run() } catch { return -1 }
+            p.waitUntilExit()
+            return p.terminationStatus
+        }
+        guard run("/usr/bin/pgrep", ["-f", pattern]) == 0 else { return }
+        _ = run("/usr/bin/pkill", ["-f", pattern])
+        var waited = 0
+        while portOpen() && waited < 30 { usleep(100_000); waited += 1 }
+        if portOpen() { _ = run("/usr/bin/pkill", ["-9", "-f", pattern]); usleep(300_000) }
     }
 
     func startServer() {

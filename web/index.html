@@ -437,9 +437,17 @@ function mountScheduler(box) {
     S.key = key; S.data = null; S.err = ''; const tok = ++S.tok; paint();
     try {
       const j = await api('people', {action: 'schedule', who: ask.map(p => p.address), start: isoDay(S.wk), days: 5});
-      if (tok === S.tok) S.data = j;
+      if (tok === S.tok) { S.data = j; S.retries = 0; S.busy = false; }
     } catch (x) {
       if (tok !== S.tok) return;
+      // A busy mailbox (the full sync right after the app starts) is not an error to
+      // show: try again by itself, every 10 s, up to 6 times, then say so.
+      if (x.code === 'unreachable' && (S.retries || 0) < 6) {
+        S.retries = (S.retries || 0) + 1; S.busy = true; S.key = '';
+        clearTimeout(S.retryT); S.retryT = setTimeout(load, 10000);
+        return paint();
+      }
+      S.busy = false;
       // Seller often returns a raw EAS/proxy dump — keep one short line people can act on.
       const raw = String(x.message || ''), green = !!(accounts.find(a => a.id === ACCT) || {}).green;
       S.err = green && (/eas|status|traceback|exception|proxy|html/i.test(raw) || raw.length > 160)
@@ -580,7 +588,8 @@ function mountScheduler(box) {
     if ($('#eall')?.checked) body = empty('Для события на весь день время подбирать не нужно.');
     else if (!invited(roleList())) body = empty('Добавьте участников — покажу свободное время.');
     else if (S.err) body = `<div class="aas-sched__empty">Занятость участников недоступна: ${esc(S.err.replace(/[.\s]+$/, ''))}. <button type="button" class="aas-linkbtn" data-retry>Повторить</button></div><div class="aas-sched__own"></div>`;
-    else if (!S.data) body = `<div class="aas-sched__skel" aria-busy="true" aria-label="Загружаю занятость">${'<i></i>'.repeat(5)}</div>`;
+    else if (!S.data) body = (S.busy ? `<div class="aas-avline hint" role="status">${avDot('warn')}Почтовый ящик занят синхронизацией — повторю сама через 10 с (попытка ${S.retries} из 6).</div>` : '')
+      + `<div class="aas-sched__skel" aria-busy="true" aria-label="Загружаю занятость">${'<i></i>'.repeat(5)}</div>`;
     else body = S.tab === 'grid' ? gridHtml() : bestHtml();
     box.innerHTML = head + body;
     if (S.err) ownCheck();
@@ -590,7 +599,7 @@ function mountScheduler(box) {
     const b = e.target.closest('button'); if (!b) return; const d = b.dataset;
     if (d.tab) { S.tab = d.tab; return paint(); }
     if (d.wk) { S.wk = new Date(S.wk.getFullYear(), S.wk.getMonth(), S.wk.getDate() + 7 * +d.wk); return load(); }
-    if (d.retry !== undefined) { S.key = ''; return load(); }
+    if (d.retry !== undefined) { S.key = ''; S.retries = 0; return load(); }
     if (d.pick) {
       const [day, s] = d.pick.split(',').map(Number), f = $('#eroom');
       const saved = (prefs.rooms || []).find(r => r.address === d.room);

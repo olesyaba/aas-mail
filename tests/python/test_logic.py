@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import os
 import threading
 import time
@@ -1304,6 +1305,29 @@ class ScheduleTest(unittest.TestCase):
         webapp._SCHED_CACHE[("a", ("x@y",), "2026-10-05", 5)] = (time.time() - 999, {"ok": True})
         webapp._sched_cache_prune()
         self.assertFalse(webapp._SCHED_CACHE)
+
+class SelfUpdateStopTest(unittest.TestCase):
+    """The installer must stop the bundle's server too: a Swift shell killed by pkill
+    leaves python behind on :8780, the relaunched app then talks to the OLD backend
+    (1.2.27 was installed five times in a row that way)."""
+
+    def test_stop_app_ends_the_bundles_server(self):
+        import shutil, signal, subprocess, sys, tempfile
+        app = Path(tempfile.mkdtemp(prefix="aas-upd-")) / "AAS mail.app"
+        py = app / "Contents/Resources/eas-bridge/python/bin/python3"
+        py.parent.mkdir(parents=True)
+        shutil.copy(sys.executable, py)
+        srv = subprocess.Popen([str(py), "-c", "import time; time.sleep(60)"])
+        try:
+            script = webapp.Path(webapp.__file__).parent / "app" / "self_update.sh"
+            r = subprocess.run(["/bin/bash", "-c", f'SELF_UPDATE_LIB=1 source "{script}" && stop_app "$1"', "_", str(app)],
+                               capture_output=True, text=True, timeout=30)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIsNotNone(srv.poll(), "the bundle's server must be gone")
+        finally:
+            if srv.poll() is None:
+                srv.send_signal(signal.SIGKILL)
+            shutil.rmtree(app.parent, ignore_errors=True)
 
 
 if __name__ == "__main__":
