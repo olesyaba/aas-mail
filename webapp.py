@@ -2027,7 +2027,9 @@ def _cal_refresh(a: Acct, claimed: bool = False, force: bool = False):
     try:
         backend = a.get()
         today = date.today()
-        start, end = today - timedelta(days=7), today + timedelta(days=60)
+        # Back far enough for this month's grid (the mail-side month rail starts on the
+        # Monday before the 1st); 93 days keep the server's «3 months» FilterType.
+        start, end = today - timedelta(days=CAL_PAST_DAYS), today + timedelta(days=60)
         # Tests / no client: keep the old calendar.handle path.
         if backend.client is None:
             with backend.lock:
@@ -2215,6 +2217,9 @@ def _cal_overlay(c: dict, items: list) -> list:
     return out
 
 
+CAL_PAST_DAYS = 33
+
+
 def cal_events(a: Acct, start: str, end: str) -> dict:
     from datetime import date, datetime
     c = a.cal
@@ -2235,7 +2240,15 @@ def cal_events(a: Acct, start: str, end: str) -> dict:
         _rsvp_answers(a)
         items = _cal_overlay(c, c["items"])
     if ds < lo or de > hi:  # outside the cached window: ask Exchange directly
-        return call(a, "events", {"action": "list", "start": start, "end": end, "limit": 1000, "fields": CAL_FIELDS})
+        direct = call(a, "events", {"action": "list", "start": start, "end": end, "limit": 1000, "fields": CAL_FIELDS})
+        if de <= lo or ds >= hi or not direct.get("ok", True):
+            return direct
+        # Partly cached: the direct list can miss what the cache has — Stalwart answers
+        # it from the empty stub calendar (the cache merges all calendars), so the
+        # month rail stayed blank. Keep the cached meetings of the overlap as well.
+        seen = {(e.get("uid") or e.get("item_id"), e.get("start_iso")) for e in direct.get("items") or []}
+        items = [*(direct.get("items") or []),
+                 *(e for e in items if (e.get("uid") or e.get("item_id"), e.get("start_iso")) not in seen)]
 
     def ts(x):
         return datetime.fromisoformat(x.replace("Z", "+00:00")).timestamp() if x else 0

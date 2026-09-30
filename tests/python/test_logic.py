@@ -82,6 +82,29 @@ class CalendarOwnWritesTest(unittest.TestCase):
         d = date.today()
         return webapp.cal_events(a, d.isoformat(), (d + timedelta(days=1)).isoformat())["items"]
 
+    def test_month_rail_past_the_window_keeps_cached_meetings(self):
+        """Alfa-Seller: the month rail asks from the Monday before the 1st; the direct
+        answer (Stalwart's empty stub calendar) must not blank the cached meetings."""
+        now = datetime.combine(date.today(), datetime.min.time()).replace(hour=10)
+        a = self._acct([dict(_ev(now, subject="bug meeting"), item_id="1", uid="u1")])
+        lo = (date.today() - timedelta(days=40)).isoformat()
+        hi = (date.today() + timedelta(days=5)).isoformat()
+        with mock.patch.object(webapp, "call", lambda *_: {"ok": True, "items": []}), \
+                mock.patch.object(webapp, "cal_refresh_bg"):
+            got = webapp.cal_events(a, lo, hi)["items"]
+        self.assertEqual([e["subject"] for e in got], ["bug meeting"])
+        other = dict(_ev(now, subject="bank meeting"), item_id="2", uid="u2")
+        same = dict(_ev(now, subject="bug meeting"), item_id="1", uid="u1")
+        with mock.patch.object(webapp, "call", lambda *_: {"ok": True, "items": [same, other]}), \
+                mock.patch.object(webapp, "cal_refresh_bg"):
+            got = webapp.cal_events(a, lo, hi)["items"]
+        self.assertEqual(sorted(e["subject"] for e in got), ["bank meeting", "bug meeting"], "no duplicates")
+
+    def test_window_covers_this_months_grid_with_the_same_filter(self):
+        self.assertGreaterEqual(webapp.CAL_PAST_DAYS, 30)
+        self.assertEqual(cal_cmd._filter_type(webapp.CAL_PAST_DAYS + 60), cal_cmd._filter_type(67),
+                         "a wider past must not force a full resync")
+
     def test_cancel_decline_accept_create_show_immediately(self):
         now = datetime.combine(date.today(), datetime.min.time()).replace(hour=10)
         a = self._acct([dict(_ev(now, subject="gone"), item_id="1"), dict(_ev(now, subject="meet"), item_id="2"),
