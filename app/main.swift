@@ -41,11 +41,11 @@ enum AppTheme {
     static let key = "appTheme"
     static let lightLooks: Set<String> = [
         "light", "navy-orange-light", "royal-velvet-light", "eclipse-almond-light",
-        "mist-light", "forest-light", "coral-mint-light"
+        "mist-light", "forest-light", "coral-mint-light", "amber-light", "dusk-light"
     ]
     static let darkLooks: Set<String> = [
         "dark", "navy-orange", "royal-velvet", "eclipse-almond",
-        "mist", "forest", "coral-mint"
+        "mist", "forest", "coral-mint", "amber", "dusk"
     ]
     static func apply(_ value: String) {
         if lightLooks.contains(value) {

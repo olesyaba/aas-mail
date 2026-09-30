@@ -2528,9 +2528,11 @@ def update_prefs(patch: dict) -> dict:
                 "eclipse-almond", "eclipse-almond-light",
                 "mist", "mist-light", "forest", "forest-light",
                 "coral-mint", "coral-mint-light",
+                "amber", "amber-light", "dusk", "dusk-light",
                 # *-auto: palette that follows macOS light/dark (resolved in the web UI)
                 "navy-orange-auto", "royal-velvet-auto", "eclipse-almond-auto",
                 "mist-auto", "forest-auto", "coral-mint-auto",
+                "amber-auto", "dusk-auto",
             ):
                 continue
             if k == "reminder_minutes" and v not in (0, 1, 2, 5, 10, 15, 30):

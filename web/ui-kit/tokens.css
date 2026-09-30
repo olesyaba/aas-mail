@@ -724,6 +724,174 @@ body.green {
     --aas-oof: #ff6b6b;
 }
 
+/* Эти две — «бережные для глаз» (2026-09-30): без чисто белого и чисто чёрного, текст
+   ~11–13:1 вместо 17+, приглушённые акценты; всё, что читается, ≥ 4.5:1.
+   Amber — «Янтарный вечер»: тёмная с тёплым текстом и янтарём — минимум синего света
+   к вечеру; светлая — нейтрально-серая (не «бумага»). Bank кирпич/янтарь, Seller олива. */
+:root[data-theme="amber"] {
+    color-scheme: dark;
+    --aas-bg: #1e1b18;
+    --aas-panel: #26221e;
+    --aas-panel-2: #221f1b;
+    --aas-line: #38332d;
+    --aas-line-strong: #463f38;
+    --aas-text: #e2d6c3;
+    --aas-muted: #a3978a;
+    --aas-on-accent: #1e1b18;
+    --aas-danger: #f08a7a;
+    --aas-ok: #9cc47a;
+    --aas-warning-text: #e8b86d;
+    --aas-shadow: 0 8px 32px rgb(0 0 0 / 50%);
+    --aas-cat-lift: 40%;
+    --aas-bank: #e0996b;
+    --aas-bank-fill: #e0996b;
+    --aas-bank-ink: #eaa77a;
+    --aas-bank-bg: #3d2b20;
+    --aas-bank-mid: #c47f55;
+    --aas-bank-soft: #7a5a45;
+    --aas-seller-fill: #a8bf7a;
+    --aas-seller-ink: #b7cc8c;
+    --aas-seller-bg: #2e3322;
+}
+:root[data-theme="amber"] body.theme-bank,
+:root[data-theme="amber"] body:not(.green):not(.theme-seller) {
+    --aas-on-accent: #1e1b18;
+    --aas-busy: #e0996b;
+    --aas-tent: #b07a52;
+    --aas-free: #5e554b;
+    --aas-oof: #a8bf7a;
+}
+:root[data-theme="amber"] body.theme-seller,
+:root[data-theme="amber"] body.green {
+    --aas-on-accent: #1e1b18;
+    --aas-busy: #a8bf7a;
+    --aas-tent: #7f9160;
+    --aas-free: #4f5443;
+    --aas-oof: #e0996b;
+}
+:root[data-theme="amber-light"] {
+    color-scheme: light;
+    --aas-bg: #eeeeec;
+    --aas-panel: #f9f9f7;
+    --aas-panel-2: #f3f3f1;
+    --aas-line: #dddcd7;
+    --aas-line-strong: #c9c7c0;
+    --aas-text: #33302b;
+    --aas-muted: #69645b;
+    --aas-on-accent: #ffffff;
+    --aas-danger: #b3261e;
+    --aas-ok: #3d6b2f;
+    --aas-warning-text: #8a5a00;
+    --aas-shadow: 0 8px 32px rgb(51 48 43 / 12%);
+    --aas-cat-lift: 0%;
+    --aas-bank: #8c3b2e;
+    --aas-bank-fill: #8c3b2e;
+    --aas-bank-ink: #8c3b2e;
+    --aas-bank-bg: #f3e3dd;
+    --aas-bank-mid: #b0604f;
+    --aas-bank-soft: #cf9f93;
+    --aas-seller-fill: #4d6b3a;
+    --aas-seller-ink: #45612f;
+    --aas-seller-bg: #e5ecdc;
+}
+:root[data-theme="amber-light"] body.theme-bank,
+:root[data-theme="amber-light"] body:not(.green):not(.theme-seller) {
+    --aas-busy: #8c3b2e;
+    --aas-tent: #b0604f;
+    --aas-free: #cfb3aa;
+    --aas-oof: #4d6b3a;
+}
+:root[data-theme="amber-light"] body.theme-seller,
+:root[data-theme="amber-light"] body.green {
+    --aas-busy: #4d6b3a;
+    --aas-tent: #7a9168;
+    --aas-free: #b9c7ae;
+    --aas-oof: #8c3b2e;
+}
+
+/* Dusk — «Сумеречная лаванда»: тихий серо-фиолетовый (спокойнее Royal Velvet, без
+   неона). Bank слива, Seller морская волна. */
+:root[data-theme="dusk"] {
+    color-scheme: dark;
+    --aas-bg: #1d1c24;
+    --aas-panel: #25242e;
+    --aas-panel-2: #212029;
+    --aas-line: #363442;
+    --aas-line-strong: #444152;
+    --aas-text: #dcdae6;
+    --aas-muted: #9d99b0;
+    --aas-on-accent: #1d1c24;
+    --aas-danger: #ff8fa3;
+    --aas-ok: #7fd1a0;
+    --aas-warning-text: #f0c674;
+    --aas-shadow: 0 8px 32px rgb(0 0 0 / 50%);
+    --aas-cat-lift: 40%;
+    --aas-bank: #d696b6;
+    --aas-bank-fill: #d696b6;
+    --aas-bank-ink: #e2a9c5;
+    --aas-bank-bg: #3b2934;
+    --aas-bank-mid: #b77a99;
+    --aas-bank-soft: #6f5566;
+    --aas-seller-fill: #7cc1b9;
+    --aas-seller-ink: #92cfc7;
+    --aas-seller-bg: #213a38;
+}
+:root[data-theme="dusk"] body.theme-bank,
+:root[data-theme="dusk"] body:not(.green):not(.theme-seller) {
+    --aas-on-accent: #1d1c24;
+    --aas-busy: #d696b6;
+    --aas-tent: #a47590;
+    --aas-free: #555064;
+    --aas-oof: #7cc1b9;
+}
+:root[data-theme="dusk"] body.theme-seller,
+:root[data-theme="dusk"] body.green {
+    --aas-on-accent: #1d1c24;
+    --aas-busy: #7cc1b9;
+    --aas-tent: #5f958f;
+    --aas-free: #4a5a5a;
+    --aas-oof: #d696b6;
+}
+:root[data-theme="dusk-light"] {
+    color-scheme: light;
+    --aas-bg: #f0eff5;
+    --aas-panel: #fafafd;
+    --aas-panel-2: #f4f3f8;
+    --aas-line: #dddbe7;
+    --aas-line-strong: #c9c6d8;
+    --aas-text: #2d2a3a;
+    --aas-muted: #625e75;
+    --aas-on-accent: #ffffff;
+    --aas-danger: #b4234a;
+    --aas-ok: #1f7a4d;
+    --aas-warning-text: #8a5a00;
+    --aas-shadow: 0 8px 32px rgb(45 42 58 / 12%);
+    --aas-cat-lift: 0%;
+    --aas-bank: #7d3a5c;
+    --aas-bank-fill: #7d3a5c;
+    --aas-bank-ink: #7d3a5c;
+    --aas-bank-bg: #f1e3ea;
+    --aas-bank-mid: #a0607f;
+    --aas-bank-soft: #c7a0b4;
+    --aas-seller-fill: #2f6f6a;
+    --aas-seller-ink: #28635e;
+    --aas-seller-bg: #dfeeed;
+}
+:root[data-theme="dusk-light"] body.theme-bank,
+:root[data-theme="dusk-light"] body:not(.green):not(.theme-seller) {
+    --aas-busy: #7d3a5c;
+    --aas-tent: #a0607f;
+    --aas-free: #cbb6c2;
+    --aas-oof: #2f6f6a;
+}
+:root[data-theme="dusk-light"] body.theme-seller,
+:root[data-theme="dusk-light"] body.green {
+    --aas-busy: #2f6f6a;
+    --aas-tent: #5c918c;
+    --aas-free: #a9c9c6;
+    --aas-oof: #7d3a5c;
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --aas-dur: 0ms;
