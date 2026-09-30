@@ -2583,7 +2583,7 @@ const toB64 = f => new Promise((res, rej) => { const r = new FileReader(); r.onl
 const parseLinks = t => t.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
   const m = l.match(/^(.*?)\s*\|\s*(https?:\/\/\S+)$/) || l.match(/^()(https?:\/\/\S+)$/);
   return m ? {name: m[1] || m[2].replace(/^https?:\/\//, '').slice(0, 40), url: m[2]} : null; }).filter(Boolean);
-function acctFields(prefix, kind, title, v, extra, loginHint, defaultUrl, status = '') {
+function acctFields(prefix, kind, title, v, extra, loginHint, defaultUrl, status = '', passHint = '') {
   const def = defaultUrl || '', custom = !!v.url && v.url !== def;
   // The server address changes about once a year: it folds away unless it is non-default.
   return `<div class="aas-card aas-card--acct-${kind}"><div class="aas-acct-title">${esc(title)}${status}</div>${extra || ''}
@@ -2591,7 +2591,7 @@ function acctFields(prefix, kind, title, v, extra, loginHint, defaultUrl, status
       <div class="f"><label for="${prefix}_user">Логин</label><input type="text" id="${prefix}_user" value="${esc(v.username)}">
         <div class="hint">${loginHint}</div></div>
       <div class="f"><label for="${prefix}_pass">Пароль</label><input type="password" id="${prefix}_pass" placeholder="${v.hasPass ? 'не менять' : 'обязательно'}">
-        <div class="hint">${v.hasPass ? 'Оставьте пустым, если не меняется' : 'Обязателен для нового аккаунта'}</div></div>
+        <div class="hint">${v.hasPass ? 'Оставьте пустым, если не меняется' : 'Обязателен для нового аккаунта'}</div>${passHint}</div>
     </div>
     <div class="f"><label for="${prefix}_email">Email</label><input type="text" id="${prefix}_email" value="${esc(v.email)}">
       <div class="hint">Адрес, от которого уходят письма (From)</div></div>
@@ -2623,7 +2623,9 @@ $('#setbtn').onclick = async () => {
     ${acctFields('s', 'seller', 'Alfa-Seller', {...sellerBefore, hasPass: !!sellerBefore.has_password},
       `<div class="f"><label>Название</label><input type="text" id="s_name" value="${esc(sellerBefore.name || 'Alfa-Seller')}">
         <div class="hint">Как аккаунт будет подписан в интерфейсе</div></div>`,
-      'Обычно совпадает с email, например name@alfaseller.ru', defs.seller || '', acctStatus(accounts.find(a => a.green)?.id, !!sellerBefore.username))}
+      'Обычно совпадает с email, например name@alfaseller.ru', defs.seller || '', acctStatus(accounts.find(a => a.green)?.id, !!sellerBefore.username),
+      // Stalwart lets outside mail clients in only with an app password, never the SSO one.
+      `<div class="aas-passtip">Нужен <b>пароль приложения</b>, а не пароль входа: <a href="https://mail.platops.ru/settings/account" target="_blank" rel="noopener noreferrer">mail.platops.ru</a> → Аккаунт → Пароли приложений → «Добавить». Скопируйте его сюда.</div>`)}
     <div class="hint">Изменения переподключаются сразу после сохранения. Адреса серверов по умолчанию сохранены в форме.</div>
     </div>
     <div data-pane="mail" hidden>

@@ -1861,3 +1861,15 @@ body.unified .aas-rail {
 /* The list gives up some width so the reader keeps ~60ch next to the rail. */
 @media (max-width: 1440px) { body.unified #list { width: 320px; } }
 @media (max-width: 1099px) { body.unified .aas-rail, .aas-railbtn { display: none; } }
+
+/* Alfa-Seller password: where the app password comes from (Settings → Аккаунты). */
+.aas-passtip {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: var(--aas-r-sm);
+  background: color-mix(in srgb, var(--aas-seller-ink) 12%, transparent);
+  color: var(--aas-text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+#modal .aas-passtip a { color: var(--aas-seller-ink); font-weight: 600; }  /* outranks `#modal a` */
