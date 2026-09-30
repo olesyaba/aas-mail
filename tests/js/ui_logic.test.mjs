@@ -781,3 +781,18 @@ test('external participants: outside the account domain (subdomains are ours)', 
   assert.equal(isExternal('Иванов', 'me@alfabank.ru'), false);
   assert.equal(isExternal('a@x.ru', ''), false);
 });
+
+test('Seller → Alfa-Bank twin: same login first, else the one full-name match', () => {
+  const {pickTwin} = load(['pickTwin']);
+  const vg = {name: 'Петрова Анна Сергеевна', address: 'ASPetrova@alfabank.ru'};
+  const other = {name: 'Петрова Мария', address: 'MPetrova@alfabank.ru'};
+  assert.equal(pickTwin('aspetrova@alfaseller.ru', '', [other, vg], 'alfabank.ru').address, 'ASPetrova@alfabank.ru');
+  // Login differs: the name decides, word order and ё do not matter.
+  const vg2 = {name: 'Петрова Анна', address: 'Petrova.A@alfabank.ru'};
+  assert.equal(pickTwin('apetrova@alfaseller.ru', 'Анна Петрова', [other, vg2], 'alfabank.ru').address, 'Petrova.A@alfabank.ru');
+  assert.equal(pickTwin('a@alfaseller.ru', 'Фёдоров Иван', [{name: 'Федоров Иван', address: 'IF@alfabank.ru'}], 'alfabank.ru').address, 'IF@alfabank.ru');
+  // Two namesakes, no name, or only non-bank hits: no guess.
+  assert.equal(pickTwin('x@alfaseller.ru', 'Петрова Мария', [other, {...other, address: 'MPetrova2@alfabank.ru'}], 'alfabank.ru'), null);
+  assert.equal(pickTwin('x@alfaseller.ru', '', [vg], 'alfabank.ru'), null);
+  assert.equal(pickTwin('aspetrova@alfaseller.ru', '', [{name: 'В', address: 'aspetrova@alfaseller.ru'}], 'alfabank.ru'), null);
+});

@@ -303,6 +303,82 @@ function isExternal(addr, me) {
   const a = dom(addr), m = dom(me);
   return !!(a && m) && a !== m && !a.endsWith('.' + m);
 }
+/** The Alfa-Bank twin of a Seller person among bank directory hits: the same login at the
+ *  bank domain wins (iivanova@alfaseller.ru → IIvanova@alfabank.ru); else the only hit
+ *  with the same full name (any word order, ё = е). Null when unsure — never guess. */
+function pickTwin(addr, name, items, bankDom) {
+  const low = x => String(x || '').trim().toLowerCase();
+  const dom = x => low(x).split('@')[1] || '', loc = x => low(x).split('@')[0];
+  const bank = (items || []).filter(p => p.address && dom(p.address) === low(bankDom));
+  const same = bank.find(p => loc(p.address) === loc(addr));
+  if (same) return same;
+  const key = s => low(s).replace(/ё/g, 'е').split(/[\s,]+/).filter(Boolean).sort().join(' ');
+  const k = key(name);
+  const byName = k ? bank.filter(p => key(p.name) === k) : [];
+  return byName.length === 1 ? byName[0] : null;
+}
+const TWINS = new Map(), TWINS_BY_BANK = new Map();  // seller address → bank person | null; bank address → person
+/** Meeting form: with #etwin on, every Seller invitee in #eatt/#eopt gets their Alfa-Bank
+ *  address added to the same field; turning it off takes the added ones back out. */
+function bindTwins() {
+  const box = $('#etwin'), hint = $('#etwinhint'); if (!box) return;
+  const dom = id => (String((accounts.find(a => a.id === id) || {}).email || '').split('@')[1] || '').toLowerCase();
+  const sellerDom = dom('seller') || 'alfaseller.ru', bankDom = dom('main') || 'alfabank.ru';
+  const fields = ['#eatt', '#eopt'].map(id => $(id));
+  const added = new Set(), missed = new Set();
+  let busy = false;
+  const paint = () => {
+    const a = [...added].map(x => (TWINS_BY_BANK.get(x) || {}).name || x);
+    hint.hidden = !a.length && !missed.size;
+    hint.textContent = [a.length ? `Добавила из Alfa-Bank: ${a.join(', ')}` : '',
+      missed.size ? `Не нашла в Alfa-Bank: ${[...missed].join(', ')}` : ''].filter(Boolean).join('. ');
+  };
+  const lookup = async (addr, name) => {
+    const k = addr.toLowerCase();
+    if (TWINS.has(k)) return TWINS.get(k);
+    const find = async q => (await api('people', {action: 'find', query: q, limit: 10}, 'main')).items || [];
+    let t = pickTwin(addr, name, await find(addr.split('@')[0]), bankDom);
+    if (!t && name) t = pickTwin(addr, name, await find(name), bankDom);
+    TWINS.set(k, t);
+    if (t) TWINS_BY_BANK.set(t.address.toLowerCase(), t);
+    return t;
+  };
+  const run = async () => {
+    if (busy || !box.checked) return;
+    busy = true;
+    try {
+      for (const f of fields) {
+        for (const entry of splitAddrs(f.value)) {
+          const addr = addrOnly(entry);
+          if (!addr.toLowerCase().endsWith('@' + sellerDom)) continue;
+          const name = /<[^>]+>\s*$/.test(entry) ? entry.replace(/\s*<[^>]*>\s*$/, '').replace(/^"|"$/g, '').trim()
+            : (filterRecentPeople(addr, 1)[0] || {}).name || '';
+          let t;
+          try { t = await lookup(addr, name); } catch (_) { missed.add(addr + ' (каталог недоступен)'); continue; }
+          if (!t) { missed.add(name || addr); continue; }
+          const have = fields.flatMap(x => splitAddrs(x.value).map(y => addrOnly(y).toLowerCase()));
+          const low = t.address.toLowerCase();
+          if (have.includes(low)) continue;
+          f.value = (f.value.trim() ? f.value.replace(/[,\s]*$/, ', ') : '') + formatPerson(t) + ', ';
+          added.add(low);
+          f.dispatchEvent(new Event('change', {bubbles: true}));  // scheduler + «внешние»; run() is busy
+        }
+      }
+    } finally { busy = false; paint(); }
+  };
+  fields.forEach(f => f.addEventListener('change', run));
+  box.onchange = () => {
+    savePrefs({twin_bank: box.checked});
+    if (box.checked) { run(); return; }
+    for (const f of fields) {
+      const keep = splitAddrs(f.value).filter(x => !added.has(addrOnly(x).toLowerCase()));
+      if (keep.length === splitAddrs(f.value).length) continue;
+      f.value = keep.length ? keep.join(', ') + ', ' : '';
+      f.dispatchEvent(new Event('change', {bubbles: true}));
+    }
+    added.clear(); missed.clear(); paint();
+  };
+}
 /** «внешние: a@x, b@y» under participant fields: they get the invitation, but their
  *  calendar is not ours to check, so they are only marked. */
 function paintExtHint(box, fields, acct = ACCT) {
@@ -3290,6 +3366,8 @@ function eventForm(e, opts = {}) {
       <div class="aas-locrow"><input type="text" id="eloc" value="${esc(e?.location || '')}" placeholder="Переговорная или https://…">
       ${(prefs.links || []).length ? `<select id="elink" title="Подставить сохранённую ссылку"><option value="">Мои ссылки…</option>${prefs.links.map((l, i) => `<option value="${i}">${esc(l.name)}</option>`).join('')}</select>` : ''}</div>
       ${(prefs.links || []).length ? '' : '<div class="hint">Свои ссылки на встречи (Telemost, KTalk…) можно сохранить в «Настройки → Почта».</div>'}</div>
+    ${accounts.some(a => a.id === 'seller') ? `<div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="etwin" ${prefs.twin_bank ? 'checked' : ''}> Добавлять к участникам Alfa-Seller их адрес в Alfa-Bank</label>
+      <div class="hint" id="etwinhint" hidden></div></div>` : ''}
     <div class="f"><label for="eatt">Обязательные участники</label><div class="aas-people"><input type="text" id="eatt" placeholder="фамилия или email" value="${esc(attOf('required'))}"></div></div>
     <div class="f"><label for="eopt">Опциональные</label><div class="aas-people"><input type="text" id="eopt" placeholder="могут не приходить" value="${esc(attOf('optional'))}"></div>
       <div class="hint aas-exthint" id="eext" hidden></div></div>
@@ -3311,6 +3389,7 @@ function eventForm(e, opts = {}) {
   const extPaint = () => paintExtHint($('#eext'), [$('#eatt'), $('#eopt')], e?._acct || ACCT);
   ['#eatt', '#eopt'].forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, extPaint)));
   extPaint();
+  bindTwins();
   const paintRooms = () => {
     const host = $('#erooms'); if (!host) return;
     const list = prefs.rooms || [];
