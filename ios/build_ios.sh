@@ -1,7 +1,7 @@
 #!/bin/bash
-# Build AAS mail for iPad from the shared sources.
+# Build AAS mail for iPhone + iPad from the shared sources.
 #   bash ios/build_ios.sh sim       # iPad simulator build (ad-hoc «Sign to Run Locally»)
-#   bash ios/build_ios.sh device    # iPad device build, free personal team (AAS_IOS_TEAM=<team id>)
+#   bash ios/build_ios.sh device    # iPhone/iPad device build, free personal team (AAS_IOS_TEAM=<team id>)
 # Stages webapp.py/bridge.py/vendor/web + pure-Python deps, generates the Xcode project
 # with xcodegen, builds with xcodebuild. Prints the path of the built .app.
 set -euo pipefail
@@ -30,7 +30,7 @@ rm -rf "$STAGE"; mkdir -p "$STAGE/app" "$STAGE/app_packages"
 cp webapp.py bridge.py ios/python/*.py "$STAGE/app/"
 cp -R "$VENDOR/outlook_activesync_mcp" "$STAGE/app/"
 rm -f "$STAGE/app/outlook_activesync_mcp/server.py"
-cp -R web "$STAGE/app/web"
+git ls-files -z web | xargs -0 tar -cf - | tar -xf - -C "$STAGE/app"   # tracked files only: no stray logs
 python3 -m pip install -q --disable-pip-version-check --target "$STAGE/app_packages" --no-deps \
   --only-binary=:all: --platform any --python-version 3.12 \
   requests urllib3 idna charset-normalizer certifi python-dateutil six

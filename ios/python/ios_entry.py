@@ -18,7 +18,7 @@ def install(webapp, web_dir: Path, secrets) -> None:
         out["can_install"] = False  # no self_update.sh here: the app is installed from Xcode
         out["page"] = f"https://github.com/{webapp.UPDATE_REPO}/releases/latest"
         if out.get("available"):
-            out["reason"] = "На iPad обновление ставится из Xcode (по кабелю с Mac)"
+            out["reason"] = "На iPhone и iPad обновление ставится из Xcode (по кабелю с Mac)"
         return out
 
     webapp.update_check = update_check

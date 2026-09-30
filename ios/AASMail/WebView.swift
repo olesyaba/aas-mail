@@ -10,7 +10,8 @@ struct WebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let cfg = WKWebViewConfiguration()
         cfg.userContentController.add(context.coordinator, name: "aasSave")
-        cfg.defaultWebpagePreferences.preferredContentMode = .desktop  // iPad: the full layout, not phone
+        // iPad: the full layout; iPhone: the narrow one (as on the Fold cover screen).
+        cfg.defaultWebpagePreferences.preferredContentMode = UIDevice.current.userInterfaceIdiom == .pad ? .desktop : .mobile
         let web = WKWebView(frame: .zero, configuration: cfg)
         web.navigationDelegate = context.coordinator
         web.uiDelegate = context.coordinator
