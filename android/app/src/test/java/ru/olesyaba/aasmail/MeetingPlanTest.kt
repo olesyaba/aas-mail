@@ -45,6 +45,21 @@ class MeetingPlanTest {
         assertNull(MeetingPlan.joinUrl("Переговорка 5", null))
     }
 
+    @Test fun joinUrlReadsThreePlacesAndMeetingHostWins() {
+        // The separate «Ссылка на встречу» field first, then Место, then the description.
+        assertEquals("https://alfaseller.ktalk.ru/vladena",
+            MeetingPlan.joinUrl("Переговорная 5", "https://wiki.corp/a", "https://alfaseller.ktalk.ru/vladena"))
+        // A video-meeting host wins even over a plain link sitting whole in Место (like the web UI).
+        assertEquals("https://teams.microsoft.com/l/x",
+            MeetingPlan.joinUrl("https://wiki.corp/room", "<a href=\"https://teams.microsoft.com/l/x\">Join</a>"))
+    }
+
+    @Test fun parsesTheMeetingLinkField() {
+        val items = JSONArray("""[{"item_id":"e3","subject":"Демо","start_iso":"2026-09-27T10:00:00+03:00",
+            "location":"Переговорная 5","body":"","online_meeting":"https://alfaseller.ktalk.ru/vladena"}]""")
+        assertEquals("https://alfaseller.ktalk.ru/vladena", MeetingPlan.parse("seller", "Seller", items).single().joinUrl)
+    }
+
     @Test fun parsesServerEvents() {
         val items = JSONArray("""[{"item_id":"e1","subject":"FW: Планёрка","start_iso":"2026-09-27T10:00:00+03:00",
             "is_all_day":false,"meeting_status":"","location":"https://zoom.us/j/1","body":""},

@@ -31,17 +31,19 @@ object MeetingPlan {
         Meeting(accountId, accountName, o.getString("item_id"),
             o.optString("subject").replace(forwardPrefix, "").trim().ifBlank { "(без темы)" },
             start, o.optString("meeting_status").equals("cancelled", true), o.optBoolean("is_all_day"),
-            joinUrl(o.optString("location").ifBlank { null }, o.optString("body").ifBlank { null }))
+            joinUrl(o.optString("location").ifBlank { null }, o.optString("body").ifBlank { null },
+                o.optString("online_meeting").ifBlank { null }))
     }
 
     private val hosts = listOf("teams.microsoft", "teams.live", "zoom.us", "ktalk", "kontur",
         "meet.google", "trueconf", "jazz.sber", "telemost.yandex", "webex.com")
     private val urlRe = Regex("""https?://[^\s<>'")\]]+""")
-    private val wholeUrl = Regex("""^https?://\S+$""")
 
-    fun joinUrl(location: String?, body: String?): String? {
-        location?.trim()?.let { if (wholeUrl.matches(it)) return it }
-        val urls = listOfNotNull(location, body).flatMap { t ->
+    /** Three places, read in order: the separate «Ссылка на встречу» field (`online`),
+     *  Место, the description. A video-meeting host wins wherever it is, otherwise the
+     *  first link — the same rule as the web UI and the Mac tray. */
+    fun joinUrl(location: String?, body: String?, online: String? = null): String? {
+        val urls = listOfNotNull(online, location, body).flatMap { t ->
             val norm = t.replace("\\/", "/").replace("&amp;", "&")
             linkedSetOf(t, norm, norm.replace(Regex("<[^>]+>"), " "))
         }.flatMap { urlRe.findAll(it).map { m -> m.value.trimEnd('.', ',', ';', ')', ']') } }

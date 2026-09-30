@@ -669,6 +669,19 @@ a.aas-btn--primary { color: var(--aas-on-accent); text-decoration: none; }
 
 .frow > * {
   flex: 1;
+  min-width: 0;   /* date-time inputs shrink instead of pushing the dialog off screen */
+}
+/* Phone / Fold cover screen: «Начало» over «Конец», the scheduler's header wraps and
+   the «По людям» names column gets narrow so the half-hours still have room. */
+@media (max-width: 480px) {
+  .frow { flex-direction: column; gap: 0; }
+  .aas-sched__tabs { flex-wrap: wrap; }
+  .aas-pg { grid-template-columns: 104px minmax(0, 1fr); }
+  .aas-pg__n .aas-av { display: none; }
+  .aas-pg__r--hdr span { font-size: 9px; }
+  .aas-pg__r--hdr span:nth-child(4n + 3) { color: transparent; }  /* every other hour */
+  .aas-bo { grid-template-columns: 22px minmax(0, 1fr) auto; }
+  .aas-bo__why { grid-column: 2 / 4; }
 }
 
 .aas-modal__acts,
