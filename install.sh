@@ -17,7 +17,7 @@ echo "==> Ищу последнюю версию…"
 TAG="$(curl -fsSI "https://github.com/$REPO/releases/latest" | awk -F/ 'tolower($1) ~ /^location:/ {print $NF}' | tr -d '\r')"
 case "$TAG" in v*) ;; *) echo "Не удалось узнать последнюю версию: нет связи с github.com."; exit 1 ;; esac
 ZIPNAME="AAS-mail-${TAG#v}-mac.zip"
-echo "==> Скачиваю $TAG…"
+echo "==> Скачиваю ${TAG}…"
 curl -fL --retry 3 --progress-bar -o "$TMP/$ZIPNAME" "https://github.com/$REPO/releases/download/$TAG/$ZIPNAME" \
   || { echo "Не удалось скачать $ZIPNAME с github.com."; exit 1; }
 # Check the archive against the SHA-256 GitHub publishes for it (when the API answers).
