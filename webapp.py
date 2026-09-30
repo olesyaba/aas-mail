@@ -2912,8 +2912,8 @@ def with_join_links(a: Acct, items: list[dict]) -> list[dict]:
         got = memo.get(uid)
         if got and got.get("url"):
             e = {**e, "online_meeting": got["url"]}
+        # The organizer's own item loses the link too; their invitation is in Sent Items.
         elif (not got or time.time() - got.get("ts", 0) > JOIN_RETRY_S) and e.get("subject") \
-                and (e.get("organizer") or {}).get("address", "").lower() not in ("", (a.email or "").lower()) \
                 and e.get("meeting_status") != "cancelled":
             todo.append(e)
         out.append(e)

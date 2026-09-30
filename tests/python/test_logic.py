@@ -743,13 +743,20 @@ class JoinLinkFromInvitationTest(unittest.TestCase):
         self.assertEqual(out[0]["online_meeting"], "https://seller.ktalk.ru/x1")
         self.assertEqual(self.searches, [])
 
-    def test_no_lookup_for_meetings_with_a_link_or_my_own(self):
-        own = {**self.ev, "organizer": {"address": "ME@seller.test"}}
+    def test_no_lookup_for_meetings_with_a_link_or_cancelled(self):
+        gone = {**self.ev, "meeting_status": "cancelled"}
         linked = {**self.ev, "uid": "u2", "body": "join https://teams.microsoft.com/l/x"}
         with mock.patch.object(webapp, "call", self._call), mock.patch.object(webapp.threading, "Thread", self.SyncThread):
-            out = webapp.with_join_links(self.a, [own, linked])
-        self.assertEqual(out, [own, linked])
+            out = webapp.with_join_links(self.a, [gone, linked])
+        self.assertEqual(out, [gone, linked])
         self.assertEqual(self.searches, [])
+
+    def test_organizer_own_meeting_is_looked_up_too(self):
+        own = {**self.ev, "organizer": {"address": "ME@seller.test"}}
+        with mock.patch.object(webapp, "call", self._call), mock.patch.object(webapp.threading, "Thread", self.SyncThread):
+            webapp.with_join_links(self.a, [own])
+            out = webapp.with_join_links(self.a, [own])
+        self.assertEqual(out[0]["online_meeting"], "https://seller.ktalk.ru/x1")
 
     def test_letter_without_link_is_not_searched_again_soon(self):
         self.a = make_acct(email="me@seller.test", backend=FakeBackend({"14:1": _invite_mime(
