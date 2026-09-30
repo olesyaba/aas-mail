@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key><string>ru</string>
+	<key>CFBundleDisplayName</key><string>AAS mail</string>
+	<key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+	<key>CFBundleName</key><string>AAS mail</string>
+	<key>CFBundlePackageType</key><string>APPL</string>
+	<key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key><true/>
+	<!-- The UI is served by the in-app Python server on 127.0.0.1:8780 over plain HTTP. -->
+	<key>NSAppTransportSecurity</key>
+	<dict><key>NSAllowsLocalNetworking</key><true/></dict>
+	<!-- Meeting links open the right app when it is installed. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array><string>ktalk</string><string>msteams</string><string>zoommtg</string><string>zoomus</string></array>
+	<!-- The server log is reachable from «Файлы» → На iPad → AAS mail. -->
+	<key>UIFileSharingEnabled</key><true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key><false/>
+	<key>UILaunchScreen</key><dict/>
+	<key>UIApplicationSceneManifest</key>
+	<dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>

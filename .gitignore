@@ -35,3 +35,9 @@ dist/*.zip
 .agents/
 .claude/
 skills-lock.json
+
+# iPad build
+ios/vendor/
+ios/stage/
+ios/build/
+ios/*.xcodeproj/
