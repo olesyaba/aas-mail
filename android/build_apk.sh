@@ -1,6 +1,7 @@
 #!/bin/bash
 # Build the Android APK from the shared sources: stage webapp.py/bridge.py/vendor/web, run Gradle, copy to dist/.
 #   bash android/build_apk.sh            # release (needs ~/.config/aas-mail/android-release.jks + AAS_KEYSTORE_PASS)
+#   bash android/build_apk.sh universal  # release for any phone (arm64 + x86_64: phones, emulators, Chromebooks; Python 3.12 has no 32-bit ARM), *-android-universal.apk
 #   bash android/build_apk.sh debug      # debug, for the emulator
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -24,10 +25,11 @@ rm -f "$STAGE/python/outlook_activesync_mcp/server.py"
 find "$STAGE" -name "__pycache__" -type d -prune -exec rm -rf {} +
 cp -R web "$STAGE/assets/web"
 
-MODE="${1:-release}"
+MODE="${1:-release}"; ABIS="arm64-v8a"
 if [ "$MODE" = debug ]; then TASK=assembleDebug; OUT="$A/app/build/outputs/apk/debug/app-debug.apk"; SUF="-debug"
 else TASK=assembleRelease; OUT="$A/app/build/outputs/apk/release/app-release.apk"; SUF=""; fi
-(cd "$A" && ./gradlew -q "$TASK" -PaasVersion="$VER")
+[ "$MODE" = universal ] && { ABIS="arm64-v8a,x86_64"; SUF="-universal"; }
+(cd "$A" && ./gradlew -q "$TASK" -PaasVersion="$VER" -PaasAbis="$ABIS")
 mkdir -p dist
 cp "$OUT" "dist/AAS-mail-$VER-android$SUF.apk"
 echo "dist/AAS-mail-$VER-android$SUF.apk"

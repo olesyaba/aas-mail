@@ -16,7 +16,8 @@ android {
         targetSdk = 35
         versionName = appVersion
         versionCode = appVersion.split(".").fold(0) { acc, p -> acc * 100 + (p.toIntOrNull() ?: 0) }.coerceAtLeast(1)
-        ndk { abiFilters += listOf("arm64-v8a") }
+        // Galaxy Fold build: arm64 only; -PaasAbis=arm64-v8a,x86_64 for the universal APK.
+        ndk { abiFilters += providers.gradleProperty("aasAbis").getOrElse("arm64-v8a").split(",") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {

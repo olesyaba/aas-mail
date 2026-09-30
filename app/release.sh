@@ -25,6 +25,7 @@ awk -v v="$VERSION" '
 
 git push origin HEAD
 ASSETS=("$ZIP"); [ -f "$APK" ] && ASSETS+=("$APK")
+UNI="dist/AAS-mail-$VERSION-android-universal.apk"; [ -f "$UNI" ] && ASSETS+=("$UNI")
 gh release create "$TAG" "${ASSETS[@]}" --repo "$REPO" --target "$(git rev-parse HEAD)" \
   --title "AAS mail $VERSION" --notes-file "$NOTES"
 rm -f "$NOTES"

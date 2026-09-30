@@ -11,6 +11,7 @@
         android:name="com.chaquo.python.android.PyApplication"
         android:label="AAS mail"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/no_backup"
         android:usesCleartextTraffic="true"

@@ -95,14 +95,38 @@ def _app_icon_1024() -> Image.Image:
     return img
 
 
-def _android_background(size: int = 432) -> Image.Image:
-    """Adaptive-icon background (108dp @xxxhdpi). The launcher shows only the middle
-    72dp in its own shape, so the tile sits at 90% — the spiral stays inside."""
-    tile = _source_tile()
-    out = Image.new("RGBA", (size, size), tile.getpixel((tile.width // 2, 2)))
-    inner = int(size * 0.90)
-    out.paste(tile.resize((inner, inner), Image.LANCZOS), ((size - inner) // 2,) * 2)
-    return out.convert("RGB")
+def _android_layers(size: int = 432) -> tuple[Image.Image, Image.Image, Image.Image]:
+    """Adaptive-icon layers (108dp @xxxhdpi): background = the tile's dark field with its
+    green / red corner glows, full bleed; foreground = the spiral and dots lifted off the
+    tile, inside the 66dp safe zone (a launcher shows only the middle 72dp, in its shape);
+    monochrome = the same mark in white for themed icons (Android 13+)."""
+    import numpy as np
+    tile = np.asarray(_source_tile().convert("RGB")).astype(float)
+    lum = tile.max(axis=2)
+    alpha = np.clip((lum - 90) / 40, 0, 1)  # spiral ≥ 140, field ≤ 100
+    ys, xs = np.nonzero(lum > 140)  # the mark's box: drops the tile's faint rim
+    box = (xs.min() - 4, ys.min() - 4, xs.max() + 5, ys.max() + 5)
+    mark = Image.fromarray(np.dstack([tile, alpha * 255]).astype("uint8"), "RGBA").crop(box)
+    side = int(size * 0.42)  # 45dp: the whole mark fits a circle mask too
+    k = side / max(mark.size)
+    mark = mark.resize((round(mark.width * k), round(mark.height * k)), Image.LANCZOS)
+    fg = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    fg.alpha_composite(mark, ((size - mark.width) // 2, (size - mark.height) // 2))
+    yy, xx = np.mgrid[0:size, 0:size] / (size - 1)
+    glow = lambda cx, cy: np.clip(1 - np.hypot(xx - cx, yy - cy) / 0.8, 0, 1)[..., None] ** 1.6
+    base = np.array([21, 21, 23], float)
+    bg = base + glow(0, 0) * (np.array([57, 82, 43]) - base) * 1.3 + glow(1, 1) * (np.array([78, 26, 30]) - base) * 1.3
+    bg = Image.fromarray(np.clip(bg, 0, 255).astype("uint8"), "RGB")
+    mono = Image.new("RGBA", (size, size), (255, 255, 255, 0))
+    mono.putalpha(fg.getchannel("A"))
+    return bg, fg, mono
+
+
+def android_icons():
+    res = os.path.join(HERE, "..", "android", "app", "src", "main", "res", "drawable-nodpi")
+    os.makedirs(res, exist_ok=True)
+    for name, img in zip(("ic_launcher_bg", "ic_launcher_fg", "ic_launcher_mono"), _android_layers()):
+        img.save(os.path.join(res, name + ".png"))
 
 
 def main():
@@ -118,17 +142,16 @@ def main():
         ["iconutil", "-c", "icns", iconset, "-o", os.path.join(HERE, "AppIcon.icns")],
         check=True)
 
-    res = os.path.join(HERE, "..", "android", "app", "src", "main", "res", "drawable-nodpi")
-    os.makedirs(res, exist_ok=True)
-    _android_background().save(os.path.join(res, "ic_launcher_bg.png"))
+    android_icons()
 
     aa = _render_tray_mark(1024)
     aa.save(os.path.join(HERE, "TrayLogoSource.png"))
     for name, size in (("TrayIcon.png", 18), ("TrayIcon@2x.png", 36)):
         _render_tray_mark(size, stroke_scale=1.2).save(os.path.join(HERE, name))
 
-    print("AppIcon.icns + Android ic_launcher_bg.png (from AppIconSource.png) + TrayIcon.png built")
+    print("AppIcon.icns + Android launcher layers (from AppIconSource.png) + TrayIcon.png built")
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    android_icons() if sys.argv[1:] == ["android"] else main()   # android: launcher layers only
