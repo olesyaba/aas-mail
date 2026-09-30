@@ -21,8 +21,12 @@ echo "==> Скачиваю ${TAG}…"
 curl -fL --retry 3 --progress-bar -o "$TMP/$ZIPNAME" "https://github.com/$REPO/releases/download/$TAG/$ZIPNAME" \
   || { echo "Не удалось скачать $ZIPNAME с github.com."; exit 1; }
 # Check the archive against the SHA-256 GitHub publishes for it (when the API answers).
-WANT="$(curl -fsS "https://api.github.com/repos/$REPO/releases/tags/$TAG" 2>/dev/null \
-  | grep -o '"digest": *"sha256:[0-9a-f]*"' | head -1 | sed 's/.*sha256://; s/"//')"
+# The release has several files (the Android APK comes first): take the digest of
+# this very archive — the one after its "name" in the asset list.
+WANT="$(curl -fsS "https://api.github.com/repos/$REPO/releases/tags/$TAG" 2>/dev/null | tr ',{}' '\n\n\n' \
+  | awk -v want="$ZIPNAME" '
+      /^[[:space:]]*"name":/ { n=$0; sub(/^[^:]*: *"/, "", n); sub(/".*/, "", n) }
+      /^[[:space:]]*"digest": *"sha256:/ && n == want { d=$0; sub(/.*sha256:/, "", d); sub(/".*/, "", d); print d; exit }')"
 if [ -n "$WANT" ]; then
   GOT="$(shasum -a 256 "$TMP/$ZIPNAME" | cut -d' ' -f1)"
   [ "$GOT" = "$WANT" ] || { echo "Архив повреждён (контрольная сумма не совпала). Запустите install.sh ещё раз."; exit 1; }
