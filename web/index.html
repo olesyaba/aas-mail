@@ -1223,8 +1223,7 @@ const UPDATE_EVERY = 6 * 3600 * 1000, UPDATE_RETRY = 10 * 60 * 1000;
 function updateText(u) {
   if (!u) return 'Ещё не проверялось';
   if (u.available) return `Доступна версия ${u.latest}` + (u.can_install ? '' : ` — ${u.reason}`);
-  if (u.reason) return u.reason;
-  return u.latest ? `У вас последняя версия (${u.current})` : '';
+  return u.reason || '';  // «up to date» is said by the disabled button itself
 }
 function updatePaneHtml() {
   const mode = prefs.update_mode || 'auto', u = updateInfo;
@@ -1236,7 +1235,9 @@ function updatePaneHtml() {
     <div class="f"><label>Версия ${esc(aboutMeta.version || '')}</label>
       <div class="frow" style="align-items:center;gap:8px;flex-wrap:wrap">
         <button type="button" class="aas-btn" id="updcheck">Проверить сейчас</button>
-        <button type="button" class="aas-btn aas-btn--primary" id="updinstall" ${u?.available && u?.can_install ? '' : 'hidden'}>Обновить до ${esc(u?.latest || '')}</button>
+        ${!u || (u.available && !u.can_install) ? '' : u.available
+          ? `<button type="button" class="aas-btn aas-btn--primary" id="updinstall">Обновить до ${esc(u.latest)}</button>`
+          : `<button type="button" class="aas-btn aas-btn--primary" id="updinstall" disabled>У вас самая актуальная${u?.current ? ' — ' + esc(u.current) : ''}</button>`}
         ${u?.available && !u.can_install && u.page ? `<a class="aas-btn aas-btn--primary" href="${esc(u.page)}" target="_blank" rel="noopener noreferrer">Открыть страницу релиза</a>` : ''}
         <span id="updstate" class="hint">${esc(updateText(u))}</span></div>
       <div id="updnotes" class="aas-upd__notes" ${u?.available && u?.notes ? '' : 'hidden'}>${esc(u?.notes || '')}</div></div>`;
