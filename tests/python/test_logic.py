@@ -416,6 +416,62 @@ class MailDeltaCacheTest(unittest.TestCase):
         self.assertEqual([m["subject"] for m in r["items"]], ["m"], "old cache dropped, fresh listing kept")
 
 
+class _SentClient(_DeltaClient):
+    def foldersync(self, force=False):
+        return [{"id": "27", "name": "Отправленные", "type": "5", "parent_id": "0"}]
+
+
+class MailFullBoxRefreshTest(unittest.TestCase):
+    """Regression (30.09, «Важно! Выкатка NIBDEPLOY-…» not in Отправленные): Sent Items
+    over «всё время» never finished its first dump; the box sat at the cap and every
+    refresh continued the key into older backlog, so a letter sent at 17:14 stayed
+    behind it. A full unfinished Exchange box is refreshed newest-first instead."""
+
+    def _full_box(self, a):
+        box = webapp._mail_box(a, "27")
+        box.update(filter=0, fields=None, label="Отправленные", gen=7, complete=False, next_cursor=None,
+                   by_id={f"27:o{i}": {"item_id": f"27:o{i}", "received": f"2026-09-{1 + i // 20:02d} {i % 20:02d}:00"}
+                          for i in range(webapp._MAIL_BOX_CAP)})
+        box["by_id"]["27:gone"] = {"item_id": "27:gone", "received": "2026-09-29 23:00"}  # deleted meanwhile
+        return box
+
+    def test_newest_letter_shows_and_deleted_ones_go(self):
+        a = make_acct()
+        a.backend.client = _SentClient([])  # a delta round here would fail the test
+        self._full_box(a)
+        fresh = {"ok": True, "has_more": True, "next_cursor": "c9",
+                 "items": [{"item_id": "27:new", "received": "2026-09-30 17:14", "subject": "Важно! Выкатка"},
+                           {"item_id": "27:o399", "received": "2026-09-20 19:00"}]}
+        with mock.patch.object(webapp, "_mail_fetch_pages", return_value=fresh) as f, \
+             mock.patch.object(webapp, "_mail_store_gen", return_value=8):
+            r = webapp._mail_list_paged(a, a.backend, {"folder": "27", "limit": 40, "filter": 0})
+        self.assertEqual(f.call_args.args[1]["limit"], 100)
+        ids = [m["item_id"] for m in r["items"]]
+        self.assertEqual(ids[0], "27:new")
+        self.assertNotIn("27:gone", ids, "newer than the fresh page's floor and not in it → deleted")
+        self.assertIn("27:o1", ids, "older cached letters stay (the very oldest yields to the cap)")
+        self.assertTrue(r["has_more"])
+
+    def test_throttled_refresh_keeps_the_box(self):
+        a = make_acct()
+        a.backend.client = _SentClient([])
+        box = self._full_box(a)
+        with mock.patch.object(webapp, "_mail_fetch_pages",
+                               return_value={"ok": False, "error": "throttled", "message": "сервер троттлит"}):
+            r = webapp._mail_list_paged(a, a.backend, {"folder": "27", "limit": 40, "filter": 0})
+        self.assertTrue(r["stale"])
+        self.assertEqual(box["gen"], 7)
+        self.assertEqual(r["count"], webapp._MAIL_BOX_CAP)
+
+    def test_seller_keeps_the_delta(self):
+        a = make_acct("seller")
+        a.backend.client = _SentClient([([], False, 7)])
+        self._full_box(a)
+        with mock.patch.object(webapp, "_mail_fetch_pages") as f:
+            webapp._mail_list_paged(a, a.backend, {"folder": "27", "limit": 40, "filter": 0})
+        f.assert_not_called()
+
+
 class FolderParsingTest(unittest.TestCase):
     @staticmethod
     def _row(tag, sid, name=None, typ=None, parent=None):

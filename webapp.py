@@ -511,6 +511,24 @@ def _mail_apply_delta(backend, collection_id: str, label: str, filt, box: dict, 
     box["next_cursor"] = None
 
 
+def _mail_merge_newest(backend, collection_id: str, box: dict, r: dict) -> dict:
+    """A fresh newest-first listing into a full box: it is the truth down to its oldest
+    letter (anything cached in that span but not listed was deleted); older cached
+    letters stay, so the list does not shrink to one page."""
+    new = {it["item_id"]: it for it in r.get("items") or [] if it.get("item_id")}
+    floor = min((m.get("received") or "" for m in new.values()), default="") if r.get("has_more") else ""
+    old = {k: m for k, m in box["by_id"].items() if k not in new and (m.get("received") or "") < floor}
+    box["by_id"] = {**old, **new}
+    box["gen"] = _mail_store_gen(backend, collection_id)
+    box["complete"] = not r.get("has_more")
+    box["next_cursor"] = r.get("next_cursor")
+    box["ts"] = time.time()
+    items = _mail_sorted_items(box)
+    has_more = not box["complete"] and bool(box["next_cursor"])
+    return {"ok": True, "action": "list", "count": len(items), "items": items, "has_more": has_more,
+            "next_cursor": box["next_cursor"] if has_more else None, "delta": True, "cached": len(box["by_id"])}
+
+
 def _mail_list_paged(a: Acct, backend: bridge.EasBackend, params: dict) -> dict:
     """List mail with a per-folder cache: first open primes SyncKey=0, later
     refreshes request only the delta (same FilterType + stored generation)."""
@@ -570,6 +588,32 @@ def _mail_list_paged(a: Acct, backend: bridge.EasBackend, params: dict) -> dict:
     can_delta = (not force and box.get("gen") is not None
                  and box.get("filter") == filt and bool(box.get("by_id"))
                  and box.get("fields") == want_fields)
+
+    # A full box whose first dump never finished (Sent Items over «всё время»: thousands
+    # of letters): the key's queue holds only letters older than all we keep, and new
+    # mail waits behind that backlog — it never showed. Exchange lists newest first, so
+    # a fresh listing brings it at the cost of one round. Not Seller: Stalwart hands out
+    # 1–2 letters a round in no set order.
+    if can_delta and not a.green and not box.get("complete") and len(box["by_id"]) >= _MAIL_BOX_CAP:
+        try:
+            r = _mail_fetch_pages(backend, {**params, "filter": filt, "limit": max(limit, 100),
+                                            "folder": params.get("folder") or collection_id})
+            err = None if r.get("ok", True) else r
+        except Exception as e:  # noqa: BLE001
+            if getattr(e, "code", None) == "auth_failed":
+                raise
+            err = {"error": getattr(e, "code", None) or type(e).__name__,
+                   "message": _friendly_error(a, "mail", "list", e), "_exc": e}
+        if err is None:
+            return _mail_merge_newest(backend, collection_id, box, r)
+        if err.get("error") in ("throttled", "auth_failed", "unreachable") or \
+                ("_exc" in err and _is_backoff(err["_exc"])):
+            log.info("[%s] mail refresh on %s deferred: %s", a.id, collection_id, err.get("message"))
+            items = _mail_sorted_items(box)
+            return {"ok": True, "action": "list", "count": len(items), "items": items, "has_more": False,
+                    "next_cursor": None, "delta": True, "stale": True, "cached": len(box["by_id"]),
+                    "message": err.get("message")}
+        can_delta = False  # anything else: a clean prime below
 
     if can_delta:
         try:

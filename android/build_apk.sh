@@ -23,7 +23,7 @@ cp webapp.py bridge.py "$STAGE/python/"
 cp -R "$VENDOR/outlook_activesync_mcp" "$STAGE/python/"
 rm -f "$STAGE/python/outlook_activesync_mcp/server.py"
 find "$STAGE" -name "__pycache__" -type d -prune -exec rm -rf {} +
-cp -R web "$STAGE/assets/web"
+git ls-files -z web | xargs -0 tar -cf - | tar -xf - -C "$STAGE/assets"   # tracked files only: no stray logs
 
 MODE="${1:-release}"; ABIS="arm64-v8a"
 if [ "$MODE" = debug ]; then TASK=assembleDebug; OUT="$A/app/build/outputs/apk/debug/app-debug.apk"; SUF="-debug"
