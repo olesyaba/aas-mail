@@ -678,6 +678,66 @@ def _invite_mime(ics=_ICS) -> bytes:
     return bytes(m)
 
 
+class JoinLinkFromInvitationTest(unittest.TestCase):
+    """Alfa-Seller (Stalwart) drops the meeting link from the calendar item; the
+    invitation letter still has it — «Подключиться» must show on the meeting too."""
+    ICS = _ICS.replace("LOCATION:https://alfabank.ktalk.ru/vladena", "LOCATION:\r\nCONFERENCE:https://seller.ktalk.ru/x1")
+
+    class SyncThread:  # run the background lookup inline
+        def __init__(self, target, args=(), daemon=None):
+            self.t, self.a = target, args
+
+        def start(self):
+            self.t(*self.a)
+
+    def setUp(self):
+        webapp._join_memo.clear()
+        webapp._join_busy.clear()
+        self.a = make_acct(email="me@seller.test", backend=FakeBackend({"14:1": _invite_mime(self.ICS)}))
+        webapp._join_path(self.a).unlink(missing_ok=True)  # other tests' opened invitations
+        self.ev = {"uid": "abc-123", "subject": "Обучение вайбкодингу :), часть 1", "location": "", "body": "",
+                   "online_meeting": None, "organizer": {"address": "VDGrekova@alfabank.ru"}}
+        self.searches = []
+
+    def _call(self, a, domain, params):
+        self.searches.append((domain, params.get("action"), params.get("query")))
+        return {"ok": True, "items": [{"item_id": "14:1"}]}
+
+    def test_link_found_in_invitation_and_remembered(self):
+        with mock.patch.object(webapp, "call", self._call), mock.patch.object(webapp.threading, "Thread", self.SyncThread):
+            first = webapp.with_join_links(self.a, [self.ev])
+            again = webapp.with_join_links(self.a, [self.ev])
+        self.assertIsNone(first[0]["online_meeting"], "the lookup runs in the background")
+        self.assertEqual(again[0]["online_meeting"], "https://seller.ktalk.ru/x1")
+        self.assertEqual(self.searches, [("mail", "search", "Обучение вайбкодингу :), часть 1")], "searched once")
+        webapp._join_memo.clear()  # restart: the link comes back from disk
+        self.assertEqual(webapp.with_join_links(self.a, [self.ev])[0]["online_meeting"], "https://seller.ktalk.ru/x1")
+
+    def test_opened_invitation_teaches_the_link_without_search(self):
+        webapp.render_message(self.a, "14:1")
+        with mock.patch.object(webapp, "call", self._call):
+            out = webapp.with_join_links(self.a, [self.ev])
+        self.assertEqual(out[0]["online_meeting"], "https://seller.ktalk.ru/x1")
+        self.assertEqual(self.searches, [])
+
+    def test_no_lookup_for_meetings_with_a_link_or_my_own(self):
+        own = {**self.ev, "organizer": {"address": "ME@seller.test"}}
+        linked = {**self.ev, "uid": "u2", "body": "join https://teams.microsoft.com/l/x"}
+        with mock.patch.object(webapp, "call", self._call), mock.patch.object(webapp.threading, "Thread", self.SyncThread):
+            out = webapp.with_join_links(self.a, [own, linked])
+        self.assertEqual(out, [own, linked])
+        self.assertEqual(self.searches, [])
+
+    def test_letter_without_link_is_not_searched_again_soon(self):
+        self.a = make_acct(email="me@seller.test", backend=FakeBackend({"14:1": _invite_mime(
+            _ICS.replace("LOCATION:https://alfabank.ktalk.ru/vladena", "LOCATION:Переговорка"))}))
+        with mock.patch.object(webapp, "call", self._call), mock.patch.object(webapp.threading, "Thread", self.SyncThread):
+            webapp.with_join_links(self.a, [self.ev])
+            out = webapp.with_join_links(self.a, [self.ev])
+        self.assertIsNone(out[0]["online_meeting"])
+        self.assertEqual(len(self.searches), 1)
+
+
 class InvitationInMailTest(unittest.TestCase):
     def setUp(self):
         self.a = make_acct(email="me@bank.test", backend=FakeBackend({"14:1": _invite_mime()}))

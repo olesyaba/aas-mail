@@ -2251,7 +2251,7 @@ def cal_events(a: Acct, start: str, end: str) -> dict:
             return datetime.fromisoformat(str(e["end"]).replace(" ", "T")).timestamp()
         except (KeyError, ValueError):
             return ts(e.get("start_iso"))
-    out = [e for e in items if ts(e.get("start_iso")) < hi_t and max(end_ts(e), ts(e.get("start_iso")) + 1) > lo_t]
+    out = with_join_links(a, [e for e in items if ts(e.get("start_iso")) < hi_t and max(end_ts(e), ts(e.get("start_iso")) + 1) > lo_t])
     return {"ok": True, "action": "list", "count": len(out), "items": out,
             "truncated": c["truncated"], "cached_age": int(time.time() - c["ts"])}
 
@@ -2827,6 +2827,117 @@ def _cal_item(a: Acct, *, item_id: str | None = None, uid: str | None = None) ->
     return None
 
 
+# -- join links recovered from invitations ------------------------------------
+# Some servers (Stalwart, Alfa-Seller) turn an invitation into a calendar item and
+# drop its meeting link: no online_meeting, empty Место and description, while the
+# letter's iCalendar still carries it (CONFERENCE / URL / X-…MEETINGURL). The link
+# is looked up once per meeting UID in its invitation letter and remembered.
+JOIN_RETRY_S = 12 * 3600       # a letter without a link: look again after this
+JOIN_BATCH = 8                 # invitations searched per background pass
+_join_memo: dict[str, dict] = {}
+_join_lock = threading.Lock()
+_join_busy: set[str] = set()
+
+
+def _join_path(a: Acct) -> Path:
+    return bridge.DATA_DIR / f"joinlinks-{a.id}.json"
+
+
+def _join_map(a: Acct) -> dict:
+    """{uid: {"url": str, "ts": float}} for this account (loaded once from disk)."""
+    with _join_lock:
+        if a.id not in _join_memo:
+            try:
+                _join_memo[a.id] = json.loads(_join_path(a).read_text())
+            except (OSError, ValueError):
+                _join_memo[a.id] = {}
+        return _join_memo[a.id]
+
+
+def _join_save(a: Acct):
+    with _join_lock:
+        data = json.dumps(_join_memo.get(a.id) or {}, ensure_ascii=False)
+    try:
+        p = _join_path(a)
+        p.write_text(data)
+        os.chmod(p, 0o600)
+    except OSError as e:
+        log.warning("[%s] join links not saved: %s", a.id, e)
+
+
+def _invite_link(invite: dict | None) -> str:
+    if not invite:
+        return ""
+    if invite.get("online"):
+        return invite["online"]
+    m = re.search(r"https?://\S+", invite.get("location") or "")
+    return m.group(0) if m else ""
+
+
+def remember_join(a: Acct, invite: dict | None):
+    """An opened invitation teaches its meeting's link (no search needed later)."""
+    url, uid = _invite_link(invite), (invite or {}).get("uid") or ""
+    if url and uid and _join_map(a).get(uid, {}).get("url") != url:
+        _join_map(a)[uid] = {"url": url, "ts": time.time()}
+        _join_save(a)
+
+
+def _has_link(e: dict) -> bool:
+    return bool(e.get("online_meeting")) or bool(re.search(r"https?://", f"{e.get('location') or ''} {e.get('body') or ''}"))
+
+
+def with_join_links(a: Acct, items: list[dict]) -> list[dict]:
+    """Fill the link of link-less meetings from their invitations; look up unknown ones
+    in the background (the next calendar answer carries what was found)."""
+    memo, todo = _join_map(a), []
+    out = []
+    for e in items:
+        uid = e.get("uid") or ""
+        if not uid or _has_link(e):
+            out.append(e)
+            continue
+        got = memo.get(uid)
+        if got and got.get("url"):
+            e = {**e, "online_meeting": got["url"]}
+        elif (not got or time.time() - got.get("ts", 0) > JOIN_RETRY_S) and e.get("subject") \
+                and (e.get("organizer") or {}).get("address", "").lower() not in ("", (a.email or "").lower()) \
+                and e.get("meeting_status") != "cancelled":
+            todo.append(e)
+        out.append(e)
+    if todo and a.id not in _join_busy:
+        _join_busy.add(a.id)
+        threading.Thread(target=_join_backfill, args=(a, todo[:JOIN_BATCH]), daemon=True).start()
+    return out
+
+
+def _join_backfill(a: Acct, events: list[dict]):
+    try:
+        for e in events:
+            uid, url = e["uid"], ""
+            try:
+                res = call(a, "mail", {"action": "search", "query": evt_subject(e), "limit": 5})
+                for m in (res.get("items") or [])[:5]:
+                    invite, _, _ = _find_invite(parse_raw(get_mime(a, m["item_id"])))
+                    if invite and invite.get("uid") == uid:
+                        url = _invite_link(invite)
+                        if url:
+                            break
+            except Exception as ex:  # noqa: BLE001 — offline / busy: try again later
+                log.info("[%s] join link lookup failed: %s", a.id, ex)
+                continue
+            _join_map(a)[uid] = {"url": url, "ts": time.time()}
+            if url:
+                log.info("[%s] join link recovered from the invitation", a.id)
+        _join_save(a)
+    finally:
+        _join_busy.discard(a.id)
+
+
+def evt_subject(e: dict) -> str:
+    """Search text for an invitation: the subject without reply prefixes."""
+    return re.sub(r"^\s*((re|fwd?|fw|отв|пер)\s*:\s*)+", "", str(e.get("subject") or ""), flags=re.I).strip()[:120]
+
+
 def _reply_from_calendar(a: Acct, item_id: str, response: str, note: str = "") -> str:
     """iTIP reply built from a cached calendar item (answer from the calendar view)."""
     from datetime import datetime, timezone
@@ -3152,6 +3263,7 @@ def render_message(a: Acct, item_id: str, has_att: bool = False) -> dict:
             text = content
     parts = _attachment_parts(msg, html_doc)
     invite, invite_part, _ = _find_invite(msg)
+    remember_join(a, invite)
     # The .ics is shown as the invitation card — don't list it as a file too.
     atts = [{"idx": i, "name": _att_name(p, i), "type": p.get_content_type(), "size": len(_part_bytes(p))}
             for i, p in enumerate(parts) if p is not invite_part]
