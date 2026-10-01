@@ -472,6 +472,26 @@ class MailFullBoxRefreshTest(unittest.TestCase):
         f.assert_not_called()
 
 
+class ReinviteMovedTest(unittest.TestCase):
+    """A meeting dragged on Seller: attendees get the update by mail (Stalwart is silent)."""
+
+    def test_same_uid_higher_sequence_not_to_me(self):
+        a = make_acct("seller", email="me@seller.test")
+        ev = {"item_id": "c:1", "uid": "u-1@eas-mail", "subject": "Демо", "location": "", "body": "",
+              "attendees": [{"address": "Me@Seller.test"}, {"address": "x@seller.test"}]}
+        with mock.patch.object(webapp, "_cal_item", return_value=ev), \
+             mock.patch.object(webapp, "send_invites", side_effect=lambda a, p, to: to) as send:
+            r = webapp.reinvite_moved(a, "c:1", "2026-10-02T14:00", "2026-10-02T16:00")
+        p, to = send.call_args.args[1], send.call_args.args[2]
+        self.assertEqual((r["ok"], to), (True, ["x@seller.test"]))
+        self.assertEqual((p["uid"], p["start"]), ("u-1@eas-mail", "2026-10-02T14:00"))
+        self.assertGreater(p["sequence"], 0)
+
+    def test_unknown_meeting(self):
+        with mock.patch.object(webapp, "_cal_item", return_value=None):
+            self.assertFalse(webapp.reinvite_moved(make_acct("seller"), "c:9", "a", "b")["ok"])
+
+
 class IcsRruleTest(unittest.TestCase):
     """Seller invitations carry the series rule (they used to go out as one meeting)."""
 

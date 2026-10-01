@@ -892,11 +892,25 @@ function openModal(html) {
   m.classList.toggle('aas-modal--actions-top', !!m.querySelector(':scope > .aas-modal__scroll'));
   $('#ov').classList.add('on'); return m;
 }
+let onModalClose = null;  // askYesNo: a dialog closed by Esc / the backdrop answers «Нет»
 function closeModal() {
+  const done = onModalClose; onModalClose = null;
   $('#ov').classList.remove('on');
   const m = $('#modal'); m.innerHTML = ''; m.classList.remove('aas-modal--actions-top', 'aas-dropping', 'aas-modal--wide');
   m.ondragover = m.ondragleave = m.ondrop = null;
   delete m.dataset.dirty; resetModalPos();
+  done?.();
+}
+/** A small «Да / Нет» question in the app's own dialog (not the browser's confirm). */
+function askYesNo(title, html, yes = 'Да', no = 'Нет') {
+  return new Promise(resolve => {
+    openModal(`<h3>${esc(title)}</h3><div class="aas-ask">${html}</div>
+      <div class="acts2"><button class="aas-btn" id="askno">${esc(no)}</button><button class="aas-btn aas-btn--primary" id="askyes">${esc(yes)}</button></div>`);
+    onModalClose = () => resolve(false);
+    $('#askno').onclick = () => closeModal();
+    $('#askyes').onclick = () => { onModalClose = null; closeModal(); resolve(true); };
+    $('#askyes').focus();
+  });
 }
 const closeModalSafe = () => { if (confirmDiscard()) closeModal(); };
 $('#modal').addEventListener('input', () => { $('#modal').dataset.dirty = '1'; });
@@ -1833,7 +1847,7 @@ async function nextMeeting(acct) {
   const now = new Date(), end = new Date(now); end.setDate(end.getDate() + 1);
   const j = await api('events', {action: 'list', start: isoDay(now), end: isoDay(end), limit: 100}, acct);
   const ev = (j.items || []).map(e => ({...e, s: new Date(e.start_iso)}))
-    .filter(e => !e.is_all_day && e.meeting_status !== 'cancelled' && e.s > now && isoDay(e.s) === isoDay(now))
+    .filter(e => !e.is_all_day && !isCancelled(e) && e.s > now && isoDay(e.s) === isoDay(now))
     .sort((a, b) => a.s - b.s)[0] || null;
   nextMeetingCache[acct] = {at: Date.now(), ev};
   return ev;
@@ -1868,6 +1882,9 @@ function paintReaderEmptyHead() {
 }
 const plural = (n, one, few, many) => { const d = n % 10, h = n % 100; return d === 1 && h !== 11 ? one : d >= 2 && d <= 4 && (h < 12 || h > 14) ? few : many; };
 /** Meeting title without the «FW:» / «RE:» of a forwarded invitation. */
+/** Cancelled by the organizer: the status, or a subject the server prefixed (some servers send only that). */
+const CANCEL_RX = /^\s*(отменен[оа]|canceled|cancelled)\s*:/i;
+const isCancelled = e => e?.meeting_status === 'cancelled' || CANCEL_RX.test(e?.subject || '');
 const evTitle = e => String(e?.subject || '').replace(/^\s*((re|fwd?|fw|отв|пер)\s*:\s*)+/i, '').trim() || '(без темы)';
 
 let cards = [];  // {m, j, el, open}
@@ -2998,7 +3015,7 @@ function railAgenda(list, day, now = new Date()) {
   const out = all.map(e => ({e, now: false}));
   let busyTo = null;
   timed.forEach(e => {
-    const live = e.meeting_status !== 'cancelled';
+    const live = !isCancelled(e);
     if (live && busyTo !== null && e.s - busyTo >= 36e5) out.push({gap: Math.round((e.s - busyTo) / 6e4)});
     out.push({e, now: live && e.s <= now && now < e.e});
     if (live) busyTo = Math.max(busyTo ?? 0, e.e.getTime());
@@ -3032,7 +3049,7 @@ function drawRail() {
   $('#rmtitle').textContent = railMonth.toLocaleDateString('ru-RU', {month: 'long'}) + ' ' + railMonth.getFullYear();
   const busy = new Set();
   railEvents.forEach(e => {
-    if (e.meeting_status === 'cancelled') return;
+    if (isCancelled(e)) return;
     const last = new Date(Math.max(e.s.getTime(), e.e.getTime() - 1));
     for (let d = startOfDay(e.s); d <= last; d.setDate(d.getDate() + 1)) busy.add(isoDay(d));
   });
@@ -3062,7 +3079,7 @@ function drawRail() {
   const html = items.map((x, i) => {
     if (x.gap) return `<div class="aas-rail__gap"><span>свободно ${x.gap % 60 === 0 ? x.gap / 60 + ' ч' : x.gap >= 90 ? '~' + Math.round(x.gap / 60) + ' ч' : x.gap + ' мин'}</span></div>`;
     const e = x.e, k = evs.push(e) - 1;
-    const cls = ['aas-meet', x.now && 'aas-meet--now', e.meeting_status === 'cancelled' && 'aas-meet--cancelled',
+    const cls = ['aas-meet', x.now && 'aas-meet--now', isCancelled(e) && 'aas-meet--cancelled',
       e.response_type === 'not_responded' && 'aas-meet--pending'].filter(Boolean).join(' ');
     const when = e.is_all_day ? 'весь<br>день' : `${hm(e.s)}<br>${hm(e.e)}`;
     const meta = [!/^\s*https?:/i.test(e.location || '') && e.location, e.response_type === 'not_responded' && 'ждёт ответа', e._join && 'ссылка'].filter(Boolean).map(esc).join(' · ');
@@ -3105,7 +3122,7 @@ function layoutLanes(timed) {
 /** Only what is ours to move: our own meeting or a plain appointment — not someone
  *  else's invitation, a series occurrence (that needs an exception), cancelled or all-day. */
 function canDragEvent(e, me) {
-  if (!e || e.is_all_day || e.is_recurring || e.meeting_status === 'cancelled' || !e.item_id) return false;
+  if (!e || e.is_all_day || e.is_recurring || isCancelled(e) || !e.item_id) return false;
   const org = (e.organizer?.address || '').toLowerCase();
   const others = (e.attendees || []).filter(a => a.address && a.address.toLowerCase() !== String(me || '').toLowerCase());
   return e.response_type === 'organizer' || (!!me && org === me.toLowerCase()) || (!org && !others.length);
@@ -3118,6 +3135,9 @@ function shiftEvent(s, e, day, mins) {
 /** Drag a meeting to another time or day of the visible grid (15-min steps); a press
  *  without movement stays a click (the card opens). */
 let evDragEnd = 0;
+const hhmm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+/** «пт, 2 октября, 13:00–15:00» for the move confirmation. */
+const whenText = (s, e) => `${s.toLocaleDateString('ru-RU', {weekday: 'short', day: 'numeric', month: 'long'})}, ${hhmm(s)}–${hhmm(e)}`;
 function bindEvDrag(el, e, cols, days, sc) {
   const acct = e._acct || ACCT, me = (accounts.find(a => a.id === acct) || {}).email || '';
   if (!canDragEvent(e, me)) return;
@@ -3127,20 +3147,27 @@ function bindEvDrag(el, e, cols, days, sc) {
     if (pd.button !== 0 || pd.pointerType === 'touch') return;
     pd.preventDefault();  // no text selection while dragging (the click still comes)
     const grab = pd.clientY - el.getBoundingClientRect().top;
-    let moved = false, target = null;
+    let moved = false, target = null, ghost = null;
     const move = mv => {
       if (!moved && Math.hypot(mv.clientX - pd.clientX, mv.clientY - pd.clientY) < 5) return;
-      if (!moved) { moved = true; el.classList.add('aas-ev--drag'); }
+      if (!moved) {
+        moved = true;
+        // The meeting's old place stays as a dashed outline: where from, at a glance.
+        ghost = el.cloneNode(true); ghost.className = 'aas-ev aas-ev--ghost'; ghost.removeAttribute('title');
+        el.parentElement.insertBefore(ghost, el);
+        el.classList.add('aas-ev--drag');
+      }
       mv.preventDefault();
       const i = cols.findIndex(c => { const r = c.getBoundingClientRect(); return mv.clientX >= r.left && mv.clientX < r.right; });
       if (i < 0) return;
       const r = cols[i].getBoundingClientRect();
       const mins = Math.max(0, Math.min(24 * 60 - 15, Math.round(sc.minsAt(Math.max(0, mv.clientY - r.top - grab)) / 15) * 15));
+      if (target && target.i === i && target.mins === mins) return;
       target = {i, mins};
       if (el.parentElement !== cols[i]) cols[i].appendChild(el);
       Object.assign(el.style, {top: sc.yOf(mins / 60) + 'px', left: '0', width: 'calc(100% - 3px)'});
       const {start, end} = shiftEvent(e.s, e.e, days[i], mins);
-      el.dataset.dragTime = `${pad(start.getHours())}:${pad(start.getMinutes())}–${pad(end.getHours())}:${pad(end.getMinutes())}`;
+      el.dataset.dragTime = `${isoDay(start) === isoDay(e.s) ? '' : DAYS[(start.getDay() + 6) % 7] + ' '}${hhmm(start)}–${hhmm(end)}`;
     };
     const up = async () => {
       document.removeEventListener('pointermove', move);
@@ -3150,14 +3177,19 @@ function bindEvDrag(el, e, cols, days, sc) {
       el.classList.remove('aas-ev--drag'); delete el.dataset.dragTime;
       const to = target && shiftEvent(e.s, e.e, days[target.i], target.mins);
       if (!to || to.start.getTime() === e.s.getTime()) { drawCal(); return; }
-      const when = `${to.start.toLocaleDateString('ru-RU', {day: 'numeric', month: 'long'})}, ${pad(to.start.getHours())}:${pad(to.start.getMinutes())}`;
       const others = (e.attendees || []).filter(a => a.address && a.address.toLowerCase() !== me.toLowerCase());
       const green = !!(accounts.find(a => a.id === acct) || {}).green;
-      if (others.length && !confirm(`Перенести «${e.subject || 'встречу'}» на ${when}?\n` +
-          (green ? 'Сервер Seller сам участников не уведомит — сообщите им отдельно.' : 'Участники получат обновлённое приглашение.'))) { drawCal(); return; }
+      const ok = await askYesNo('Перенести встречу?',
+        `<p>Подтвердите перенос «${esc(evTitle(e))}» с <b>${esc(whenText(e.s, e.e))}</b> на <b>${esc(whenText(to.start, to.end))}</b>` +
+        (others.length ? ` с уведомлением участников встречи (${others.length}).</p>` : '.</p>') +
+        (others.length && green ? '<p class="hint">Сервер Alfa-Seller сам участникам не пишет — уведомление уйдёт письмом-приглашением.</p>' : ''));
+      ghost?.remove();
+      if (!ok) { drawCal(); return; }  // «Нет»: the meeting goes back
       try {
-        await api('events', {action: 'update', item_id: e.item_id, start: isoLocal(to.start), end: isoLocal(to.end)}, acct);
-        e.s = to.start; e.e = to.end; toast(`Перенесено на ${when}`);
+        const p = {action: 'update', item_id: e.item_id, start: isoLocal(to.start), end: isoLocal(to.end)};
+        await api('events', p, acct);
+        if (others.length && green) await api('events', {action: 'reinvite', item_id: e.item_id, start: p.start, end: p.end}, acct).catch(() => {});
+        e.s = to.start; e.e = to.end; toast(`Перенесено на ${whenText(to.start, to.end)}`);
       } catch (err) { toast(err.message || 'Не удалось перенести', true); }
       drawCal();
     };
@@ -3200,7 +3232,7 @@ function drawCal() {
     const day0 = d.getTime(), day1 = day0 + 864e5;
     const todays = events.filter(e => e.s.getTime() < day1 && Math.max(e.e.getTime(), e.s.getTime() + 1) > day0);
     todays.filter(e => e.is_all_day).forEach(e => {
-      const c = document.createElement('div'); c.className = 'aas-chip'; c.textContent = evTitle(e); c.title = e.subject || ''; c.onclick = () => eventView(e);
+      const c = document.createElement('div'); c.className = 'aas-chip' + (isCancelled(e) ? ' aas-chip--cancelled' : ''); c.textContent = evTitle(e); c.title = e.subject || ''; c.onclick = () => eventView(e);
       if (e._cat) c.style.setProperty('--evc', mutedCat(catColor(e._cat)));
       cells[i].appendChild(c);
     });
@@ -3232,12 +3264,13 @@ function drawCal() {
       if (e._n > MAXL && e._l >= MAXL - 1) { (hidden.get(e._g) || hidden.set(e._g, []).get(e._g)).push({e, top}); return; }
       const el = document.createElement('div');
       el.className = 'aas-ev' + (e.busy_status ? ' aas-ev--' + e.busy_status : '') + (wide ? ' wide' : '') + (e._cat ? ' aas-ev--cat' : '') +
-        (e.meeting_status === 'cancelled' ? ' aas-ev--cancelled' : '') + (e.response_type === 'not_responded' ? ' aas-ev--pending' : '') + (h < 30 ? ' aas-ev--short' : '');
+        (isCancelled(e) ? ' aas-ev--cancelled' : '') + (e.response_type === 'not_responded' ? ' aas-ev--pending' : '') + (h < 30 ? ' aas-ev--short' : '');
       el.style.cssText = `top:${top}px;height:${h}px;left:${e._l * 100 / slots}%;width:calc(${100 / slots}% - 3px)`;
       if (e._cat) el.style.setProperty('--evc', mutedCat(catColor(e._cat)));
       const t1 = `${pad(e.s.getHours())}:${pad(e.s.getMinutes())}–${pad(e.e.getHours())}:${pad(e.e.getMinutes())}`;
       const hasJoin = !!e._join, title = esc(evTitle(e));
-      el.innerHTML = (wide ? `<div class="l1">${title}<small>${t1}${e.location ? ' · ' + esc(e.location) : ''}${hasJoin ? ' · ссылка' : ''}</small></div>`
+      const xMark = isCancelled(e) && !CANCEL_RX.test(e.subject || '') ? '<span class="aas-ev__x">отменена</span>' : '';
+      el.innerHTML = xMark + (wide ? `<div class="l1">${title}<small>${t1}${e.location ? ' · ' + esc(e.location) : ''}${hasJoin ? ' · ссылка' : ''}</small></div>`
         : `<b>${title}</b><small>${t1.slice(0, 5)}${e.location ? ' · ' + esc(e.location) : ''}</small>`) +
         (wide && h > 46 && e.organizer ? `<small>${esc(who(e.organizer))}${(e.attendees || []).length > 1 ? ' · участников: ' + e.attendees.length : ''}</small>` : '');
       el.title = `${e.subject}\n${t1}\n${e.location || ''}${hasJoin ? '\nесть ссылка для подключения' : ''}`;
@@ -3404,7 +3437,7 @@ function eventView(e) {
   const orgAddr = (e.organizer?.address || '').toLowerCase();
   const iAmOrg = e.response_type === 'organizer' || (me && orgAddr && orgAddr === me.toLowerCase());
   const isMeeting = e.meeting_status === 'meeting' || !!e.organizer?.address || att.length > 1;
-  const canRespond = isMeeting && !iAmOrg && e.meeting_status !== 'cancelled' && e.meeting_status !== 'appointment';
+  const canRespond = isMeeting && !iAmOrg && !isCancelled(e) && e.meeting_status !== 'appointment';
   const my = e.response_type || '';
   const st = {accepted: 'принял', tentative: 'под вопросом', declined: 'отклонил', not_responded: 'без ответа', none: 'без ответа', organizer: 'организатор'};
   // The answer is the first thing on the card: one segmented control, current answer marked.
@@ -3419,9 +3452,9 @@ function eventView(e) {
   const mailActs = [
     ...(!iAmOrg && orgAddr ? [['reply', 'replyOne', 'Ответить', 'Письмо организатору, без ответа на приглашение']] : []),
     ...(others.length > 1 || (iAmOrg && others.length) ? [['replyall', 'replyAll', 'Ответить всем', 'Письмо всем участникам']] : []),
-    ...(e.meeting_status !== 'cancelled' ? [['fwd', 'fwd', 'Переслать', 'Переслать приглашение в календарь']] : []),
+    ...(!isCancelled(e) ? [['fwd', 'fwd', 'Переслать', 'Переслать приглашение в календарь']] : []),
   ];
-  const el = openModal(`<h3>${esc(evTitle(e))}${e.is_recurring ? '<span class="aas-pill">серия</span>' : ''}${canRespond ? '<span class="aas-pill">встреча</span>' : ''}${e.meeting_status === 'cancelled' ? '<span class="aas-pill aas-pill--cancel">отменена</span>' : ''}</h3>
+  const el = openModal(`<h3>${esc(evTitle(e))}${e.is_recurring ? '<span class="aas-pill">серия</span>' : ''}${canRespond ? '<span class="aas-pill">встреча</span>' : ''}${isCancelled(e) ? '<span class="aas-pill aas-pill--cancel">отменена</span>' : ''}</h3>
     ${(e.categories || []).length ? `<div class="f aas-cats">${catChips(e.categories)}</div>` : ''}
     <div class="f aas-evwhen">${icon('clock', 14)} ${esc(fmtRange(e.s, e.e, e.is_all_day))}${e.is_recurring ? ', повторяется' : ''}</div>
     ${canRespond || link ? `<div class="f aas-evtop">${canRespond ? `<span class="aas-rsvpseg" role="group" aria-label="Ваш ответ">${rsvpBtn('accept', 'Принять') + rsvpBtn('tentative', 'Под вопросом') + rsvpBtn('decline', 'Отклонить')}</span>` : ''}

@@ -835,3 +835,12 @@ test('calendar drag: only own movable meetings, same length at the new time', ()
   assert.equal(to.start.getDate(), 2); assert.equal(to.start.getHours(), 14); assert.equal(to.start.getMinutes(), 15);
   assert.equal(to.end - to.start, 90 * 60e3);
 });
+
+test('cancelled meetings: by status or by a server-prefixed subject', () => {
+  const {isCancelled, evTitle} = load(['isCancelled', 'evTitle']);
+  assert.equal(isCancelled({meeting_status: 'cancelled', subject: 'Backend гильдия'}), true, 'series exception: plain subject');
+  assert.equal(isCancelled({meeting_status: 'meeting', subject: 'Отменено: Daily'}), true);
+  assert.equal(isCancelled({subject: 'Canceled: B2B IT leads sync'}), true);
+  assert.equal(isCancelled({meeting_status: 'meeting', subject: 'Демо отменённых фич'}), false);
+  assert.equal(evTitle({subject: 'FW: Отменено: Daily'}), 'Отменено: Daily');
+});

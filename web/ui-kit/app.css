@@ -974,12 +974,6 @@ input[type="checkbox"].aas-sw:focus-visible { outline: 2px solid var(--aas-accen
 
 .aas-hint-tight { margin: -4px 0 8px; }
 
-/* Meeting cancelled by the organizer (still in the calendar until removed). */
-.aas-ev--cancelled {
-  opacity: .55;
-  text-decoration: line-through;
-  background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgb(255 255 255 / 18%) 6px 12px);
-}
 .aas-pill--cancel { background: var(--aas-danger, #c0392b); color: #fff; }
 
 /* Account unread total above the folder tree. */
@@ -1234,11 +1228,22 @@ kbd {
 .aas-ev--pending { background: var(--aas-panel); border-style: dashed; border-color: var(--evc); }
 .aas-ev--free { background: transparent; }
 .aas-ev--oof { --evc: var(--aas-oof); }
+/* Cancelled by the organizer (kept in the calendar until removed): grey, not the
+   account colour, a dashed frame, struck-through title and an «отменена» tag — it
+   must not read as a meeting to go to (the series exceptions keep a plain subject). */
 .aas-ev--cancelled {
-  opacity: 0.6;
-  background-color: var(--aas-panel);
-  background-image: repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in srgb, var(--evc) 14%, transparent) 5px 10px);
+  --evc: var(--aas-muted);
+  background-color: var(--aas-panel-2);
+  background-image: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--aas-muted) 12%, transparent) 6px 12px);
+  border-style: dashed;
+  color: var(--aas-muted);
 }
+.aas-ev--cancelled b, .aas-ev--cancelled .l1 { text-decoration: line-through; font-weight: 500; }
+.aas-ev__x { float: right; margin-left: 4px; padding: 0 5px; border-radius: var(--aas-r-pill);
+  background: color-mix(in srgb, var(--aas-danger) 14%, var(--aas-panel)); color: var(--aas-danger);
+  font-size: 10px; font-weight: 600; line-height: 15px; text-decoration: none; }
+.aas-ev--short .aas-ev__x { display: none; }
+.aas-chip--cancelled { --evc: var(--aas-muted); color: var(--aas-muted); text-decoration: line-through; border-style: dashed; }
 .aas-chip {
   --evc: var(--aas-accent);
   background: color-mix(in srgb, var(--evc) 16%, var(--aas-panel));
@@ -1891,4 +1896,9 @@ body.unified .aas-rail {
 .aas-ev--drag { cursor: grabbing; z-index: 5; opacity: .92; box-shadow: var(--aas-shadow); outline: 2px solid var(--aas-accent); }
 .aas-ev--drag[data-drag-time]::after { content: attr(data-drag-time); position: absolute; right: 4px; top: 2px; padding: 0 6px;
   border-radius: var(--aas-r-pill); background: var(--aas-accent); color: var(--aas-on-accent); font-size: var(--aas-t-xs); font-weight: 600; }
-@media (prefers-reduced-motion: no-preference) { .aas-ev--drag { transition: top 60ms linear; } }
+.aas-ev--ghost { opacity: .45; border-style: dashed; background: transparent; pointer-events: none; box-shadow: none; }
+.aas-ev--ghost::after { content: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .aas-ev--drag { transition: top 90ms var(--aas-ease), box-shadow var(--aas-dur) var(--aas-ease); }
+}
+.aas-ask p { margin: 0 0 10px; line-height: 1.45; }

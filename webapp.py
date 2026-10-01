@@ -1513,6 +1513,20 @@ def ics_rrule(p: dict) -> str | None:
     return "RRULE:" + ";".join(parts)
 
 
+def reinvite_moved(a: Acct, item_id: str, start: str, end: str) -> dict:
+    """A meeting dragged to a new time on Seller: Stalwart does not tell the attendees,
+    so they get the updated invitation (same UID, a higher SEQUENCE) by mail."""
+    e = _cal_item(a, item_id=item_id)
+    if not e or not e.get("uid"):
+        return {"ok": False, "error": "not_found", "message": "встреча не найдена в календаре — обновите календарь"}
+    me = (a.email or "").lower()
+    to = [x["address"] for x in e.get("attendees") or [] if x.get("address") and x["address"].lower() != me]
+    sent = send_invites(a, {"uid": e["uid"], "subject": e.get("subject"), "location": e.get("location"),
+                            "body": e.get("body"), "start": start, "end": end, "all_day": e.get("is_all_day"),
+                            "sequence": int(time.time() // 60)}, to)  # minutes: grows with every move
+    return {"ok": True, "action": "reinvite", "count": len(sent), "items": [{"address": x} for x in sent]}
+
+
 def send_invites(a: Acct, p: dict, attendees: list[str]) -> list[str]:
     import uuid
     from datetime import datetime, timezone
@@ -1545,7 +1559,7 @@ def send_invites(a: Acct, p: dict, attendees: list[str]) -> list[str]:
     if desc:
         lines.append(f"DESCRIPTION:{esc(desc)}")
     lines += [f"ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:{x}" for x in to]
-    lines += ["SEQUENCE:0", "STATUS:CONFIRMED", "END:VEVENT", "END:VCALENDAR"]
+    lines += [f"SEQUENCE:{int(p.get('sequence') or 0)}", "STATUS:CONFIRMED", "END:VEVENT", "END:VCALENDAR"]
     m = EmailMessage()
     m["From"], m["To"] = me, ", ".join(to)
     m["Subject"] = "Приглашение: " + (p.get("subject") or "(без темы)")
@@ -3581,6 +3595,9 @@ class Handler(BaseHTTPRequestHandler):
                     # a full resync, not another delta on top of a possibly drifted cache.
                     cal_refresh_wait(a, force=True)
                 return self._json({"ok": True, "calendar_error": a.cal["error"]})
+            if path == "/api/events" and params.get("action") == "reinvite":
+                return self._json(reinvite_moved(a, params.get("item_id") or "", params.get("start") or "",
+                                                 params.get("end") or ""))
             if path == "/api/events" and params.get("action") == "list":
                 return self._json(cal_events(a, params["start"], params["end"]))
             if path.startswith("/api/"):

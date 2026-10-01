@@ -315,6 +315,9 @@ class UiContractTest(unittest.TestCase):
                 continue  # webapp.forward_event (iMIP / update attendees)
             if (domain, action) == ("people", "schedule"):
                 continue  # served by webapp._schedule (batched availability)
+            if (domain, action) == ("events", "reinvite"):
+                self.assertIn('"reinvite"', inspect.getsource(webapp.Handler.do_POST))
+                continue  # webapp.reinvite_moved (Seller: the moved meeting by mail)
             fn = calendar._update if (domain, action) == ("events", "update") else upstream_handler(domain, action)
             self.assertIsNotNone(fn, f"{domain}/{action} has no upstream handler")
             named = {n for n, p in inspect.signature(fn).parameters.items()
