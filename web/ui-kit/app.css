@@ -1902,3 +1902,8 @@ body.unified .aas-rail {
   .aas-ev--drag { transition: top 90ms var(--aas-ease), box-shadow var(--aas-dur) var(--aas-ease); }
 }
 .aas-ask p { margin: 0 0 10px; line-height: 1.45; }
+
+/* Meeting form: participant lists grow with their content (up to ~7 lines, then scroll). */
+.aas-people__ta { display: block; width: 100%; box-sizing: border-box; resize: none; overflow-y: auto; min-height: 2.4em;
+  font: inherit; line-height: 1.45; }
+.aas-cnt { color: var(--aas-muted); font-weight: 400; }

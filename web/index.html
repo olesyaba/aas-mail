@@ -446,7 +446,10 @@ function paintExtHint(box, fields, acct = ACCT) {
   const me = (accounts.find(a => a.id === acct) || {}).email;
   const ext = [...new Set(fields.flatMap(f => splitAddrs(f?.value).map(addrOnly)).filter(a => isExternal(a, me)))];
   box.hidden = !ext.length;
-  box.innerHTML = ext.length ? `<span class="aas-ext">внешние</span> ${esc(ext.join(', '))} — вне компании, занятость не проверяется` : '';
+  // 30 addresses in a row buried the form: the first few, the rest as «и ещё N» (all in the tooltip).
+  const shown = ext.length > 4 ? `${ext.slice(0, 3).join(', ')} и ещё ${ext.length - 3}` : ext.join(', ');
+  box.title = ext.length > 4 ? ext.join('\n') : '';
+  box.innerHTML = ext.length ? `<span class="aas-ext">внешние · ${ext.length}</span> ${esc(shown)} — вне компании, занятость не проверяется` : '';
 }
 /** A meeting's length in half-hours, rounded up (45 min takes 2 slots, never 1). */
 const halfHours = ms => Math.max(1, Math.ceil(ms / 18e5));
@@ -518,7 +521,7 @@ function agendaText(items) {
    Reads the editor's fields, fetches a Mon–Fri week of free/busy for everyone
    (people/schedule) and writes the chosen start back into «Начало/Конец». */
 function mountScheduler(box) {
-  const S = {tab: 'best', wk: null, data: null, err: '', tok: 0, key: '', gday: 0, fold: {}};
+  const S = {tab: 'grid', wk: null, data: null, err: '', tok: 0, key: '', gday: 0, fold: {}};
   const ws = () => prefs.work_start ?? 9, we = () => prefs.work_end ?? 18;
   const cons = () => ({not_before_10: true, lunch: true, fri_late: true, room: true, ...(prefs.sched_cons || {})});
   const monday = d => { const x = startOfDay(d), wd = (x.getDay() + 6) % 7; x.setDate(x.getDate() + (wd > 4 ? 7 - wd : -wd)); return x; };
@@ -560,6 +563,13 @@ function mountScheduler(box) {
     ['#est', '#een'].forEach(id => $(id)?.dispatchEvent(new Event('change', {bubbles: true})));
   };
   const empty = t => `<div class="aas-sched__empty">${esc(t)}</div>`;
+  // The server answered, found everyone, yet gave no free/busy for anyone (not «not found»,
+  // not only external people): availability is simply not served.
+  const noFreeBusy = () => {
+    if (!S.data || (S.data.unresolved || []).length) return false;
+    const ask = people().filter(p => !p.me && !p.ext && (p.role === 'req' || p.role === 'opt'));
+    return ask.length > 0 && !ask.some(p => /[0123]/.test(p.fb));
+  };
 
   async function load() {
     if (!box.isConnected) return;  // the editor was closed while a reload was pending
@@ -568,6 +578,9 @@ function mountScheduler(box) {
     const ppl = roleList();
     if (!invited(ppl)) { S.data = null; S.err = ''; S.key = ''; return paint(); }
     const ask = ppl.filter(p => !p.ext);
+    // Seller (Stalwart) has no free/busy for other people at all: say so, check only my calendar.
+    if ((accounts.find(a => a.id === ACCT) || {}).green) { S.data = null; S.err = ''; S.noAvail = true; S.key = ''; return paint(); }
+    S.noAvail = false;
     const key = ask.map(p => p.address.toLowerCase()).join(',') + '|' + isoDay(S.wk);
     if (key === S.key && (S.data || S.err)) return paint();
     S.key = key; S.data = null; S.err = ''; const tok = ++S.tok; paint();
@@ -578,7 +591,7 @@ function mountScheduler(box) {
       if (tok !== S.tok) return;
       // A busy mailbox (the full sync right after the app starts) is not an error to
       // show: try again by itself, every 10 s, up to 6 times, then say so.
-      if (x.code === 'unreachable' && (S.retries || 0) < 6) {
+      if ((x.code === 'unreachable' || x.code === 'throttled') && (S.retries || 0) < 6) {
         S.retries = (S.retries || 0) + 1; S.busy = true; S.key = '';
         clearTimeout(S.retryT); S.retryT = setTimeout(load, 10000);
         return paint();
@@ -716,19 +729,21 @@ function mountScheduler(box) {
       ? `${S.wk.getDate()}–${fri.getDate()} ${RU_MON[fri.getMonth()]}`
       : `${S.wk.getDate()} ${RU_MON[S.wk.getMonth()]} – ${fri.getDate()} ${RU_MON[fri.getMonth()]}`;
     const tab = (id, t) => `<button type="button" role="tab" data-tab="${id}" aria-selected="${S.tab === id}">${t}</button>`;
-    const head = `<div class="aas-sched__tabs" role="tablist">${tab('best', 'Лучшие варианты')}${tab('grid', 'По людям')}
+    const head = `<div class="aas-sched__tabs" role="tablist">${tab('grid', 'По людям')}${tab('best', 'Лучшие варианты')}
       <span class="aas-spacer"></span><button type="button" class="aas-btn aas-btn--sm" data-wk="-1" aria-label="Предыдущая неделя">‹</button>
       <span class="aas-sched__wk">${wkLabel}</span>
       <button type="button" class="aas-btn aas-btn--sm" data-wk="1" aria-label="Следующая неделя">›</button></div>`;
     let body;
     if ($('#eall')?.checked) body = empty('Для события на весь день время подбирать не нужно.');
     else if (!invited(roleList())) body = empty('Добавьте участников — покажу свободное время.');
+    else if (S.noAvail || noFreeBusy())
+      body = `<div class="aas-sched__empty">${S.noAvail ? `Сервер ${esc((accounts.find(a => a.id === ACCT) || {}).name || 'Alfa-Seller')}` : 'Сервер'} не отдаёт занятость участников — подобрать время за них не получится. Ниже — только ваш календарь.</div><div class="aas-sched__own"></div>`;
     else if (S.err) body = `<div class="aas-sched__empty">Занятость участников недоступна: ${esc(S.err.replace(/[.\s]+$/, ''))}. <button type="button" class="aas-linkbtn" data-retry>Повторить</button></div><div class="aas-sched__own"></div>`;
-    else if (!S.data) body = (S.busy ? `<div class="aas-avline hint" role="status">${avDot('warn')}Почтовый ящик занят синхронизацией — повторю сама через 10 с (попытка ${S.retries} из 6).</div>` : '')
+    else if (!S.data) body = (S.busy ? `<div class="aas-avline hint" role="status">${avDot('warn')}Сервер сейчас занят — повторю сама через 10 с (попытка ${S.retries} из 6).</div>` : '')
       + `<div class="aas-sched__skel" aria-busy="true" aria-label="Загружаю занятость">${'<i></i>'.repeat(5)}</div>`;
     else body = S.tab === 'grid' ? gridHtml() : bestHtml();
     box.innerHTML = head + body;
-    if (S.err) ownCheck();
+    if (box.querySelector('.aas-sched__own')) ownCheck();
     if (S.tab === 'grid' && S.data && !S.err) bindGrid();
   }
   box.onclick = e => {
@@ -3569,8 +3584,8 @@ function eventForm(e, opts = {}) {
       ${(prefs.links || []).length ? '' : '<div class="hint">Свои ссылки на встречи (Telemost, KTalk…) можно сохранить в «Настройки → Почта».</div>'}</div>
     ${accounts.some(a => a.id === 'seller') ? `<div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="etwin" ${prefs.twin_bank ? 'checked' : ''}> Добавлять к участникам Alfa-Seller их адрес в Alfa-Bank</label>
       <div class="hint" id="etwinhint" hidden></div></div>` : ''}
-    <div class="f"><label for="eatt">Обязательные участники</label><div class="aas-people"><input type="text" id="eatt" placeholder="фамилия или email" value="${esc(attOf('required'))}"></div></div>
-    <div class="f"><label for="eopt">Опциональные</label><div class="aas-people"><input type="text" id="eopt" placeholder="могут не приходить" value="${esc(attOf('optional'))}"></div>
+    <div class="f"><label for="eatt">Обязательные участники <span class="aas-cnt" id="eattn"></span></label><div class="aas-people"><textarea id="eatt" class="aas-people__ta" rows="1" placeholder="фамилия или email">${esc(attOf('required'))}</textarea></div></div>
+    <div class="f"><label for="eopt">Опциональные <span class="aas-cnt" id="eoptn"></span></label><div class="aas-people"><textarea id="eopt" class="aas-people__ta" rows="1" placeholder="могут не приходить">${esc(attOf('optional'))}</textarea></div>
       <div class="hint aas-exthint" id="eext" hidden></div></div>
     <div class="f"><label for="eroom">Переговорка</label><div class="aas-people"><input type="text" id="eroom" placeholder="найдите по названию, например «Байкал»" value="${esc(attOf('resource'))}"></div>
       ${(prefs.rooms || []).length ? `<div class="aas-slots" id="erooms">${prefs.rooms.map((r, i) => `<span class="aas-roomchip"><button type="button" class="aas-btn aas-btn--sm" data-room="${i}">${esc(r.name || r.address)}</button><button type="button" class="aas-roomchip__x" data-room-del="${i}" title="Забыть переговорку" aria-label="Забыть ${esc(r.name || r.address)}">×</button></span>`).join('')}</div>` : ''}
@@ -3594,6 +3609,16 @@ function eventForm(e, opts = {}) {
   $('#modal').classList.add('aas-modal--wide');
   if (series) ['#est', '#een', '#eall'].forEach(id => { const x = $(id); if (x) x.disabled = true; });
   ['#eatt', '#eopt', '#eroom'].forEach(id => bindPeopleInput($(id)));
+  // A big roster must be seen whole (31 people in a one-line field looked like «one loaded»):
+  // the fields grow with their content and say how many people are in them.
+  ['#eatt', '#eopt'].forEach(id => {
+    const f = $(id), n = $(id + 'n');
+    const fit = () => { f.style.height = 'auto'; f.style.height = Math.min(f.scrollHeight + 2, 168) + 'px';
+      const k = splitAddrs(f.value).length; n.textContent = k ? `· ${k}` : ''; };
+    ['input', 'change'].forEach(ev => f.addEventListener(ev, fit));
+    f.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.defaultPrevented) e.preventDefault(); });  // a list, not lines
+    requestAnimationFrame(fit);
+  });
   const extPaint = () => paintExtHint($('#eext'), [$('#eatt'), $('#eopt')], e?._acct || ACCT);
   ['#eatt', '#eopt'].forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, extPaint)));
   extPaint();
