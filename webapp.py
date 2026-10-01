@@ -1643,11 +1643,36 @@ def _cal_expand(masters: dict, calendar_id: str, win_start, win_end, fields) -> 
             except Exception as e2:  # noqa: BLE001
                 log.warning("calendar: series %s skipped (%s: %s)", server_id, type(e2).__name__, e2)
                 continue
+        occs += _cal_orphan_exceptions(body, occs, win_start, win_end)
         for occ in occs:
             occ_item_id = pack_item_id(cid, server_id, instance=occ.get("instance_start"))
             items.append(project_event(occ, proj, item_id=occ_item_id))
     items.sort(key=lambda e: e.get("start_iso") or "")
     return items, notes
+
+
+def _cal_orphan_exceptions(master: dict, occs: list, win_start, win_end) -> list:
+    """Changed occurrences the rule never generates. Stalwart (Seller) moves a series'
+    start to its next regular date and keeps the earlier one only as an exception
+    («Демо» every 2nd Friday: series from 16.10, the 02.10 meeting an exception) —
+    upstream applies exceptions to generated dates only, so 02.10 vanished."""
+    import copy
+    from outlook_activesync_mcp.model.recurrence import _normalize_key
+    if not master.get("recurrence") or not master.get("exceptions"):
+        return []
+    have = {o.get("instance_start") for o in occs}
+    out = []
+    for ex in _cal_inherit_exceptions(copy.deepcopy(master))["exceptions"]:
+        key = _normalize_key(ex.get("exception_start"))
+        start, end = ex.get("start"), ex.get("end")
+        if ex.get("deleted") or not key or key in have or start is None or end is None:
+            continue
+        if end < win_start or start > win_end:
+            continue
+        row = {k: v for k, v in ex.items() if k not in ("exceptions", "exception_start", "deleted")}
+        row.update(is_recurring=True, instance_start=key)
+        out.append(row)
+    return out
 
 
 def _cal_inherit_exceptions(master: dict) -> dict:

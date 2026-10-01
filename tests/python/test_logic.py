@@ -1612,6 +1612,24 @@ class CalendarOddSeriesTest(unittest.TestCase):
         self.assertIn("one-off", subjects)
         self.assertGreaterEqual(subjects.count("daily"), 2)
 
+    def test_an_occurrence_before_the_series_start_shows(self):
+        """Live 01.10 (Seller «Демо», every 2nd Friday): Stalwart starts the series on its
+        next date and keeps the earlier Friday only as an exception — it was dropped."""
+        from datetime import timezone
+        fri = datetime.combine(date.today(), datetime.min.time()).replace(hour=10, tzinfo=timezone.utc) + timedelta(days=1)
+        later = fri + timedelta(days=14)
+        masters = {"1:7": {"subject": "Демо", "start": later, "end": later + timedelta(hours=2), "is_recurring": True,
+                           "recurrence": {"type": "1", "interval": "2", "count": "", "day_of_week": str(1 << ((fri.weekday() + 1) % 7))},
+                           "exceptions": [{"exception_start": fri.strftime("%Y%m%dT%H%M%SZ"), "deleted": False,
+                                           "start": fri, "end": fri + timedelta(hours=2), "subject": "", "location": ""},
+                                          {"exception_start": (fri - timedelta(days=14)).strftime("%Y%m%dT%H%M%SZ"),
+                                           "deleted": True}]}}
+        items, _ = webapp._cal_expand(masters, "1", date.today(), date.today() + timedelta(days=20), webapp.CAL_FIELDS)
+        starts = [e["start_iso"][:10] for e in items]
+        self.assertEqual(starts, [fri.date().isoformat(), later.date().isoformat()])
+        self.assertEqual({e["subject"] for e in items}, {"Демо"}, "the exception inherits the series fields")
+        self.assertEqual(len({e["item_id"] for e in items}), 2, "each occurrence has its own instance id")
+
     def test_a_series_that_cannot_expand_is_skipped_not_fatal(self):
         from datetime import timezone
         start = datetime.now(timezone.utc).replace(microsecond=0)
