@@ -35,7 +35,7 @@ for s in "${SUITES[@]}"; do
       echo "==> Python ($("$PY" --version 2>&1), vendor: ${VENDOR:-none})"
       if [ -z "$VENDOR" ]; then echo "outlook_activesync_mcp not found — build the dist app once"; FAILED+=(py); continue; fi
       PYTHONPATH="$VENDOR:$BUNDLE/site-packages:$ROOT/tests/python" PYTHONDONTWRITEBYTECODE=1 \
-        "$PY" -m unittest discover -s tests/python -t tests/python "${UNITTEST_ARGS:--q}" || FAILED+=(py)
+        "$PY" -m unittest discover -s tests/python -t tests/python ${UNITTEST_ARGS:--q -b} || FAILED+=(py)  # -b: a test's log lines show only when it fails
       ;;
     js)
       echo "==> Web UI (node $(node --version))"

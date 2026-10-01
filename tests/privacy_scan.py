@@ -6,7 +6,7 @@ ids, signatures, saved meeting links, session token) plus name/home-path markers
 Every file in the archive is searched as bytes (UTF-8 and UTF-16), binaries too.
 Only needle *labels* and file paths are printed — never the values.
 
-    python3 tests/privacy_scan.py dist/AAS-mail-1.2.6-mac.zip
+    python3 tests/privacy_scan.py dist/AAS-mail-1.2.6-mac.zip [dist/AAS-mail-1.2.6-android.apk …]
 """
 from __future__ import annotations
 
@@ -64,20 +64,35 @@ def needles() -> dict[str, str]:
     return out
 
 
+def _members(z: zipfile.ZipFile, prefix: str = ""):
+    """(name, bytes) of every file, opening nested archives too: an APK keeps the
+    Python code in assets/chaquopy/*.imy, which are zips of their own."""
+    import io
+    for n in z.namelist():
+        if n.endswith("/"):
+            continue
+        data = z.read(n)
+        yield prefix + n, data
+        if n.endswith((".imy", ".zip", ".apk", ".jar")) and data[:2] == b"PK":
+            try:
+                with zipfile.ZipFile(io.BytesIO(data)) as inner:
+                    yield from _members(inner, prefix + n + "!/")
+            except zipfile.BadZipFile:
+                pass
+
+
 def main(zip_path: str) -> int:
     marks = needles()
     print(f"scanning {zip_path} for {len(marks)} personal markers (values not printed)")
     hits: list[tuple[str, str]] = []
     bad_files: list[str] = []
+    count = 0
     with zipfile.ZipFile(zip_path) as z:
-        names = z.namelist()
-        for n in names:
+        for n, data in _members(z):
+            count += 1
             base = n.rsplit("/", 1)[-1]
             if base in FORBIDDEN_FILES or (base.startswith("state") and base.endswith(".json")):
                 bad_files.append(n)
-            if n.endswith("/"):
-                continue
-            data = z.read(n)
             low = data.lower()
             for label, v in marks.items():
                 for enc in ("utf-8", "utf-16-le"):
@@ -85,7 +100,7 @@ def main(zip_path: str) -> int:
                     if b in data or b.lower() in low:
                         hits.append((label, n))
                         break
-    print(f"  files in archive: {len(names)}")
+    print(f"  files in archive (nested included): {count}")
     if bad_files:
         print("  ✘ config/state/token files present:", *bad_files, sep="\n     ")
     else:
@@ -95,11 +110,10 @@ def main(zip_path: str) -> int:
             print(f"  ✘ {label}: {n}")
     else:
         print("  ✔ none of your logins, e-mails, device ids, signatures, meeting links, token or home path found")
-    for a in sorted(ALLOWED):
-        where = [n for n in names if not n.endswith("/") and a.encode() in z.read(n)] if False else None
     print(f"  ℹ intentionally public: {', '.join(sorted(ALLOWED))} (support contact in «О приложении»)")
     return 1 if hits or bad_files else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1]))
+    # Every archive given (the Mac zip and both APKs on a release); fails if any fails.
+    sys.exit(max(main(p) for p in sys.argv[1:]))
