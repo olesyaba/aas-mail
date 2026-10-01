@@ -827,7 +827,7 @@ test('calendar drag: only own movable meetings, same length at the new time', ()
   assert.equal(canDragEvent({item_id: '1', response_type: 'organizer', attendees: [{address: 'x@bank.test'}]}, me), true);
   assert.equal(canDragEvent({item_id: '1', attendees: []}, me), true, 'a plain appointment');
   assert.equal(canDragEvent({item_id: '1', organizer: {address: 'boss@bank.test'}, response_type: 'accepted'}, me), false);
-  assert.equal(canDragEvent({item_id: '1', response_type: 'organizer', is_recurring: true}, me), false);
+  assert.equal(canDragEvent({item_id: '1', response_type: 'organizer', is_recurring: true}, me), true, 'own series: one occurrence moves');
   assert.equal(canDragEvent({item_id: '1', response_type: 'organizer', is_all_day: true}, me), false);
   assert.equal(canDragEvent({item_id: '1', response_type: 'organizer', meeting_status: 'cancelled'}, me), false);
   const s = new Date(2026, 9, 1, 10, 0), e = new Date(2026, 9, 1, 11, 30);
@@ -843,4 +843,15 @@ test('cancelled meetings: by status or by a server-prefixed subject', () => {
   assert.equal(isCancelled({subject: 'Canceled: B2B IT leads sync'}), true);
   assert.equal(isCancelled({meeting_status: 'meeting', subject: 'Демо отменённых фич'}), false);
   assert.equal(evTitle({subject: 'FW: Отменено: Daily'}), 'Отменено: Daily');
+});
+
+test('own meetings: an alias in Settings does not hide them; others get a reason', () => {
+  const {myAddrs, dragBlock} = load(['myAddrs', 'dragBlock']);
+  const list = [{_acct: 'main', response_type: 'organizer', organizer: {address: 'IIvanov@bank.test'}}];
+  const mine = myAddrs('main', list);
+  assert.equal(mine.has('iivanov@bank.test'), true, 'learned from a meeting the server marks as mine');
+  // Exchange answers «none» for some own meetings (Lunch): the organizer address decides.
+  assert.equal(dragBlock({item_id: '1', response_type: 'none', organizer: {address: 'iivanov@BANK.test'}, attendees: [{address: 'x@bank.test'}]}, mine), '');
+  assert.match(dragBlock({item_id: '1', response_type: 'accepted', organizer: {address: 'boss@bank.test'}}, mine), /организатор/);
+  assert.match(dragBlock({item_id: '1', response_type: 'organizer', meeting_status: 'cancelled'}, mine), /отменена/);
 });

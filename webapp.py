@@ -3715,6 +3715,52 @@ def _patch_attendee_types():
     calendar._resolve_attendees = resolve
 
 
+def _update_instance(client, item_id: str, *, start=None, end=None, subject=None, location=None) -> dict:
+    """Move / rename ONE occurrence of a series: a Change on the master carrying its
+    Exceptions, the way upstream cancels one (a Change replaces the whole set, so the
+    existing exceptions go along). Exchange then mails the organizer's update itself."""
+    from outlook_activesync_mcp.commands import calendar as cal
+    from outlook_activesync_mcp.errors import BadRequest, EasStatusError
+    from outlook_activesync_mcp.models import envelope, instance_of, unpack_item_id
+    from outlook_activesync_mcp.utils import parse_datetime
+    from outlook_activesync_mcp.wbxml import el, find, text_of
+    collection_id, server_id = unpack_item_id(item_id)
+    instance = instance_of(item_id)
+    if start is None and end is None and subject is None and location is None:
+        raise BadRequest("update: для вхождения серии меняются время, тема или место")
+    client.ensure_provisioned()
+    fetched = client.command("ItemOperations", cal._build_fetch(collection_id, server_id))
+    master = cal.parse_event(find(fetched, "ItemOperations", "Properties") or fetched)
+    mine = next((ex for ex in master.get("exceptions") or []
+                 if cal._norm_instance(ex.get("exception_start")) == instance and not ex.get("deleted")), {})
+    new = {"exception_start": instance, "start": mine.get("start"), "end": mine.get("end"),
+           "subject": mine.get("subject"), "location": mine.get("location")}
+    if start is not None:
+        new["start"] = parse_datetime(start)
+    if end is not None:
+        new["end"] = parse_datetime(end)
+    if subject is not None:
+        new["subject"] = subject
+    if location is not None:
+        new["location"] = location
+    if new["start"] is None or new["end"] is None:  # keep the occurrence's own times
+        orig = parse_datetime(instance)
+        dur = (master["end"] - master["start"]) if master.get("start") and master.get("end") else None
+        new["start"] = new["start"] or orig
+        new["end"] = new["end"] or (new["start"] + dur if dur else new["start"])
+    ex_nodes = [cal._exception_node(ex) for ex in master.get("exceptions") or []
+                if cal._norm_instance(ex.get("exception_start")) != instance]
+    ex_nodes.append(cal._exception_node(new))
+    change = el("AirSync", "Change", el("AirSync", "ServerId", text=server_id),
+                el("AirSync", "ApplicationData", el("Calendar", "Exceptions", *ex_nodes)))
+    tree, _m, _g = client.sync_round(collection_id, command_children=[change], get_changes=False)
+    node = cal.response_for(tree, "Change", server_id=server_id)
+    status = text_of(find(node, "AirSync", "Status")) if node is not None else None
+    if status and status != "1":
+        raise EasStatusError("Sync", int(status), f"сервер не принял изменение вхождения серии (status {status})")
+    return envelope("update", [{"updated": True, "item_id": item_id, "scope": "instance"}])
+
+
 def _patch_event_update_attendees():
     """Upstream events/update ignores ``attendees``. Extend Sync Change so the
     organizer can add/remove people and Exchange re-sends the invite."""
@@ -3733,6 +3779,11 @@ def _patch_event_update_attendees():
     def wrapped(client, *, item_id=None, attendees=None, subject=None, start=None, end=None,
                 location=None, body=None, busy_status=None, all_day=None, reminder=None,
                 sensitivity=None, **_):
+        from outlook_activesync_mcp.models import instance_of
+        if instance_of(item_id):
+            # One occurrence: upstream dropped the instance and changed the whole series
+            # (a moved daily shifted every day). The roster is the series' — not per date.
+            return _update_instance(client, item_id, start=start, end=end, subject=subject, location=location)
         if attendees is None:
             return orig(client, item_id=item_id, subject=subject, start=start, end=end,
                         location=location, body=body, busy_status=busy_status,

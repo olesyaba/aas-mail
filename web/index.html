@@ -3119,14 +3119,25 @@ function layoutLanes(timed) {
   return timed;
 }
 
-/** Only what is ours to move: our own meeting or a plain appointment — not someone
- *  else's invitation, a series occurrence (that needs an exception), cancelled or all-day. */
-function canDragEvent(e, me) {
-  if (!e || e.is_all_day || e.is_recurring || isCancelled(e) || !e.item_id) return false;
-  const org = (e.organizer?.address || '').toLowerCase();
-  const others = (e.attendees || []).filter(a => a.address && a.address.toLowerCase() !== String(me || '').toLowerCase());
-  return e.response_type === 'organizer' || (!!me && org === me.toLowerCase()) || (!org && !others.length);
+/** My addresses on an account: the one in Settings plus every organizer the server marks
+ *  as me (response_type «organizer») — an alias typed in Settings must not hide my meetings. */
+function myAddrs(acct, list = events) {
+  const s = new Set([String((accounts.find(a => a.id === acct) || {}).email || '').toLowerCase()].filter(Boolean));
+  for (const e of list || []) if (e.response_type === 'organizer' && (e._acct || ACCT) === acct && e.organizer?.address) s.add(e.organizer.address.toLowerCase());
+  return s;
 }
+/** Why a meeting cannot be moved here, or '' when it can: our own meeting or a plain
+ *  appointment (a series moves one occurrence) — not someone else's invitation. */
+function dragBlock(e, mine) {
+  if (!e || !e.item_id) return 'это событие нельзя перенести';
+  if (e.is_all_day) return 'событие на весь день переносите в карточке';
+  if (isCancelled(e)) return 'встреча отменена';
+  const org = (e.organizer?.address || '').toLowerCase();
+  const others = (e.attendees || []).filter(a => a.address && !mine.has(a.address.toLowerCase()));
+  const own = e.response_type === 'organizer' || (org && mine.has(org)) || (!org && !others.length);
+  return own ? '' : 'перенести встречу может только организатор — вы можете предложить ему другое время';
+}
+const canDragEvent = (e, mine) => !dragBlock(e, mine instanceof Set ? mine : new Set([String(mine || '').toLowerCase()].filter(Boolean)));
 /** The same meeting length, starting on `day` at `mins` past midnight. */
 function shiftEvent(s, e, day, mins) {
   const start = new Date(day); start.setHours(0, mins, 0, 0);
@@ -3139,8 +3150,16 @@ const hhmm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 /** «пт, 2 октября, 13:00–15:00» for the move confirmation. */
 const whenText = (s, e) => `${s.toLocaleDateString('ru-RU', {weekday: 'short', day: 'numeric', month: 'long'})}, ${hhmm(s)}–${hhmm(e)}`;
 function bindEvDrag(el, e, cols, days, sc) {
-  const acct = e._acct || ACCT, me = (accounts.find(a => a.id === acct) || {}).email || '';
-  if (!canDragEvent(e, me)) return;
+  const acct = e._acct || ACCT, mine = myAddrs(acct), why = dragBlock(e, mine);
+  if (why) {  // say why instead of a drag that silently does nothing
+    el.addEventListener('pointerdown', pd => {
+      if (pd.button !== 0 || pd.pointerType === 'touch') return;
+      const nope = mv => { if (Math.hypot(mv.clientX - pd.clientX, mv.clientY - pd.clientY) < 8) return; off(); toast(why[0].toUpperCase() + why.slice(1)); };
+      const off = () => { document.removeEventListener('pointermove', nope); document.removeEventListener('pointerup', off); };
+      document.addEventListener('pointermove', nope); document.addEventListener('pointerup', off);
+    });
+    return;
+  }
   el.classList.add('aas-ev--movable');
   el.addEventListener('pointerdown', pd => {
     // ponytail: mouse/trackpad only — a finger keeps scrolling the grid; long-press drag if tablets need it.
@@ -3177,7 +3196,7 @@ function bindEvDrag(el, e, cols, days, sc) {
       el.classList.remove('aas-ev--drag'); delete el.dataset.dragTime;
       const to = target && shiftEvent(e.s, e.e, days[target.i], target.mins);
       if (!to || to.start.getTime() === e.s.getTime()) { drawCal(); return; }
-      const others = (e.attendees || []).filter(a => a.address && a.address.toLowerCase() !== me.toLowerCase());
+      const others = (e.attendees || []).filter(a => a.address && !mine.has(a.address.toLowerCase()));
       const green = !!(accounts.find(a => a.id === acct) || {}).green;
       const ok = await askYesNo('Перенести встречу?',
         `<p>Подтвердите перенос «${esc(evTitle(e))}» с <b>${esc(whenText(e.s, e.e))}</b> на <b>${esc(whenText(to.start, to.end))}</b>` +
@@ -3433,9 +3452,9 @@ function eventMailForm(e, mode) {
 }
 function eventView(e) {
   const att = e.attendees || [];
-  const me = (accounts.find(a => a.id === ACCT) || {}).email || '';
+  const mine = myAddrs(e._acct || ACCT);
   const orgAddr = (e.organizer?.address || '').toLowerCase();
-  const iAmOrg = e.response_type === 'organizer' || (me && orgAddr && orgAddr === me.toLowerCase());
+  const iAmOrg = e.response_type === 'organizer' || (!!orgAddr && mine.has(orgAddr));
   const isMeeting = e.meeting_status === 'meeting' || !!e.organizer?.address || att.length > 1;
   const canRespond = isMeeting && !iAmOrg && !isCancelled(e) && e.meeting_status !== 'appointment';
   const my = e.response_type || '';
@@ -3448,7 +3467,7 @@ function eventView(e) {
   const link = e._join ?? joinURL(e.location, e.body, e.online_meeting);
   // Writing about the meeting: the same actions and icons as under a letter, kept quiet
   // (ghost) so they never compete with the answer (Принять / Отклонить) or «Подключиться».
-  const others = att.filter(a => a.address && a.address.toLowerCase() !== me.toLowerCase());
+  const others = att.filter(a => a.address && !mine.has(a.address.toLowerCase()));
   const mailActs = [
     ...(!iAmOrg && orgAddr ? [['reply', 'replyOne', 'Ответить', 'Письмо организатору, без ответа на приглашение']] : []),
     ...(others.length > 1 || (iAmOrg && others.length) ? [['replyall', 'replyAll', 'Ответить всем', 'Письмо всем участникам']] : []),
@@ -3474,7 +3493,8 @@ function eventView(e) {
   // Rare actions live behind «•••»: the card is for reading, answering and writing.
   el.querySelectorAll('[data-mail]').forEach(b => b.onclick = () => eventMailForm(e, b.dataset.mail));
   $('#evmore').onclick = () => openMenu($('#evmore'), [
-    {label: 'Изменить', run: () => eventForm(e)},
+    // Someone else's meeting is changed by its organizer (an attendee's edit would rewrite their roster).
+    ...(iAmOrg || !isMeeting ? [{label: e.is_recurring ? 'Изменить это вхождение' : 'Изменить', run: () => eventForm(e)}] : []),
     {label: iAmOrg && isMeeting ? 'Отменить встречу' : 'Удалить', danger: true, run: removeEvent},
   ]);
   el.querySelectorAll('[data-r]').forEach(b => b.onclick = guard(async () => {
@@ -3533,7 +3553,8 @@ function eventForm(e, opts = {}) {
   const s = e ? e.s : now, en = e ? e.e : new Date(now.getTime() + 30 * 6e4);  // 30 min by default
   const attOf = type => e ? (e.attendees || []).filter(a => a.address && a.address !== e.organizer?.address && (a.type || 'required') === type)
     .map(a => formatPerson(a)).join(', ') : '';
-  openModal(`<h3>${editing ? 'Изменить событие' : 'Новое событие'}</h3><div class="aas-evwrap"><div class="aas-evform">
+  openModal(`<h3>${editing ? (e.is_recurring ? 'Изменить вхождение серии' : 'Изменить событие') : 'Новое событие'}</h3><div class="aas-evwrap"><div class="aas-evform">
+    ${editing && e.is_recurring ? '<div class="hint aas-hint-tight">Изменится только эта встреча серии: время, тема и место. Участники и описание — общие для всей серии.</div>' : ''}
     <div class="f"><label>Тема</label><input type="text" id="esub" value="${esc(e?.subject || '')}"></div>
     <div class="frow"><div class="f"><label>Начало</label><input type="datetime-local" id="est" value="${isoLocal(s)}"></div>
       <div class="f"><label>Конец</label><input type="datetime-local" id="een" value="${isoLocal(en)}"></div></div>
