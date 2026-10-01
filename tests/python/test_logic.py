@@ -1471,12 +1471,18 @@ class SelfUpdateStopTest(unittest.TestCase):
     (1.2.27 was installed five times in a row that way)."""
 
     def test_stop_app_ends_the_bundles_server(self):
-        import shutil, signal, subprocess, sys, tempfile
+        import shutil, signal, subprocess, tempfile
         app = Path(tempfile.mkdtemp(prefix="aas-upd-")) / "AAS mail.app"
         py = app / "Contents/Resources/eas-bridge/python/bin/python3"
         py.parent.mkdir(parents=True)
-        shutil.copy(sys.executable, py)
-        srv = subprocess.Popen([str(py), "-c", "import time; time.sleep(60)"])
+        # A stand-in that lives at the server's path (stop_app finds it by command line):
+        # a bare copy of python3 has no stdlib beside it and died at once — so «gone»
+        # passed whatever stop_app did — and a copied /bin/sleep is killed by macOS.
+        py.write_text("#!/bin/sh\nwhile :; do sleep 0.2; done\n")
+        py.chmod(0o755)
+        srv = subprocess.Popen([str(py)])
+        time.sleep(0.3)
+        self.assertIsNone(srv.poll(), "the stand-in server must be running before stop_app")
         try:
             script = webapp.Path(webapp.__file__).parent / "app" / "self_update.sh"
             r = subprocess.run(["/bin/bash", "-c", f'SELF_UPDATE_LIB=1 source "{script}" && stop_app "$1"', "_", str(app)],
