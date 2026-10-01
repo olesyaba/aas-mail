@@ -8,6 +8,7 @@ cd "$(dirname "$0")/.."
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 : "${AAS_IOS_TEAM:?set AAS_IOS_TEAM to the team id}"
 APP="ios/build/Build/Products/Release-iphoneos/AASMail.app"
+VER="$(python3 -c "import re;print(re.search(r'\"version\": \"([^\"]+)', open('webapp.py').read())[1])")"
 
 JSON="$(mktemp)"; trap 'rm -f "$JSON"' EXIT
 xcrun devicectl list devices --json-output "$JSON" >/dev/null
@@ -29,7 +30,7 @@ while IFS=$'\t' read -r UDID NAME; do
   # A build for this very device registers it in the profile (free team: Xcode does it).
   if ! xcodebuild -quiet -project ios/AASMail.xcodeproj -scheme AASMail -configuration Release \
       -destination "id=$UDID" -destination-timeout 30 -derivedDataPath ios/build -allowProvisioningUpdates \
-      DEVELOPMENT_TEAM="$AAS_IOS_TEAM" build 2>&1 | grep -E "error:|Developer Mode" | grep -v IDERunDestination; then :; fi
+      DEVELOPMENT_TEAM="$AAS_IOS_TEAM" MARKETING_VERSION="$VER" build 2>&1 | grep -E "error:|Developer Mode" | grep -v IDERunDestination; then :; fi
   if xcrun devicectl device install app --device "$UDID" "$APP" >/dev/null 2>&1; then echo "    установлено"
   else echo "    не установлено — на устройстве: Настройки → Конфиденциальность и безопасность → Режим разработчика"; fi
 done <<< "$UDIDS"
