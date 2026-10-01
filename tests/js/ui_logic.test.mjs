@@ -856,3 +856,13 @@ test('own meetings: an alias in Settings does not hide them; others get a reason
   assert.match(dragBlock({item_id: '1', response_type: 'organizer', meeting_status: 'cancelled'}, mine), /отменена/);
   assert.match(dragBlock({item_id: '1', response_type: 'organizer', is_recurring: true}, mine), /Outlook или OWA/);
 });
+
+test('people field: the next name is searched even without a comma after «…>»', () => {
+  const {peopleToken} = load(['peopleToken']);
+  const P = v => plain(peopleToken(v));
+  assert.equal(P('Мамаджанов Мирзохид <MMamajanov@alfabank.ru> гре').token, 'гре');
+  assert.equal(P('Мамаджанов Мирзохид <MMamajanov@alfabank.ru> гре').pre, 'Мамаджанов Мирзохид <MMamajanov@alfabank.ru>');
+  assert.equal(P('a@x.ru, гре').token, 'гре');
+  assert.equal(P('"Иванов, Иван" <i@x.ru>, пет').token, 'пет', 'a comma inside quotes is not a separator');
+  assert.equal(P('Иванов <i@x').token, 'Иванов <i@x', 'an unfinished address is still being typed');
+});

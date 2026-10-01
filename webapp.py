@@ -47,6 +47,7 @@ APP_META = {
     "version": "1.2.42",
     "description": "Локальный клиент почты и календаря Alfa / Alfa-Seller поверх Exchange ActiveSync.",
     "contact_mm": "@olesya_ba",
+    "channel_mm": "https://mm.alfaops.ru/platforma-global/channels/aas-mail",
     "thanks_intro": "Спасибо за тест-рейды и светлые идеи:",
     "thanks": [
         {"emoji": "🧚", "title": "фее", "handle": "@vdgrekova", "name": "Грековой Владене"},

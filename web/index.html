@@ -2490,6 +2490,22 @@ function filterRecentPeople(q, limit = 8) {
   ).slice(0, limit);
 }
 
+/** A people field's text → what is settled (`pre`) and the name being typed (`token`). */
+function peopleToken(v) {
+  let depth = 0, lastSep = -1, quoted = false;
+  for (let i = 0; i < v.length; i++) {
+    const ch = v[i];
+    if (ch === '"') quoted = !quoted;
+    else if (quoted) continue;
+    else if (ch === '<') depth++;
+    // «Имя <адрес>» is complete at its «>»: what follows is the next person even without a comma.
+    else if (ch === '>') { depth = Math.max(0, depth - 1); if (!depth) lastSep = i; }
+    else if ((ch === ',' || ch === ';' || ch === '\n') && depth === 0) lastSep = i;
+  }
+  const pre = lastSep >= 0 ? v.slice(0, lastSep + 1) : '';
+  const rawToken = lastSep >= 0 ? v.slice(lastSep + 1) : v;
+  return {pre, token: rawToken.replace(/^\s+/, ''), rawToken};
+}
 /**
  * Autocomplete for To/Cc/attendees: recent contacts instantly, GAL after 2+ chars,
  * keyboard nav, replaces only the last incomplete token.
@@ -2533,21 +2549,7 @@ function bindPeopleInput(inp) {
     dd.style.right = 'auto';
   };
   const hide = () => { dd.hidden = true; dd.innerHTML = ''; items = []; idx = -1; };
-  const prefixAndToken = () => {
-    const v = inp.value;
-    let depth = 0, lastSep = -1, quoted = false;
-    for (let i = 0; i < v.length; i++) {
-      const ch = v[i];
-      if (ch === '"') quoted = !quoted;
-      else if (quoted) continue;
-      else if (ch === '<') depth++;
-      else if (ch === '>') depth = Math.max(0, depth - 1);
-      else if ((ch === ',' || ch === ';' || ch === '\n') && depth === 0) lastSep = i;
-    }
-    const pre = lastSep >= 0 ? v.slice(0, lastSep + 1) : '';
-    const rawToken = lastSep >= 0 ? v.slice(lastSep + 1) : v;
-    return {pre, token: rawToken.replace(/^\s+/, ''), rawToken};
-  };
+  const prefixAndToken = () => peopleToken(inp.value);
 
   const paint = (list, {loading, empty} = {}) => {
     items = list || [];
@@ -2581,8 +2583,8 @@ function bindPeopleInput(inp) {
     const p = items[i]; if (!p) return;
     const {pre} = prefixAndToken();
     const formatted = formatPerson(p);
-    const needsSep = pre.length && !/[,;\s]$/.test(pre);
-    inp.value = pre + (needsSep ? ', ' : /[,;]$/.test(pre) ? ' ' : '') + formatted + ', ';
+    // Always «…, Новый, »: a comma before the person (none was typed after «…>») and one after.
+    inp.value = (pre.trim() ? pre.replace(/[\s,;]*$/, '') + ', ' : '') + formatted + ', ';
     rememberPeople([p]);
     hide();
     inp.focus();
@@ -2641,6 +2643,13 @@ function bindPeopleInput(inp) {
     else if (e.key === 'Escape') { e.preventDefault(); hide(); }
   });
   inp.addEventListener('blur', () => setTimeout(hide, 120));
+  // Clicking into a filled field: the caret lands after «, » — ready for the next person.
+  inp.addEventListener('focus', () => {
+    if (inp.value.trim() && !/[,;]\s*$/.test(inp.value)) {
+      inp.value = inp.value.replace(/\s*$/, ', ');
+      const n = inp.value.length; inp.setSelectionRange?.(n, n);
+    }
+  });
   inp.addEventListener('focus', () => {
     const {token} = prefixAndToken();
     if (token.trim()) run();
@@ -2863,7 +2872,7 @@ $('#setbtn').onclick = async () => {
       <h4 class="aas-about__title">${esc(aboutMeta.name || 'AAS mail')}</h4>
       <div class="aas-about__ver">Версия ${esc(aboutMeta.version || '')}</div>
       <p>${esc(aboutMeta.description || '')}</p>
-      <p>Контакт в Mattermost: <b>${esc(aboutMeta.contact_mm || '@olesya_ba')}</b></p>
+      <p>Контакт в Mattermost: <b>${esc(aboutMeta.contact_mm || '@olesya_ba')}</b>${aboutMeta.channel_mm ? ` · канал <a href="${esc(aboutMeta.channel_mm)}" target="_blank" rel="noopener noreferrer"><b>AAS mail</b></a>` : ''}</p>
       ${Array.isArray(aboutMeta.thanks) && aboutMeta.thanks.length ? `
       <div class="aas-about__thanks">
         <div class="aas-about__thanks-head">${esc(aboutMeta.thanks_intro || '')}</div>
@@ -3569,7 +3578,7 @@ function eventForm(e, opts = {}) {
   }
   const s = e ? e.s : now, en = e ? e.e : new Date(now.getTime() + 30 * 6e4);  // 30 min by default
   const attOf = type => e ? (e.attendees || []).filter(a => a.address && a.address !== e.organizer?.address && (a.type || 'required') === type)
-    .map(a => formatPerson(a)).join(', ') : '';
+    .map(a => formatPerson(a)).join(', ').replace(/.$/, '$&, ') : '';  // ends with «, »: the next name can be typed at once
   const series = editing && e.is_recurring;  // the series' subject, place, roster — never one date's time
   openModal(`<h3>${editing ? (series ? 'Изменить серию' : 'Изменить событие') : 'Новое событие'}</h3><div class="aas-evwrap"><div class="aas-evform">
     ${series ? '<div class="hint aas-hint-tight">Меняются тема, место, описание и участники всей серии. Время серии и отдельных встреч меняйте в Outlook или OWA — сервер не даёт сделать это отсюда.</div>' : ''}
