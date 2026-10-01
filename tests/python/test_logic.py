@@ -473,52 +473,36 @@ class MailFullBoxRefreshTest(unittest.TestCase):
 
 
 class UpdateInstanceTest(unittest.TestCase):
-    """Editing / dragging one occurrence of a series changed the whole series: upstream
-    update drops the instance part of the item id. It is now an exception on the master."""
+    """Editing one occurrence used to write its time into the whole series (upstream update
+    drops the instance part of the id). Exchange refuses every way to move one occurrence,
+    so a time change on an occurrence is refused; other fields go to the series."""
 
-    def _run(self, master, **kw):
+    def _client(self):
+        client = mock.Mock(); client.sync_round.return_value = (None, False, 1)
+        return client
+
+    def test_time_of_one_occurrence_is_refused(self):
+        from outlook_activesync_mcp.commands import calendar as cal
+        from outlook_activesync_mcp.errors import BadRequest
+        from outlook_activesync_mcp.models import pack_item_id
+        webapp._patch_event_update_attendees()
+        client = self._client()
+        with self.assertRaises(BadRequest):
+            cal._update(client, item_id=pack_item_id("20", "s1", instance="20261003T170000Z"), start="2026-10-03T21:00")
+        client.sync_round.assert_not_called()
+
+    def test_subject_of_an_occurrence_goes_to_the_series(self):
         from outlook_activesync_mcp.commands import calendar as cal
         from outlook_activesync_mcp.models import pack_item_id
-        client = mock.Mock()
-        client.command.return_value = el("ItemOperations", "ItemOperations")
-        client.sync_round.return_value = (None, False, 1)
-        with mock.patch.object(cal, "_build_fetch"), mock.patch.object(cal, "parse_event", return_value=master), \
-             mock.patch.object(cal, "response_for", return_value=None):
-            r = webapp._update_instance(client, pack_item_id("20", "s1", instance="20261002T070000Z"), **kw)
+        from outlook_activesync_mcp.wbxml import find, text_of
+        webapp._patch_event_update_attendees()
+        client = self._client()
+        with mock.patch.object(cal, "response_for", return_value=None):
+            cal._update(client, item_id=pack_item_id("20", "s1", instance="20261003T170000Z"), subject="Новая тема",
+                        attendees=[])
         change = client.sync_round.call_args.kwargs["command_children"][0]
-        return r, change
-
-    @staticmethod
-    def _exceptions(change):
-        from outlook_activesync_mcp.wbxml import find_all, find, text_of
-        return [(text_of(find(x, "Calendar", "ExceptionStartTime")), text_of(find(x, "Calendar", "StartTime")),
-                 text_of(find(x, "Calendar", "Deleted"))) for x in find_all(change, "Calendar", "Exception")]
-
-    def test_moves_one_occurrence_and_keeps_other_exceptions(self):
-        from datetime import timezone
-        s = datetime(2026, 9, 1, 7, tzinfo=timezone.utc)
-        master = {"start": s, "end": s + timedelta(minutes=30),
-                  "exceptions": [{"exception_start": "20260925T070000Z", "deleted": True}]}
-        r, change = self._run(master, start="2026-10-02T10:00", end="2026-10-02T10:30")
-        self.assertEqual(r["items"][0]["scope"], "instance")
-        ex = self._exceptions(change)
-        self.assertIn(("20260925T070000Z", "", "1"), ex, "the earlier deletion is re-sent, not dropped")
-        moved = [x for x in ex if x[0] == "20261002T070000Z"]
-        self.assertEqual(len(moved), 1)
-        want = datetime(2026, 10, 2, 10, 0).astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")  # local 10:00
-        self.assertEqual(moved[0][1], want, "the new start rides in the exception")
-        from outlook_activesync_mcp.wbxml import find
-        self.assertIsNone(find(change, "Calendar", "Recurrence"))
-
-    def test_series_update_without_instance_is_untouched(self):
-        with mock.patch.object(webapp, "_update_instance") as inst:
-            from outlook_activesync_mcp.commands import calendar as cal
-            webapp._patch_event_update_attendees()
-            client = mock.Mock(); client.sync_round.return_value = (None, False, 1)
-            with mock.patch.object(cal, "response_for", return_value=None):
-                cal._update(client, item_id=__import__("outlook_activesync_mcp.models", fromlist=["x"]).pack_item_id("20", "s1"),
-                            subject="x")
-        inst.assert_not_called()
+        self.assertEqual(text_of(find(change, "AirSync", "ServerId")), "s1")
+        self.assertIsNone(find(change, "Calendar", "StartTime"))
 
 
 class ReinviteMovedTest(unittest.TestCase):

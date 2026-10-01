@@ -827,7 +827,7 @@ test('calendar drag: only own movable meetings, same length at the new time', ()
   assert.equal(canDragEvent({item_id: '1', response_type: 'organizer', attendees: [{address: 'x@bank.test'}]}, me), true);
   assert.equal(canDragEvent({item_id: '1', attendees: []}, me), true, 'a plain appointment');
   assert.equal(canDragEvent({item_id: '1', organizer: {address: 'boss@bank.test'}, response_type: 'accepted'}, me), false);
-  assert.equal(canDragEvent({item_id: '1', response_type: 'organizer', is_recurring: true}, me), true, 'own series: one occurrence moves');
+  assert.equal(canDragEvent({item_id: '1', response_type: 'organizer', is_recurring: true}, me), false, 'Exchange refuses to move one occurrence');
   assert.equal(canDragEvent({item_id: '1', response_type: 'organizer', is_all_day: true}, me), false);
   assert.equal(canDragEvent({item_id: '1', response_type: 'organizer', meeting_status: 'cancelled'}, me), false);
   const s = new Date(2026, 9, 1, 10, 0), e = new Date(2026, 9, 1, 11, 30);
@@ -854,4 +854,5 @@ test('own meetings: an alias in Settings does not hide them; others get a reason
   assert.equal(dragBlock({item_id: '1', response_type: 'none', organizer: {address: 'iivanov@BANK.test'}, attendees: [{address: 'x@bank.test'}]}, mine), '');
   assert.match(dragBlock({item_id: '1', response_type: 'accepted', organizer: {address: 'boss@bank.test'}}, mine), /организатор/);
   assert.match(dragBlock({item_id: '1', response_type: 'organizer', meeting_status: 'cancelled'}, mine), /отменена/);
+  assert.match(dragBlock({item_id: '1', response_type: 'organizer', is_recurring: true}, mine), /Outlook или OWA/);
 });
