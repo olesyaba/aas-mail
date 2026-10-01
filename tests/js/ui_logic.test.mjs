@@ -796,3 +796,42 @@ test('Seller → Alfa-Bank twin: same login first, else the one full-name match'
   assert.equal(pickTwin('x@alfaseller.ru', '', [vg], 'alfabank.ru'), null);
   assert.equal(pickTwin('aspetrova@alfaseller.ru', '', [{name: 'В', address: 'aspetrova@alfaseller.ru'}], 'alfabank.ru'), null);
 });
+
+test('meeting recurrence: form choice → create params and words', () => {
+  const {repeatParams, repeatText} = load(['repeatParams', 'repeatText']);
+  const P = r => plain(repeatParams(r));
+  assert.equal(repeatParams({kind: ''}), null);
+  assert.deepEqual(P({kind: 'weekdays'}), {repeat: 'weekly', repeat_days: ['mon', 'tue', 'wed', 'thu', 'fri']});
+  assert.deepEqual(P({kind: 'daily', end: 'count', count: '5'}), {repeat: 'daily', repeat_count: 5});
+  assert.deepEqual(P({kind: 'custom', unit: 'weekly', n: '2', days: ['fri', 'mon'], end: 'until', until: '2026-12-31'}),
+    {repeat: 'weekly', repeat_interval: 2, repeat_days: ['mon', 'fri'], repeat_until: '2026-12-31T23:59'});
+  assert.deepEqual(P({kind: 'custom', unit: 'monthly', n: '0', days: ['mon']}), {repeat: 'monthly'}, 'days only for weekly; interval ≥ 1');
+  assert.equal(repeatText(repeatParams({kind: 'weekdays', end: 'count', count: '10'})), 'По будням (пн–пт), 10 раз');
+  assert.equal(repeatText(repeatParams({kind: 'custom', unit: 'weekly', n: '2', days: ['tue', 'thu']})), 'Каждые 2 недели: вт, чт, без окончания');
+  assert.equal(repeatText(repeatParams({kind: 'yearly', end: 'until', until: '2030-01-15'})), 'Каждый год, до 15.01.2030');
+});
+
+test('delete from the keyboard: the next letter below opens, else the one above', () => {
+  const {keyAfterRemoval} = load(['keyAfterRemoval']);
+  const order = ['a', 'b', 'c', 'd'];
+  assert.equal(keyAfterRemoval(order, new Set(['b'])), 'c');
+  assert.equal(keyAfterRemoval(order, new Set(['b', 'c'])), 'd');
+  assert.equal(keyAfterRemoval(order, new Set(['d'])), 'c', 'last row: the one above');
+  assert.equal(keyAfterRemoval(order, new Set(['c', 'd'])), 'b');
+  assert.equal(keyAfterRemoval(['a'], new Set(['a'])), null);
+});
+
+test('calendar drag: only own movable meetings, same length at the new time', () => {
+  const {canDragEvent, shiftEvent} = load(['canDragEvent', 'shiftEvent']);
+  const me = 'me@bank.test';
+  assert.equal(canDragEvent({item_id: '1', response_type: 'organizer', attendees: [{address: 'x@bank.test'}]}, me), true);
+  assert.equal(canDragEvent({item_id: '1', attendees: []}, me), true, 'a plain appointment');
+  assert.equal(canDragEvent({item_id: '1', organizer: {address: 'boss@bank.test'}, response_type: 'accepted'}, me), false);
+  assert.equal(canDragEvent({item_id: '1', response_type: 'organizer', is_recurring: true}, me), false);
+  assert.equal(canDragEvent({item_id: '1', response_type: 'organizer', is_all_day: true}, me), false);
+  assert.equal(canDragEvent({item_id: '1', response_type: 'organizer', meeting_status: 'cancelled'}, me), false);
+  const s = new Date(2026, 9, 1, 10, 0), e = new Date(2026, 9, 1, 11, 30);
+  const to = shiftEvent(s, e, new Date(2026, 9, 2), 14 * 60 + 15);
+  assert.equal(to.start.getDate(), 2); assert.equal(to.start.getHours(), 14); assert.equal(to.start.getMinutes(), 15);
+  assert.equal(to.end - to.start, 90 * 60e3);
+});

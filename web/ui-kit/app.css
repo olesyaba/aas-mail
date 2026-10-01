@@ -895,6 +895,17 @@ a.aas-btn--primary { color: var(--aas-on-accent); text-decoration: none; }
 .aas-locrow { display: flex; gap: 8px; }
 .aas-locrow input { flex: 1 1 auto; min-width: 0; }
 .aas-locrow select { flex: 0 0 auto; width: auto; max-width: 42%; }
+/* Meeting recurrence: «Каждые N нед.», weekday chips, the end of the series. */
+.aas-rep { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; color: var(--aas-muted); }
+.aas-rep input[type="number"] { width: 4.5em; }
+.aas-rep select, .aas-rep input[type="date"] { width: auto; }
+.aas-rep__days { gap: 6px; }
+.aas-rep__day { position: relative; }
+.aas-rep__day input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.aas-rep__day span { display: inline-flex; align-items: center; justify-content: center; min-width: 2.4em; height: 2em; padding: 0 6px;
+  border: 1px solid var(--aas-line-strong); border-radius: var(--aas-r-pill); color: var(--aas-text); font-size: var(--aas-t-sm); }
+.aas-rep__day input:checked + span { background: var(--aas-accent); border-color: var(--aas-accent); color: var(--aas-on-accent); }
+.aas-rep__day input:focus-visible + span { outline: 2px solid var(--aas-accent); outline-offset: 2px; }
 
 /* Invitation card inside a letter */
 .aas-invite {
@@ -1873,3 +1884,11 @@ body.unified .aas-rail {
   line-height: 1.45;
 }
 #modal .aas-passtip a { color: var(--aas-seller-ink); font-weight: 600; }  /* outranks `#modal a` */
+
+/* Calendar drag-and-drop: own meetings move by pointer; the new time rides on the block. */
+.aas-ev--movable { cursor: grab; }
+.aas-ev--drag { user-select: none; }
+.aas-ev--drag { cursor: grabbing; z-index: 5; opacity: .92; box-shadow: var(--aas-shadow); outline: 2px solid var(--aas-accent); }
+.aas-ev--drag[data-drag-time]::after { content: attr(data-drag-time); position: absolute; right: 4px; top: 2px; padding: 0 6px;
+  border-radius: var(--aas-r-pill); background: var(--aas-accent); color: var(--aas-on-accent); font-size: var(--aas-t-xs); font-weight: 600; }
+@media (prefers-reduced-motion: no-preference) { .aas-ev--drag { transition: top 60ms linear; } }

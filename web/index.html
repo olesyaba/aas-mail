@@ -317,6 +317,66 @@ function pickTwin(addr, name, items, bankDom) {
   const byName = k ? bank.filter(p => key(p.name) === k) : [];
   return byName.length === 1 ? byName[0] : null;
 }
+/* ---------- meeting recurrence ---------- */
+const REP_DAYS = [['mon', 'пн'], ['tue', 'вт'], ['wed', 'ср'], ['thu', 'чт'], ['fri', 'пт'], ['sat', 'сб'], ['sun', 'вс']];
+const REP_WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri'];
+/** The form's choice → create params (repeat, repeat_interval, repeat_days, repeat_count |
+ *  repeat_until), or null for a one-off. `days` only matter for a weekly rule; empty = the
+ *  start's weekday (the server's default). */
+function repeatParams(r) {
+  if (!r || !r.kind) return null;
+  const p = r.kind === 'weekdays' ? {repeat: 'weekly', repeat_days: REP_WEEKDAYS.slice()}
+    : r.kind === 'custom' ? {repeat: r.unit || 'weekly'} : {repeat: r.kind};
+  if (r.kind === 'custom') {
+    const n = Math.max(1, Math.min(99, parseInt(r.n, 10) || 1));
+    if (n > 1) p.repeat_interval = n;
+    if (p.repeat === 'weekly' && (r.days || []).length) p.repeat_days = REP_DAYS.map(([k]) => k).filter(k => r.days.includes(k));
+  }
+  if (r.end === 'count') p.repeat_count = Math.max(1, Math.min(999, parseInt(r.count, 10) || 1));
+  else if (r.end === 'until' && /^\d{4}-\d{2}-\d{2}$/.test(r.until || '')) p.repeat_until = r.until + 'T23:59';
+  return p;
+}
+/** «по будням (пн–пт), 10 раз» — what the rule means, under the picker. */
+function repeatText(p) {
+  if (!p) return '';
+  const n = p.repeat_interval || 1, days = p.repeat_days || [], weekdays = days.join() === REP_WEEKDAYS.join();
+  const one = {daily: 'каждый день', weekly: 'каждую неделю', monthly: 'каждый месяц', yearly: 'каждый год'}[p.repeat];
+  const many = {daily: ['день', 'дня', 'дней'], weekly: ['неделю', 'недели', 'недель'], monthly: ['месяц', 'месяца', 'месяцев'], yearly: ['год', 'года', 'лет']}[p.repeat];
+  let s = weekdays && n === 1 ? 'по будням (пн–пт)' : n === 1 ? one : `каждые ${n} ${plural(n, ...many)}`;
+  if (days.length && !(weekdays && n === 1)) s += ': ' + REP_DAYS.filter(([k]) => days.includes(k)).map(([, l]) => l).join(', ');
+  if (p.repeat_count) s += `, ${p.repeat_count} ${plural(p.repeat_count, 'раз', 'раза', 'раз')}`;
+  else if (p.repeat_until) s += `, до ${p.repeat_until.slice(8, 10)}.${p.repeat_until.slice(5, 7)}.${p.repeat_until.slice(0, 4)}`;
+  else s += ', без окончания';
+  return s[0].toUpperCase() + s.slice(1);
+}
+function readRepeat() {
+  const v = id => $(id)?.value || '';
+  return {kind: v('#erep'), n: v('#erepn'), unit: v('#erepu'), end: v('#erepe'), count: v('#erepc'), until: v('#erepd'),
+    days: [...document.querySelectorAll('#erepdays input:checked')].map(x => x.value)};
+}
+/** Show only the parts the choice needs and say in words what will be created. */
+function bindRepeat() {
+  const sel = $('#erep'); if (!sel) return;
+  const paint = () => {
+    const r = readRepeat(), custom = r.kind === 'custom';
+    $('#erepx').hidden = !custom;
+    $('#erepdays').hidden = !(custom && r.unit === 'weekly');
+    $('#erepend').hidden = !r.kind;
+    $('#erepc').hidden = $('#erepcl').hidden = r.end !== 'count';
+    $('#erepd').hidden = r.end !== 'until';
+    $('#erepsum').textContent = repeatText(repeatParams(r));
+  };
+  // A custom weekly rule starts from the meeting's own weekday.
+  sel.addEventListener('change', () => {
+    if (sel.value === 'custom' && !document.querySelector('#erepdays input:checked')) {
+      const d = new Date($('#est').value), k = isNaN(d) ? 'mon' : REP_DAYS[(d.getDay() + 6) % 7][0];
+      const box = document.querySelector(`#erepdays input[value="${k}"]`); if (box) box.checked = true;
+    }
+  });
+  ['#erep', '#erepn', '#erepu', '#erepe', '#erepc', '#erepd'].forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, paint)));
+  $('#erepdays').addEventListener('change', paint);
+  paint();
+}
 const TWINS = new Map(), TWINS_BY_BANK = new Map();  // seller address → bank person | null; bank address → person
 /** Meeting form: with #etwin on, every Seller invitee in #eatt/#eopt gets their Alfa-Bank
  *  address added to the same field; turning it off takes the added ones back out. */
@@ -2205,14 +2265,15 @@ async function removeGroups(keys, folder = null) {
   const items = itemsForKeys(keys);
   if (!items.length) return;
   const item_ids = items.map(m => m.item_id);
+  const order = rowKeys(), removed = new Set(keys);
   await api('mail', folder ? {action: 'move', item_ids, folder} : {action: 'delete', item_ids});
   const gone = new Set(item_ids);
   allItems = allItems.filter(m => !gone.has(m.item_id));
   keys.forEach(k => selectedKeys.delete(k));
-  if (curGroup && curGroup.items.some(m => gone.has(m.item_id))) {
-    curKey = null; curGroup = null; showReaderEmpty();
-  }
+  const openGone = curGroup && curGroup.items.some(m => gone.has(m.item_id));
+  if (openGone) { curKey = null; curGroup = null; }
   renderList(!!nextCursor); syncBulkBar(); recountOpenFolder();
+  if (openGone) openAfterRemoval(keyAfterRemoval(order, removed));  // the open letter went: the next one opens
   const n = keys.size, what = n === 1 ? '' : ` (${n})`;
   toast(folder ? `Перемещено в «${folders.find(f => f.folder_id === folder)?.name || 'папку'}»${what}` : `Перемещено в «Удалённые»${what}`);
 }
@@ -2221,10 +2282,25 @@ function fillBulkMove() {
   sel.innerHTML = '<option value="">Переместить в…</option>' + folders.filter(f => f.folder_id !== curFolder)
     .map(f => `<option value="${esc(f.folder_id)}">${esc(f.name)}</option>`).join('');
 }
+/** After a delete/move, the letter to open: the first row below the removed ones (as in
+ *  Outlook), else the nearest above; null when the list is left empty. */
+function keyAfterRemoval(order, gone) {
+  const last = order.reduce((at, k, i) => gone.has(k) ? i : at, -1);
+  return order.slice(last + 1).find(k => !gone.has(k)) ?? order.slice(0, Math.max(0, last)).reverse().find(k => !gone.has(k)) ?? null;
+}
+const rowKeys = () => [...document.querySelectorAll('#rows .aas-row')].map(r => r.dataset.key);
+/** Open `key` after the list was redrawn; the row takes focus so ↑/↓ and Delete go on. */
+function openAfterRemoval(key) {
+  const g = key && groupsOnScreen().find(x => x.key === key);
+  if (!g) { showReaderEmpty(); return; }
+  openGroup(g);
+  const row = document.querySelector(`#rows .aas-row[data-key="${CSS.escape(key)}"]`);
+  row?.scrollIntoView?.({block: 'nearest'}); row?.focus?.();
+}
 function afterRemove(g) {
-  const gone = new Set(g.items.map(m => m.item_id));
+  const gone = new Set(g.items.map(m => m.item_id)), next = keyAfterRemoval(rowKeys(), new Set([g.key]));
   allItems = allItems.filter(m => !gone.has(m.item_id)); curKey = null; curGroup = null;
-  renderList(!!nextCursor); showReaderEmpty();
+  renderList(!!nextCursor); openAfterRemoval(next);
 }
 
 $('#sort').onchange = e => { savePrefs({[sortKeyFor(ACCT)]: e.target.value}); paintViewBtn(); if (allItems.length) renderList(!!nextCursor); };
@@ -3026,6 +3102,70 @@ function layoutLanes(timed) {
   return timed;
 }
 
+/** Only what is ours to move: our own meeting or a plain appointment — not someone
+ *  else's invitation, a series occurrence (that needs an exception), cancelled or all-day. */
+function canDragEvent(e, me) {
+  if (!e || e.is_all_day || e.is_recurring || e.meeting_status === 'cancelled' || !e.item_id) return false;
+  const org = (e.organizer?.address || '').toLowerCase();
+  const others = (e.attendees || []).filter(a => a.address && a.address.toLowerCase() !== String(me || '').toLowerCase());
+  return e.response_type === 'organizer' || (!!me && org === me.toLowerCase()) || (!org && !others.length);
+}
+/** The same meeting length, starting on `day` at `mins` past midnight. */
+function shiftEvent(s, e, day, mins) {
+  const start = new Date(day); start.setHours(0, mins, 0, 0);
+  return {start, end: new Date(start.getTime() + (e - s))};
+}
+/** Drag a meeting to another time or day of the visible grid (15-min steps); a press
+ *  without movement stays a click (the card opens). */
+let evDragEnd = 0;
+function bindEvDrag(el, e, cols, days, sc) {
+  const acct = e._acct || ACCT, me = (accounts.find(a => a.id === acct) || {}).email || '';
+  if (!canDragEvent(e, me)) return;
+  el.classList.add('aas-ev--movable');
+  el.addEventListener('pointerdown', pd => {
+    // ponytail: mouse/trackpad only — a finger keeps scrolling the grid; long-press drag if tablets need it.
+    if (pd.button !== 0 || pd.pointerType === 'touch') return;
+    pd.preventDefault();  // no text selection while dragging (the click still comes)
+    const grab = pd.clientY - el.getBoundingClientRect().top;
+    let moved = false, target = null;
+    const move = mv => {
+      if (!moved && Math.hypot(mv.clientX - pd.clientX, mv.clientY - pd.clientY) < 5) return;
+      if (!moved) { moved = true; el.classList.add('aas-ev--drag'); }
+      mv.preventDefault();
+      const i = cols.findIndex(c => { const r = c.getBoundingClientRect(); return mv.clientX >= r.left && mv.clientX < r.right; });
+      if (i < 0) return;
+      const r = cols[i].getBoundingClientRect();
+      const mins = Math.max(0, Math.min(24 * 60 - 15, Math.round(sc.minsAt(Math.max(0, mv.clientY - r.top - grab)) / 15) * 15));
+      target = {i, mins};
+      if (el.parentElement !== cols[i]) cols[i].appendChild(el);
+      Object.assign(el.style, {top: sc.yOf(mins / 60) + 'px', left: '0', width: 'calc(100% - 3px)'});
+      const {start, end} = shiftEvent(e.s, e.e, days[i], mins);
+      el.dataset.dragTime = `${pad(start.getHours())}:${pad(start.getMinutes())}–${pad(end.getHours())}:${pad(end.getMinutes())}`;
+    };
+    const up = async () => {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up);
+      if (!moved) return;
+      el._dragged = true; evDragEnd = Date.now(); setTimeout(() => { el._dragged = false; }, 0);  // swallow the click that follows
+      el.classList.remove('aas-ev--drag'); delete el.dataset.dragTime;
+      const to = target && shiftEvent(e.s, e.e, days[target.i], target.mins);
+      if (!to || to.start.getTime() === e.s.getTime()) { drawCal(); return; }
+      const when = `${to.start.toLocaleDateString('ru-RU', {day: 'numeric', month: 'long'})}, ${pad(to.start.getHours())}:${pad(to.start.getMinutes())}`;
+      const others = (e.attendees || []).filter(a => a.address && a.address.toLowerCase() !== me.toLowerCase());
+      const green = !!(accounts.find(a => a.id === acct) || {}).green;
+      if (others.length && !confirm(`Перенести «${e.subject || 'встречу'}» на ${when}?\n` +
+          (green ? 'Сервер Seller сам участников не уведомит — сообщите им отдельно.' : 'Участники получат обновлённое приглашение.'))) { drawCal(); return; }
+      try {
+        await api('events', {action: 'update', item_id: e.item_id, start: isoLocal(to.start), end: isoLocal(to.end)}, acct);
+        e.s = to.start; e.e = to.end; toast(`Перенесено на ${when}`);
+      } catch (err) { toast(err.message || 'Не удалось перенести', true); }
+      drawCal();
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
+  });
+}
+
 let calDrawnFor = null;
 function drawCal() {
   calDrawnFor = ACCT;
@@ -3074,7 +3214,7 @@ function drawCal() {
     for (let h = 1; h < 24; h++) if (sc.H[h - 1] === HP || sc.H[h] === HP) {
       const l = document.createElement('div'); l.className = 'aas-hline'; l.style.top = sc.Y[h] + 'px'; cols[i].appendChild(l); }
     cols[i].onclick = ev => {
-      if (ev.target.closest('.aas-ev')) return;
+      if (ev.target.closest('.aas-ev') || Date.now() - evDragEnd < 400) return;  // not the end of a drag
       const rect = cols[i].getBoundingClientRect();
       const y = Math.max(0, ev.clientY - rect.top);
       const mins = Math.min(23 * 60 + 30, Math.floor(sc.minsAt(y)));
@@ -3101,7 +3241,8 @@ function drawCal() {
         : `<b>${title}</b><small>${t1.slice(0, 5)}${e.location ? ' · ' + esc(e.location) : ''}</small>`) +
         (wide && h > 46 && e.organizer ? `<small>${esc(who(e.organizer))}${(e.attendees || []).length > 1 ? ' · участников: ' + e.attendees.length : ''}</small>` : '');
       el.title = `${e.subject}\n${t1}\n${e.location || ''}${hasJoin ? '\nесть ссылка для подключения' : ''}`;
-      el.onclick = ev => { ev.stopPropagation(); eventView(e); };
+      el.onclick = ev => { ev.stopPropagation(); if (!el._dragged) eventView(e); };
+      bindEvDrag(el, e, cols, days, sc);
       cols[i].appendChild(el);
     });
     hidden.forEach(list => {
@@ -3384,7 +3525,13 @@ function eventForm(e, opts = {}) {
       <textarea id="ebody" rows="4">${esc(e?.body || '')}</textarea></div>
     ${editing || !(accounts.find(a => a.id === ACCT) || {}).green ? '' : `<div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="emime" checked> Разослать участникам приглашения письмом</label>
       <div class="hint">Сервер ${esc((accounts.find(a => a.id === ACCT) || {}).name || 'Seller')} сам приглашения не отправляет — без этой галочки участники не узнают о встрече. В Alfa-Bank приглашения рассылает Exchange, поэтому там этой опции нет.</div></div>`}
-    <div class="f" id="repw" ${editing ? 'style="display:none"' : ''}><label>Повторять</label><select id="erep"><option value="">Не повторять</option><option value="daily">Каждый день</option><option value="weekly">Каждую неделю</option><option value="monthly">Каждый месяц</option></select></div>
+    <div class="f" id="repw" ${editing ? 'style="display:none"' : ''}><label for="erep">Повторять</label><select id="erep"><option value="">Не повторять</option><option value="daily">Каждый день</option><option value="weekdays">По будням (пн–пт)</option><option value="weekly">Каждую неделю</option><option value="monthly">Каждый месяц</option><option value="yearly">Каждый год</option><option value="custom">Настроить…</option></select>
+      <div class="aas-rep" id="erepx" hidden><span>Каждые</span><input type="number" id="erepn" min="1" max="99" value="1" aria-label="Интервал">
+        <select id="erepu" aria-label="Единица"><option value="daily">дн.</option><option value="weekly" selected>нед.</option><option value="monthly">мес.</option><option value="yearly">г.</option></select></div>
+      <div class="aas-rep aas-rep__days" id="erepdays" hidden role="group" aria-label="Дни недели">${REP_DAYS.map(([k, l]) => `<label class="aas-rep__day"><input type="checkbox" value="${k}"><span>${l}</span></label>`).join('')}</div>
+      <div class="aas-rep" id="erepend" hidden><span>Окончание</span><select id="erepe" aria-label="Окончание"><option value="">никогда</option><option value="count">после</option><option value="until">до даты</option></select>
+        <input type="number" id="erepc" min="1" max="999" value="10" aria-label="Сколько раз" hidden><span id="erepcl" hidden>раз</span><input type="date" id="erepd" aria-label="До даты" hidden></div>
+      <div class="hint" id="erepsum"></div></div>
     <div class="acts2"><button class="aas-btn" id="ecancel">Отмена</button><button class="aas-btn aas-btn--primary" id="esave">${editing ? 'Сохранить' : 'Создать'}</button></div>
     </div><div class="aas-sched" id="sched"></div></div>`);
   $('#modal').classList.add('aas-modal--wide');
@@ -3393,6 +3540,7 @@ function eventForm(e, opts = {}) {
   ['#eatt', '#eopt'].forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, extPaint)));
   extPaint();
   bindTwins();
+  bindRepeat();
   const paintRooms = () => {
     const host = $('#erooms'); if (!host) return;
     const list = prefs.rooms || [];
@@ -3493,7 +3641,7 @@ function eventForm(e, opts = {}) {
       remember();
     } else {
       if (att.length) p.attendees = att;
-      if ($('#erep').value) { p.repeat = $('#erep').value; p.repeat_count = 10; }
+      Object.assign(p, repeatParams(readRepeat()) || {});
       if (att.length && $('#emime')?.checked) p.mime_invite = true;
       const r = await api('events', {action: 'create', ...p});
       remember();

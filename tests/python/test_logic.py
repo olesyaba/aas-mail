@@ -472,6 +472,19 @@ class MailFullBoxRefreshTest(unittest.TestCase):
         f.assert_not_called()
 
 
+class IcsRruleTest(unittest.TestCase):
+    """Seller invitations carry the series rule (they used to go out as one meeting)."""
+
+    def test_rules(self):
+        self.assertIsNone(webapp.ics_rrule({}))
+        self.assertEqual(webapp.ics_rrule({"repeat": "weekly", "repeat_days": ["mon", "tue", "wed", "thu", "fri"]}),
+                         "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR")
+        self.assertEqual(webapp.ics_rrule({"repeat": "weekly", "repeat_interval": 2, "repeat_days": ["fri"], "repeat_count": 6}),
+                         "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=FR;COUNT=6")
+        self.assertEqual(webapp.ics_rrule({"repeat": "monthly", "repeat_until": "2026-12-31T23:59"}),
+                         "RRULE:FREQ=MONTHLY;UNTIL=20261231T235959Z")
+
+
 class FolderParsingTest(unittest.TestCase):
     @staticmethod
     def _row(tag, sid, name=None, typ=None, parent=None):

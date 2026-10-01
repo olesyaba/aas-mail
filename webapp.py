@@ -1489,6 +1489,30 @@ def _send_invites_bg(a: Acct, p: dict, attendees: list[str]) -> None:
                    f"{_friendly_error(a, 'mail', 'send', e)}", error=True)
 
 
+_RRULE_FREQ = {"daily": "DAILY", "weekly": "WEEKLY", "monthly": "MONTHLY", "yearly": "YEARLY"}
+_RRULE_DAY = {"mon": "MO", "tue": "TU", "wed": "WE", "thu": "TH", "fri": "FR", "sat": "SA", "sun": "SU"}
+
+
+def ics_rrule(p: dict) -> str | None:
+    """The form's repeat_* params as an iCalendar RRULE: without it a series created on
+    Seller reached attendees as a single meeting."""
+    freq = _RRULE_FREQ.get(str(p.get("repeat") or "").lower())
+    if not freq:
+        return None
+    parts = [f"FREQ={freq}"]
+    n = int(p.get("repeat_interval") or 1)
+    if n > 1:
+        parts.append(f"INTERVAL={n}")
+    days = [_RRULE_DAY[d] for d in (p.get("repeat_days") or []) if d in _RRULE_DAY]
+    if freq == "WEEKLY" and days:
+        parts.append("BYDAY=" + ",".join(days))
+    if p.get("repeat_count"):
+        parts.append(f"COUNT={int(p['repeat_count'])}")
+    elif p.get("repeat_until"):
+        parts.append("UNTIL=" + str(p["repeat_until"])[:10].replace("-", "") + "T235959Z")
+    return "RRULE:" + ";".join(parts)
+
+
 def send_invites(a: Acct, p: dict, attendees: list[str]) -> list[str]:
     import uuid
     from datetime import datetime, timezone
@@ -1514,6 +1538,8 @@ def send_invites(a: Acct, p: dict, attendees: list[str]) -> list[str]:
              f"UID:{uid}", f"DTSTAMP:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
              f"DTSTART{';VALUE=DATE' if day else ''}:{utc(p['start'])}", f"DTEND{';VALUE=DATE' if day else ''}:{utc(p['end'])}",
              f"SUMMARY:{esc(p.get('subject') or '(без темы)')}", f"ORGANIZER;CN={esc(a.name)}:mailto:{me}"]
+    if ics_rrule(p):
+        lines.append(ics_rrule(p))
     if p.get("location"):
         lines.append(f"LOCATION:{esc(p['location'])}")
     if desc:
