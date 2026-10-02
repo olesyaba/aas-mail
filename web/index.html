@@ -2486,7 +2486,8 @@ function splitAddrs(s) {
     } else cur += ch;
   }
   if (cur.trim()) out.push(cur.trim());
-  return out;
+  // «a@x b@x» without a comma is two people, not one (it once got remembered as one).
+  return out.flatMap(t => !t.includes('<') && (t.match(/@/g) || []).length > 1 ? t.split(/[\s,;]+/).filter(Boolean) : [t]);
 }
 /** Prefer bare SMTP for the wire; keep display name only in the UI field. */
 function addrOnly(s) {
@@ -2511,7 +2512,22 @@ function peopleRecentKey() { return 'aas-people-recent:' + ACCT; }
 function loadRecentPeople() {
   try {
     const raw = JSON.parse(localStorage.getItem(peopleRecentKey()) || '[]');
-    return Array.isArray(raw) ? raw.filter(p => p && p.address) : [];
+    if (!Array.isArray(raw)) return [];
+    // Older builds saved «a@x b@x» as one person: split such entries for good.
+    const out = [], seen = new Set();
+    let fixed = false;
+    for (const p of raw) {
+      if (!p || !p.address) { fixed = true; continue; }
+      const addrs = /[\s,;]/.test(p.address.trim()) ? p.address.split(/[\s,;]+/).filter(a => a.includes('@')) : [p.address];
+      if (addrs.length !== 1 || addrs[0] !== p.address) fixed = true;
+      for (const address of addrs) {
+        if (seen.has(address.toLowerCase())) continue;
+        seen.add(address.toLowerCase());
+        out.push(addrs.length > 1 || addrs[0] !== p.address ? {...p, address, name: ''} : p);
+      }
+    }
+    if (fixed) saveRecentPeople(out);
+    return out;
   } catch (_) { return []; }
 }
 function saveRecentPeople(list) {

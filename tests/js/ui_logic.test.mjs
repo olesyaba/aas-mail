@@ -169,6 +169,15 @@ test('recent people: ranked by use, case-insensitive merge, per-account key', ()
   assert.deepEqual(plain(x.filterRecentPeople('')), []);
 });
 
+test('recent people: «a@x b@x» is two people, and an old glued entry is split for good', () => {
+  const x = load(['rememberAddrsFromFields', 'filterRecentPeople', 'loadRecentPeople']);
+  x.rememberAddrsFromFields('ipisaev@s.ru irachenko@s.ru');
+  assert.deepEqual(plain(x.filterRecentPeople('').map(p => p.address)).sort(), ['ipisaev@s.ru', 'irachenko@s.ru']);
+  vm.runInContext(`localStorage.setItem('aas-people-recent:main', JSON.stringify([{address: 'a@s.ru b@s.ru', name: 'a@s.ru b@s.ru', useCount: 3}, {address: 'a@s.ru'}]))`, x.ctx);
+  assert.deepEqual(plain(x.loadRecentPeople().map(p => p.address)), ['a@s.ru', 'b@s.ru']);
+  assert.equal(vm.runInContext(`localStorage.getItem('aas-people-recent:main')`, x.ctx).includes('a@s.ru b@s.ru'), false);
+});
+
 test('calendar week starts on Monday', () => {
   const {mondayOf} = load(['mondayOf']);
   const sun = new Date(2026, 8, 27, 15, 0);  // Sunday
