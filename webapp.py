@@ -681,6 +681,11 @@ def call(a: Acct, domain: str, params: dict) -> dict:
     action = params.pop("action", None)
     cache_only = bool(params.pop("cache_only", False))
     roles = params.pop("attendee_types", None) if domain == "events" else None
+    extra = ({k: params.pop(k) for k in ("response_requested", "disallow_counter", "attachments") if k in params}
+             if domain == "events" and action in ("create", "update") else {})
+    if extra.get("attachments") and a.green:
+        return {"ok": False, "error": "bad_request", "action": action, "count": 0, "items": [],
+                "message": f"Сервер {a.name} не принимает вложения во встречах (ActiveSync 14.1)"}
     if domain == "mail" and action == "list" and cache_only:
         return mail_cached_list(a, params)
     if mod is None or not action:
@@ -721,9 +726,11 @@ def call(a: Acct, domain: str, params: dict) -> dict:
     try:
         _ATT.types = ({str(k).lower(): v for k, v in roles.items() if v in _ATT_TYPE_CODE}
                       if isinstance(roles, dict) else {})
+        _ATT.extra = extra
         return _call_locked(a, backend, mod, domain, action, params)
     finally:
         _ATT.types = {}
+        _ATT.extra = {}
         backend.lock.release()
 
 
@@ -1528,6 +1535,38 @@ def reinvite_moved(a: Acct, item_id: str, start: str, end: str) -> dict:
     return {"ok": True, "action": "reinvite", "count": len(sent), "items": [{"address": x} for x in sent]}
 
 
+def cancel_notice_target(a: Acct, item_id: str) -> tuple[dict, list[str]] | None:
+    """Seller: the meeting I organize that is about to be cancelled, and who must hear
+    of it. Read before the cancel — afterwards the cache hides the item. Stalwart
+    deletes it silently, so without our CANCEL mail attendees keep the meeting."""
+    if not a.green or not item_id:
+        return None
+    e = _cal_item(a, item_id=item_id)
+    if not e or not e.get("uid"):
+        return None
+    me = (a.email or "").lower()
+    org = ((e.get("organizer") or {}).get("address") or "").lower()
+    if not (e.get("response_type") == "organizer" or org == me):
+        return None  # an attendee removing someone else's meeting tells nobody
+    to = _uniq_emails([x.get("address") for x in e.get("attendees") or []
+                       if (x.get("address") or "").lower() != me])
+    return (e, to) if to else None
+
+
+def _send_cancel_bg(a: Acct, target: tuple[dict, list[str]], item_id: str) -> None:
+    from outlook_activesync_mcp.models import instance_of
+    e, to = target
+    p = {**_event_invite_payload(e), "uid": e["uid"], "method": "CANCEL",
+         "recurrence_id": instance_of(item_id), "sequence": int(time.time() // 60)}
+    try:
+        send_invites(a, p, to)
+        _notice(a, f"Участникам «{e.get('subject') or 'встреча'}» отправлена отмена: {', '.join(to)}")
+    except Exception as ex:  # noqa: BLE001
+        log.warning("[%s] cancel mail failed: %s", a.id, ex)
+        _notice(a, f"Встреча «{e.get('subject') or ''}» отменена, но участники письмом не уведомлены: "
+                   f"{_friendly_error(a, 'mail', 'send', ex)}", error=True)
+
+
 def send_invites(a: Acct, p: dict, attendees: list[str]) -> list[str]:
     import uuid
     from datetime import datetime, timezone
@@ -1546,32 +1585,42 @@ def send_invites(a: Acct, p: dict, attendees: list[str]) -> list[str]:
         return (t or "").replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\r", "").replace("\n", "\\n")
 
     day = bool(p.get("all_day"))
+    cancel = p.get("method") == "CANCEL"
+    method = "CANCEL" if cancel else "REQUEST"
     uid = (p.get("uid") or "").strip() or f"{uuid.uuid4()}@eas-mail"
     note = (p.get("note") or "").strip()
     desc = ((note + "\n\n") if note else "") + (p.get("body") or "")
-    lines = ["BEGIN:VCALENDAR", "PRODID:-//eas-mail//RU", "VERSION:2.0", "METHOD:REQUEST", "BEGIN:VEVENT",
+    lines = ["BEGIN:VCALENDAR", "PRODID:-//eas-mail//RU", "VERSION:2.0", f"METHOD:{method}", "BEGIN:VEVENT",
              f"UID:{uid}", f"DTSTAMP:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
              f"DTSTART{';VALUE=DATE' if day else ''}:{utc(p['start'])}", f"DTEND{';VALUE=DATE' if day else ''}:{utc(p['end'])}",
              f"SUMMARY:{esc(p.get('subject') or '(без темы)')}", f"ORGANIZER;CN={esc(a.name)}:mailto:{me}"]
-    if ics_rrule(p):
+    if p.get("recurrence_id"):
+        lines.append(f"RECURRENCE-ID:{p['recurrence_id']}")  # one occurrence of a series
+    elif ics_rrule(p):
         lines.append(ics_rrule(p))
+    if p.get("disallow_counter"):
+        lines.append("X-MICROSOFT-DISALLOW-COUNTER:TRUE")
+    if str(p.get("sensitivity")) == "2":
+        lines.append("CLASS:PRIVATE")
     if p.get("location"):
         lines.append(f"LOCATION:{esc(p['location'])}")
     if desc:
         lines.append(f"DESCRIPTION:{esc(desc)}")
-    lines += [f"ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:{x}" for x in to]
-    lines += [f"SEQUENCE:{int(p.get('sequence') or 0)}", "STATUS:CONFIRMED", "END:VEVENT", "END:VCALENDAR"]
+    rsvp = "FALSE" if cancel or p.get("response_requested") is False else "TRUE"
+    lines += [f"ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP={rsvp}:mailto:{x}" for x in to]
+    lines += [f"SEQUENCE:{int(p.get('sequence') or 0)}", f"STATUS:{'CANCELLED' if cancel else 'CONFIRMED'}",
+              "END:VEVENT", "END:VCALENDAR"]
     m = EmailMessage()
     m["From"], m["To"] = me, ", ".join(to)
-    m["Subject"] = "Приглашение: " + (p.get("subject") or "(без темы)")
+    m["Subject"] = ("Отменено: " if cancel else "Приглашение: ") + (p.get("subject") or "(без темы)")
     m["Date"], m["Message-ID"] = formatdate(localtime=True), make_msgid(domain="eas-mail")
     plain = ((note + "\n\n") if note else "") + (
-        f"{a.name} приглашает вас на встречу «{p.get('subject') or ''}»\n"
+        f"{a.name} {'отменяет встречу' if cancel else 'приглашает вас на встречу'} «{p.get('subject') or ''}»\n"
         f"{p['start'].replace('T', ' ')} – {p['end'].replace('T', ' ')}\n"
         + (f"\n{p['location']}\n" if p.get("location") else "")
         + (f"\n{p['body']}\n" if p.get("body") else ""))
     m.set_content(plain)
-    m.add_alternative("\r\n".join(lines) + "\r\n", subtype="calendar", params={"method": "REQUEST", "charset": "UTF-8"})
+    m.add_alternative("\r\n".join(lines) + "\r\n", subtype="calendar", params={"method": method, "charset": "UTF-8"})
     _send_mime(a, m.as_bytes())
     return to
 
@@ -1661,7 +1710,9 @@ def _cal_expand(masters: dict, calendar_id: str, win_start, win_end, fields) -> 
         occs += _cal_orphan_exceptions(body, occs, win_start, win_end)
         for occ in occs:
             occ_item_id = pack_item_id(cid, server_id, instance=occ.get("instance_start"))
-            items.append(project_event(occ, proj, item_id=occ_item_id))
+            row = project_event(occ, proj, item_id=occ_item_id)
+            row.update({k: occ[k] for k in CAL_EXTRA if occ.get(k) is not None})
+            items.append(row)
     items.sort(key=lambda e: e.get("start_iso") or "")
     return items, notes
 
@@ -1734,6 +1785,34 @@ def _meeting_status(raw: str | None) -> str | None:
     return "appointment" if v == 0 else "cancelled" if v & 4 else "meeting"
 
 
+_SENSITIVITY = {"0": "normal", "1": "personal", "2": "private", "3": "confidential"}
+# What upstream parse_event/project_event drop and the event card/form need.
+CAL_EXTRA = ("sensitivity", "response_requested", "disallow_counter", "attachments")
+
+
+def _cal_extras(appdata) -> dict:
+    """The item's own (not an Exception's) Sensitivity, response options and attachments."""
+    from outlook_activesync_mcp.wbxml import find, find_all, text_of
+    own = {c.tag: c for c in appdata.children if c.ns in ("Calendar", "AirSyncBase")}
+    out = {}
+    if "Sensitivity" in own:
+        out["sensitivity"] = _SENSITIVITY.get(text_of(own["Sensitivity"]))
+    if "ResponseRequested" in own:
+        out["response_requested"] = text_of(own["ResponseRequested"]) != "0"
+    if "DisallowNewTimeProposal" in own:
+        out["disallow_counter"] = text_of(own["DisallowNewTimeProposal"]) == "1"
+    if "Attachments" in own:
+        atts = []
+        for x in find_all(own["Attachments"], "AirSyncBase", "Attachment"):
+            ref = text_of(find(x, "AirSyncBase", "FileReference"))
+            if ref and text_of(find(x, "AirSyncBase", "IsInline")) != "1":
+                size = text_of(find(x, "AirSyncBase", "EstimatedDataSize"))
+                atts.append({"ref": ref, "name": text_of(find(x, "AirSyncBase", "DisplayName")) or "вложение",
+                             "size": int(size) if (size or "").isdigit() else 0})
+        out["attachments"] = atts
+    return out
+
+
 def _cal_parse(appdata) -> dict:
     """parse_event plus what upstream drops: correct MeetingStatus, the occurrence
     key of each exception (EAS 16.x), and per-occurrence status/busy for
@@ -1745,6 +1824,7 @@ def _cal_parse(appdata) -> dict:
     own = next((c for c in appdata.children if c.tag == "MeetingStatus"), None)
     if own is not None:
         ev["meeting_status"] = _meeting_status(text_of(own))
+    ev.update(_cal_extras(appdata))
     box = find(appdata, "Calendar", "Exceptions")
     if box is not None and ev.get("exceptions"):
         for ex, node in zip(ev["exceptions"], find_all(box, "Calendar", "Exception")):
@@ -1798,7 +1878,7 @@ def _cal_apply_tree(tree, masters: dict, calendar_id: str | None = None) -> tupl
 # known calendar at once and catches up with a delta (~0.5 s) instead of a
 # SyncKey=0 prime (~30 s). The generation is checked against the client's state
 # file on the first round: a mismatch is CursorExpired → full sync.
-CAL_CACHE_VERSION = 3  # 3: multi type-8 calendars (Stalwart); 2: InstanceId exceptions
+CAL_CACHE_VERSION = 4  # 4: sensitivity, response options, attachments; 3: multi type-8 calendars (Stalwart); 2: InstanceId exceptions
 
 
 def _cal_cache_path(a: Acct):
@@ -3104,8 +3184,10 @@ def _meeting_response(a: Acct, client, item_id: str, response: str, note: str, n
     return not note
 
 
-def _respond_with_note(client, item_id: str, response: str, note: str) -> None:
-    """Upstream `calendar._respond` plus the answer text (MS-ASCMD SendResponse>Body)."""
+def _respond_with_note(client, item_id: str, response: str, note: str, propose: tuple | None = None) -> None:
+    """Upstream `calendar._respond` plus the answer text (MS-ASCMD SendResponse>Body) and,
+    with ``propose`` (start, end datetimes), a new time for the organizer (EAS 16.0+
+    SendResponse>ProposedStartTime/EndTime — Outlook shows it as «Предложено новое время»)."""
     from outlook_activesync_mcp.commands import calendar
     from outlook_activesync_mcp.errors import EasStatusError
     from outlook_activesync_mcp.models import instance_of, unpack_item_id
@@ -3120,8 +3202,13 @@ def _respond_with_note(client, item_id: str, response: str, note: str) -> None:
              el("MeetingResponse", "RequestId", text=server_id))
     if instance:
         req.add(el("MeetingResponse", "InstanceId", text=format_datetime(from_compact(instance), millis=0)))
-    req.add(el("MeetingResponse", "SendResponse",
-               el("AirSyncBase", "Body", el("AirSyncBase", "Type", text="1"), el("AirSyncBase", "Data", text=note))))
+    send = el("MeetingResponse", "SendResponse")
+    if note:
+        send.add(el("AirSyncBase", "Body", el("AirSyncBase", "Type", text="1"), el("AirSyncBase", "Data", text=note)))
+    if propose:
+        send.add(el("MeetingResponse", "ProposedStartTime", text=format_datetime(propose[0], millis=0)))
+        send.add(el("MeetingResponse", "ProposedEndTime", text=format_datetime(propose[1], millis=0)))
+    req.add(send)
     tree = client.command("MeetingResponse", el("MeetingResponse", "MeetingResponse", req))
     result = find(tree, "MeetingResponse", "Result") or tree
     status = text_of(find(result, "MeetingResponse", "Status"))
@@ -3281,6 +3368,19 @@ def _trash_invite_mail(a: Acct, item_id: str) -> bool:
         return False
 
 
+def _proposal(params: dict) -> tuple | None:
+    """`propose_start`/`propose_end` (local «YYYY-MM-DDTHH:MM») as aware datetimes."""
+    from datetime import datetime
+    s, e = params.get("propose_start"), params.get("propose_end")
+    if not s or not e:
+        return None
+    try:
+        s, e = (datetime.fromisoformat(str(v)[:16]).astimezone() for v in (s, e))
+    except ValueError:
+        return None
+    return (s, e) if e > s else None
+
+
 def respond_event(a: Acct, params: dict) -> dict:
     """RSVP from the calendar (web/tray). Exchange's MeetingResponse first; if the
     server refuses it (status 2/3 were seen live), answer the organizer by mail so
@@ -3291,6 +3391,26 @@ def respond_event(a: Acct, params: dict) -> dict:
                 "message": "ответ: accept, tentative или decline"}
     note = str(params.get("note") or "").strip()
     backend = a.get()
+    propose = _proposal(params)
+    if propose and response == "accept":
+        return {"ok": False, "action": "respond", "count": 0, "items": [], "error": "bad_request",
+                "message": "другое время предлагают с ответом «Под вопросом» или «Отклонить»"}
+    if propose and not a.green:  # Seller speaks ActiveSync 14.1: no proposals there
+        try:
+            with backend.lock:
+                backend._pace()
+                _respond_with_note(backend.client, item_id, response, note, propose)
+            return {"ok": True, "action": "respond", "count": 1,
+                    "items": [{"responded": response, "item_id": item_id, "note": bool(note), "proposed": True}]}
+        except Exception as e:  # noqa: BLE001
+            if _is_unreachable(e) or _is_backoff(e):
+                return {"ok": False, "action": "respond", "count": 0, "items": [],
+                        "error": getattr(e, "code", None) or type(e).__name__,
+                        "message": _friendly_error(a, "events", "respond", e)}
+            log.info("[%s] proposal refused (%s) — the new time goes as text", a.id, e)
+    if propose:  # the organizer still learns the time, as a line of the answer's comment
+        when = f"{propose[0].astimezone():%d.%m %H:%M}–{propose[1].astimezone():%H:%M}"
+        note = (note + "\n\n" if note else "") + f"Предлагаю другое время: {when}"
     try:
         with backend.lock:
             backend._pace()
@@ -3603,7 +3723,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(cal_events(a, params["start"], params["end"]))
             if path.startswith("/api/"):
                 invite = params.pop("mime_invite", False) if path == "/api/events" else False
+                gone = (cancel_notice_target(a, params.get("item_id") or "")
+                        if path == "/api/events" and params.get("action") == "cancel" else None)
                 res = call(a, path[5:], dict(params))
+                if gone and res.get("ok", True):
+                    threading.Thread(target=_send_cancel_bg, args=(a, gone, params["item_id"]), daemon=True).start()
                 if invite and res.get("ok", True) and params.get("action") == "create" and params.get("attendees"):
                     res["mime_invite_pending"] = True
                     threading.Thread(target=_send_invites_bg, args=(a, dict(params), list(params["attendees"])),
@@ -3716,6 +3840,62 @@ def _patch_attendee_types():
     calendar._resolve_attendees = resolve
 
 
+def _cal_extra_els(client) -> list:
+    """Response options and new attachments of the events create/update running on
+    this thread (see call()), as ApplicationData children. Attachments: EAS 16.x
+    AirSyncBase:Attachments>Add — Exchange stores the file on the item and sends it
+    to the attendees with the invitation."""
+    from outlook_activesync_mcp.model.attachments import load_attachments
+    from outlook_activesync_mcp.wbxml import el
+    x = getattr(_ATT, "extra", None) or {}
+    out = []
+    if "disallow_counter" in x:
+        out.append(el("Calendar", "DisallowNewTimeProposal", text="1" if x["disallow_counter"] else "0"))
+    if "response_requested" in x:
+        out.append(el("Calendar", "ResponseRequested", text="1" if x["response_requested"] else "0"))
+    parts = load_attachments(x.get("attachments"), max_total_bytes=client.s.max_attachment_bytes)
+    if parts:
+        import uuid
+        out.append(el("AirSyncBase", "Attachments", *[
+            el("AirSyncBase", "Add",
+               el("AirSyncBase", "ClientId", text=str(uuid.uuid4())),
+               el("AirSyncBase", "Content", data=p["data"]),
+               el("AirSyncBase", "Method", text="1"),
+               el("AirSyncBase", "DisplayName", text=p["name"]),
+               el("AirSyncBase", "ContentType", text=f"{p['maintype']}/{p['subtype']}"))
+            for p in parts]))
+    return out
+
+
+def _patch_event_create_extras():
+    """Upstream create knows nothing of response options or attachments: append
+    them to the ApplicationData it builds."""
+    try:
+        from outlook_activesync_mcp.commands import calendar
+    except ImportError:
+        return
+    if getattr(calendar._create, "_eas_extras_patched", False):
+        return
+    orig_create, orig_appdata = calendar._create, calendar._create_appdata
+    state = threading.local()
+
+    def appdata(**kw):
+        ad, s, e = orig_appdata(**kw)
+        for x in getattr(state, "els", None) or []:
+            ad.add(x)
+        return ad, s, e
+
+    def create(client, **kw):
+        state.els = _cal_extra_els(client)  # files read before anything reaches the network
+        try:
+            return orig_create(client, **kw)
+        finally:
+            state.els = None
+
+    create._eas_extras_patched = True  # type: ignore[attr-defined]
+    calendar._create, calendar._create_appdata = create, appdata
+
+
 def _patch_event_update_attendees():
     """Upstream events/update ignores ``attendees``. Extend Sync Change so the
     organizer can add/remove people and Exchange re-sends the invite."""
@@ -3744,7 +3924,8 @@ def _patch_event_update_attendees():
                 raise BadRequest("время одной встречи серии сервер через ActiveSync не меняет — "
                                  "перенесите её в Outlook или OWA")
             item_id = pack_item_id(*unpack_item_id(item_id))
-        if attendees is None:
+        extras = _cal_extra_els(client)
+        if attendees is None and not extras:
             return orig(client, item_id=item_id, subject=subject, start=start, end=end,
                         location=location, body=body, busy_status=busy_status,
                         all_day=all_day, reminder=reminder, sensitivity=sensitivity)
@@ -3774,9 +3955,10 @@ def _patch_event_update_attendees():
         if resolved:
             fields.append(calendar._attendees_block(resolved))
             fields.append(el("Calendar", "MeetingStatus", text="1"))
-        else:
+        elif attendees is not None:
             # Empty roster → keep as appointment (no attendees block).
             fields.append(el("Calendar", "MeetingStatus", text="0"))
+        fields += extras
         if not fields:
             raise BadRequest("update: не переданы поля для изменения")
         change = el("AirSync", "Change", el("AirSync", "ServerId", text=server_id),
@@ -4178,6 +4360,7 @@ def main():
     _patch_moveitems_status()
     _patch_calendar_attendees()
     _patch_event_update_attendees()
+    _patch_event_create_extras()
     _patch_attendee_types()
     _patch_message_date()
     _patch_unreachable_fail_fast()  # last: wraps the other command patches

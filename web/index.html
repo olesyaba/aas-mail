@@ -3539,13 +3539,18 @@ function eventView(e) {
     ...(others.length > 1 || (iAmOrg && others.length) ? [['replyall', 'replyAll', 'Ответить всем', 'Письмо всем участникам']] : []),
     ...(!isCancelled(e) ? [['fwd', 'fwd', 'Переслать', 'Переслать приглашение в календарь']] : []),
   ];
-  const el = openModal(`<h3>${esc(evTitle(e))}${e.is_recurring ? '<span class="aas-pill">серия</span>' : ''}${canRespond ? '<span class="aas-pill">встреча</span>' : ''}${isCancelled(e) ? '<span class="aas-pill aas-pill--cancel">отменена</span>' : ''}</h3>
+  const el = openModal(`<h3>${esc(evTitle(e))}${e.is_recurring ? '<span class="aas-pill">серия</span>' : ''}${canRespond ? '<span class="aas-pill">встреча</span>' : ''}${isCancelled(e) ? '<span class="aas-pill aas-pill--cancel">отменена</span>' : ''}${e.sensitivity === 'private' ? '<span class="aas-pill">частная</span>' : ''}</h3>
     ${(e.categories || []).length ? `<div class="f aas-cats">${catChips(e.categories)}</div>` : ''}
     <div class="f aas-evwhen">${icon('clock', 14)} ${esc(fmtRange(e.s, e.e, e.is_all_day))}${e.is_recurring ? ', повторяется' : ''}</div>
     ${canRespond || link ? `<div class="f aas-evtop">${canRespond ? `<span class="aas-rsvpseg" role="group" aria-label="Ваш ответ">${rsvpBtn('accept', 'Принять') + rsvpBtn('tentative', 'Под вопросом') + rsvpBtn('decline', 'Отклонить')}</span>` : ''}
       ${link ? `<a class="aas-btn aas-btn--primary" id="evjoin" href="${esc(link)}" target="_blank" rel="noopener noreferrer" title="Открыть ссылку встречи в браузере: ${esc(link)}">Подключиться</a>` : ''}</div>` : ''}
     ${canRespond && !['accepted', 'tentative', 'declined'].includes(my) ? '<div class="hint aas-hint-tight">Вы ещё не ответили организатору</div>' : ''}
     ${canRespond ? rsvpNoteHtml() : ''}
+    ${canRespond && !e.disallow_counter && !e.is_all_day ? `<div class="f aas-propose"><button type="button" class="aas-linkbtn" id="evprop">Предложить другое время</button>
+      <div id="evpropx" hidden><div class="frow"><div class="f"><label>Начало</label><input type="datetime-local" id="evps" value="${isoLocal(e.s)}"></div>
+        <div class="f"><label>Конец</label><input type="datetime-local" id="evpe" value="${isoLocal(e.e)}"></div></div>
+        <div class="aas-slots"><button type="button" class="aas-btn aas-btn--sm" data-prop="tentative">Под вопросом и предложить</button><button type="button" class="aas-btn aas-btn--sm" data-prop="decline">Отклонить и предложить</button></div>
+        <div class="hint">Организатор увидит предложенное время${(accounts.find(a => a.id === (e._acct || ACCT)) || {}).green ? ' в комментарии к ответу' : ''} и сам решит, переносить ли.</div></div></div>` : ''}
     ${mailActs.length ? `<div class="f aas-evmail" role="group" aria-label="Написать по встрече">${mailActs.map(([m, ic, label, tip]) =>
       `<button type="button" class="aas-btn aas-btn--ghost aas-btn--sm" data-mail="${m}" title="${tip}">${icon(ic, 14)}${label}</button>`).join('')}</div>` : ''}
     <dl class="f aas-evfacts">
@@ -3554,6 +3559,8 @@ function eventView(e) {
     </dl>
     ${isMeeting && att.length ? `<details class="f aas-att"${att.length <= 3 ? ' open' : ''}><summary><label>Участники (${att.length})</label>${attSummary(att, st)}</summary><ul class="att-list">${att.map(a => `<li>${esc(a.name || a.address)}${a.status ? ` <small style="color:var(--muted)">— ${st[a.status] || esc(a.status)}</small>` : ''}</li>`).join('')}</ul></details>` : ''}
     ${e.body ? `<div class="f"><label>Описание</label>${evBodyHtml(e.body)}</div>` : ''}
+    ${(e.attachments || []).length ? `<div class="f"><label>Вложения</label><div class="aas-atts">${e.attachments.map(x =>
+      `<a class="aas-att" href="/attachment?ref=${encodeURIComponent(x.ref)}&n=${encodeURIComponent(x.name)}&a=${e._acct || ACCT}&t=${TOK}" download>${icon('clip', 14)} ${esc(x.name)} <small>${fmtSize(x.size)}</small></a>`).join('')}</div></div>` : ''}
     <div class="aas-modal__hacts"><button type="button" class="aas-btn aas-btn--ghost aas-btn--icon" id="evmore" aria-haspopup="menu" title="Ещё" aria-label="Ещё действия">${icon('more')}</button><button type="button" class="aas-btn aas-btn--ghost aas-btn--icon" id="evclose" title="Закрыть (Esc)" aria-label="Закрыть">${icon('x')}</button></div>`);
   $('#evclose').onclick = closeModal;
   // Rare actions live behind «•••»: the card is for reading, answering and writing.
@@ -3569,6 +3576,16 @@ function eventView(e) {
     const r = await api('events', {action: 'respond', item_id: e.item_id, response: b.dataset.r, notify: true, ...(note ? {note} : {})}, e._acct || ACCT);
     if (r.via === 'mail') { closeModal(); toast('Сервер не принял ответ напрямую — отправили его организатору письмом'); loadCal(); return; }
     closeModal(); toast(note ? 'Ответ с комментарием отправлен организатору' : 'Ответ отправлен организатору'); loadCal();
+  }));
+  const prop = $('#evprop');
+  if (prop) prop.onclick = () => { $('#evpropx').hidden = false; prop.hidden = true; $('#evps').focus(); };
+  el.querySelectorAll('[data-prop]').forEach(b => b.onclick = guard(async () => {
+    const ps = new Date($('#evps').value), pe = new Date($('#evpe').value);
+    if (isNaN(ps) || isNaN(pe) || pe <= ps) throw new Error('Проверьте время: конец должен быть позже начала');
+    const note = (el.querySelector('.aas-rsvpnote textarea')?.value || '').trim();
+    const r = await api('events', {action: 'respond', item_id: e.item_id, response: b.dataset.prop, notify: true,
+      propose_start: isoLocal(ps), propose_end: isoLocal(pe), ...(note ? {note} : {})}, e._acct || ACCT);
+    closeModal(); toast(r.items?.[0]?.proposed ? 'Предложение нового времени отправлено организатору' : 'Ответ отправлен, новое время — в комментарии'); loadCal();
   }));
   const removeEvent = guard(async () => {
     if (!confirm(e.is_recurring ? 'Отменить это событие серии?' : (iAmOrg && isMeeting ? 'Отменить событие? Участникам уйдёт уведомление.' : 'Удалить событие?'))) return;
@@ -3620,6 +3637,8 @@ function eventForm(e, opts = {}) {
   const attOf = type => e ? (e.attendees || []).filter(a => a.address && a.address !== e.organizer?.address && (a.type || 'required') === type)
     .map(a => formatPerson(a)).join(', ').replace(/.$/, '$&, ') : '';  // ends with «, »: the next name can be typed at once
   const series = editing && e.is_recurring;  // the series' subject, place, roster — never one date's time
+  const formGreen = !!(accounts.find(a => a.id === (e?._acct || ACCT)) || {}).green;  // Seller: ActiveSync 14.1, no attachments on meetings
+  const efiles = [];
   openModal(`<h3>${editing ? (series ? 'Изменить серию' : 'Изменить событие') : 'Новое событие'}</h3><div class="aas-evwrap"><div class="aas-evform">
     ${series ? '<div class="hint aas-hint-tight">Меняются тема, место, описание и участники всей серии. Время серии и отдельных встреч меняйте в Outlook или OWA — сервер не даёт сделать это отсюда.</div>' : ''}
     <div class="f"><label>Тема</label><input type="text" id="esub" value="${esc(e?.subject || '')}"></div>
@@ -3644,6 +3663,12 @@ function eventForm(e, opts = {}) {
       <div id="eag"></div><button type="button" class="aas-linkbtn" id="eagadd">+ пункт</button><div class="hint" id="eagsum"></div></div>
     <div class="f"><label>Описание</label>
       <textarea id="ebody" rows="4">${esc(e?.body || '')}</textarea></div>
+    ${formGreen ? '' : `<div class="f aas-attrow"><label class="aas-btn aas-btn--sm aas-attbtn">${icon('clip', 14)}Прикрепить файл<input type="file" id="efile" multiple hidden></label>
+      <div id="efiles">${(e?.attachments || []).map(x => `<span class="aas-attendee">${esc(x.name)} <small>${fmtSize(x.size)}</small></span>`).join('')}</div>
+      <div class="hint">Файлы уйдут участникам вместе с приглашением.</div></div>`}
+    <div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="epriv" ${e?.sensitivity === 'private' ? 'checked' : ''}> Частная — другие видят только «занят»</label></div>
+    <div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="ersvp" ${e?.response_requested === false ? '' : 'checked'}> Запрашивать ответы участников</label></div>
+    <div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="ecounter" ${e?.disallow_counter ? '' : 'checked'}> Участники могут предложить другое время</label></div>
     ${editing || !(accounts.find(a => a.id === ACCT) || {}).green ? '' : `<div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="emime" checked> Разослать участникам приглашения письмом</label>
       <div class="hint">Сервер ${esc((accounts.find(a => a.id === ACCT) || {}).name || 'Seller')} сам приглашения не отправляет — без этой галочки участники не узнают о встрече. В Alfa-Bank приглашения рассылает Exchange, поэтому там этой опции нет.</div></div>`}
     <div class="f" id="repw" ${editing ? 'style="display:none"' : ''}><label for="erep">Повторять</label><select id="erep"><option value="">Не повторять</option><option value="daily">Каждый день</option><option value="weekdays">По будням (пн–пт)</option><option value="weekly">Каждую неделю</option><option value="monthly">Каждый месяц</option><option value="yearly">Каждый год</option><option value="custom">Настроить…</option></select>
@@ -3673,6 +3698,12 @@ function eventForm(e, opts = {}) {
   extPaint();
   bindTwins();
   bindRepeat();
+  const efi = $('#efile');
+  if (efi) efi.onchange = async () => {
+    for (const f of efi.files) efiles.push({name: f.name, content_base64: await toB64(f), size: f.size});
+    efi.value = '';
+    $('#efiles').innerHTML = [...(e?.attachments || []), ...efiles].map(x => `<span class="aas-attendee">${esc(x.name)} <small>${fmtSize(x.size)}</small></span>`).join('');
+  };
   const paintRooms = () => {
     const host = $('#erooms'); if (!host) return;
     const list = prefs.rooms || [];
@@ -3765,6 +3796,11 @@ function eventForm(e, opts = {}) {
       else if (opt.some(o => o.toLowerCase() === low)) roleMap[a] = 'optional';
     }
     if (Object.keys(roleMap).length) p.attendee_types = roleMap;
+    const priv = $('#epriv').checked, rsvp = $('#ersvp').checked, counter = $('#ecounter').checked;
+    if (priv !== (e?.sensitivity === 'private')) p.sensitivity = priv ? 2 : 0;  // only what changed: an old cache has no flag
+    if (rsvp !== (e?.response_requested !== false)) p.response_requested = rsvp;
+    if (counter !== !e?.disallow_counter) p.disallow_counter = !counter;
+    if (efiles.length) p.attachments = efiles.map(({name, content_base64}) => ({name, content_base64}));
     if (rooms.length && !p.location.trim()) p.location = splitAddrs($('#eroom').value).map(x => x.replace(/\s*<[^>]*>\s*$/, '').replace(/^"|"$/g, '').trim()).join(', ');
     const remember = () => { rememberAddrsFromFields($('#eatt').value, $('#eopt').value, $('#eroom').value); rememberRooms($('#eroom').value); };
     if (editing) {
