@@ -55,6 +55,13 @@ class PrefsTest(unittest.TestCase):
                                                          {"name": "a", "ids": [], "shut": False, "c": 2}]})
         self.assertEqual(webapp.load_prefs(), out)
 
+    def test_calendar_both_prefs(self):
+        out = webapp.update_prefs({"cal_both": True, "cal_new_acct": "last", "cal_last_acct": "last"})
+        self.assertIs(out["cal_both"], True)
+        self.assertEqual(out["cal_new_acct"], "last")
+        self.assertEqual(out["cal_last_acct"], "main")  # «last» is a choice, not a mailbox
+        self.assertEqual(webapp.update_prefs({"cal_new_acct": "other"})["cal_new_acct"], "last")
+
     def test_scheduler_prefs(self):
         out = webapp.update_prefs({"rooms": [{"name": "Байкал", "address": "baikal@x.ru"}, {"name": "x", "address": "nope"}, 5],
                                    "sched_cons": {"lunch": False, "evil": 1}})

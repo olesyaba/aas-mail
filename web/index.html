@@ -105,6 +105,8 @@ try {
     <div id="calbar">
       <button class="aas-btn aas-btn--icon" id="prev" title="Назад" aria-label="Назад"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><button class="aas-btn" id="today">Сегодня</button><button class="aas-btn aas-btn--icon" id="next" title="Вперёд" aria-label="Вперёд"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
       <h2 id="caltitle"></h2><span class="aas-spacer"></span>
+      <div class="aas-calacc" id="calacc" hidden></div>
+      <button type="button" class="aas-btn aas-btn--sm" id="calboth" hidden aria-pressed="false" title="Встречи обоих ящиков в одной сетке">Оба календаря</button>
       <button type="button" class="aas-btn aas-btn--sm aas-btn--ghost" id="caloff" hidden title="Показать или свернуть часы вне рабочего дня">Всё время</button>
       <div class="aas-seg" id="calmode"><button data-m="day">День</button><button data-m="work">Раб. неделя</button><button data-m="week">Неделя</button></div>
     </div>
@@ -527,6 +529,9 @@ function agendaText(items) {
 /* ---------- meeting scheduler (event editor, right side) ----------
    Reads the editor's fields, fetches a Mon–Fri week of free/busy for everyone
    (people/schedule) and writes the chosen start back into «Начало/Конец». */
+/** The mailbox the open meeting form works in (Alfa-Bank or Alfa-Seller); null outside it. */
+let formAcct = null;
+const fAcct = () => formAcct || ACCT;
 function mountScheduler(box) {
   const S = {tab: 'grid', wk: null, data: null, err: '', tok: 0, key: '', gday: 0, fold: {}};
   const ws = () => prefs.work_start ?? 9, we = () => prefs.work_end ?? 18;
@@ -538,7 +543,7 @@ function mountScheduler(box) {
   // Saved rooms are asked about only while «Нужна свободная переговорка» is on.
   const roleList = () => {
     const pick = (id, role) => splitAddrs($(id)?.value).map(addrOnly).filter(Boolean).map(address => ({address, role}));
-    const me = accounts.find(a => a.id === ACCT)?.email, seen = new Set();
+    const me = accounts.find(a => a.id === fAcct())?.email, seen = new Set();
     return [...(me ? [{address: me, role: 'req', me: true}] : []), ...pick('#eatt', 'req'), ...pick('#eopt', 'opt'), ...pick('#eroom', 'room'),
       ...(cons().room ? (prefs.rooms || []).map(r => ({address: r.address, role: 'cand'})) : [])]
       .filter(p => { const k = p.address.toLowerCase(); return !seen.has(k) && seen.add(k); })
@@ -586,13 +591,13 @@ function mountScheduler(box) {
     if (!invited(ppl)) { S.data = null; S.err = ''; S.key = ''; return paint(); }
     const ask = ppl.filter(p => !p.ext);
     // Seller (Stalwart) has no free/busy for other people at all: say so, check only my calendar.
-    if ((accounts.find(a => a.id === ACCT) || {}).green) { S.data = null; S.err = ''; S.noAvail = true; S.key = ''; return paint(); }
+    if ((accounts.find(a => a.id === fAcct()) || {}).green) { S.data = null; S.err = ''; S.noAvail = true; S.key = ''; return paint(); }
     S.noAvail = false;
     const key = ask.map(p => p.address.toLowerCase()).join(',') + '|' + isoDay(S.wk);
     if (key === S.key && (S.data || S.err)) return paint();
     S.key = key; S.data = null; S.err = ''; const tok = ++S.tok; paint();
     try {
-      const j = await api('people', {action: 'schedule', who: ask.map(p => p.address), start: isoDay(S.wk), days: 5});
+      const j = await api('people', {action: 'schedule', who: ask.map(p => p.address), start: isoDay(S.wk), days: 5}, fAcct());
       if (tok === S.tok) { S.data = j; S.retries = 0; S.busy = false; }
     } catch (x) {
       if (tok !== S.tok) return;
@@ -605,7 +610,7 @@ function mountScheduler(box) {
       }
       S.busy = false;
       // Seller often returns a raw EAS/proxy dump — keep one short line people can act on.
-      const raw = String(x.message || ''), green = !!(accounts.find(a => a.id === ACCT) || {}).green;
+      const raw = String(x.message || ''), green = !!(accounts.find(a => a.id === fAcct()) || {}).green;
       S.err = green && (/eas|status|traceback|exception|proxy|html/i.test(raw) || raw.length > 160)
         ? 'Сервер занятости не ответил. Проверьте VPN или попробуйте позже.'
         : (raw || 'ошибка сервера');
@@ -623,7 +628,7 @@ function mountScheduler(box) {
     const c = cur(), slot = box.querySelector('.aas-sched__own'); if (!c || !slot) return;
     const en = new Date(+c.st + c.dur * 18e5);
     try {
-      const l = await api('events', {action: 'list', start: isoDay(c.st), end: isoDay(new Date(+en + 864e5)), limit: 300});
+      const l = await api('events', {action: 'list', start: isoDay(c.st), end: isoDay(new Date(+en + 864e5)), limit: 300}, fAcct());
       const hit = (l.items || []).filter(e => { const es = new Date(e.start_iso), ee = e.end ? localDate(e.end) : es; return es < en && ee > c.st && e.busy_status !== 'free'; });
       slot.innerHTML = hit.length ? hit.map(e => `<div class="aas-avline">${avDot('bad')}У вас пересечение: ${esc(evTitle(e))} (${esc(fmtRange(new Date(e.start_iso)))})</div>`).join('')
         : `<div class="aas-avline">${avDot('ok')}У вас в это время свободно</div>`;
@@ -744,7 +749,7 @@ function mountScheduler(box) {
     if ($('#eall')?.checked) body = empty('Для события на весь день время подбирать не нужно.');
     else if (!invited(roleList())) body = empty('Добавьте участников — покажу свободное время.');
     else if (S.noAvail || noFreeBusy())
-      body = `<div class="aas-sched__empty">${S.noAvail ? `Сервер ${esc((accounts.find(a => a.id === ACCT) || {}).name || 'Alfa-Seller')}` : 'Сервер'} не отдаёт занятость участников — подобрать время за них не получится. Ниже — только ваш календарь.</div><div class="aas-sched__own"></div>`;
+      body = `<div class="aas-sched__empty">${S.noAvail ? `Сервер ${esc((accounts.find(a => a.id === fAcct()) || {}).name || 'Alfa-Seller')}` : 'Сервер'} не отдаёт занятость участников — подобрать время за них не получится. Ниже — только ваш календарь.</div><div class="aas-sched__own"></div>`;
     else if (S.err) body = `<div class="aas-sched__empty">Занятость участников недоступна: ${esc(S.err.replace(/[.\s]+$/, ''))}. <button type="button" class="aas-linkbtn" data-retry>Повторить</button></div><div class="aas-sched__own"></div>`;
     else if (!S.data) body = (S.busy ? `<div class="aas-avline hint" role="status">${avDot('warn')}Сервер сейчас занят — повторю сама через 10 с (попытка ${S.retries} из 6).</div>` : '')
       + `<div class="aas-sched__skel" aria-busy="true" aria-label="Загружаю занятость">${'<i></i>'.repeat(5)}</div>`;
@@ -816,7 +821,7 @@ function fmtRange(s, e, allDay = false, now = new Date()) {
 const icon = (name, size = 16) => `<svg class="aas-ic" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
 /* ---------- preferences (kept on the server) ---------- */
-let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 1, cal_view: 'week', links: [], favorite_folders: [], folders_collapsed: [], folders_hidden: [], folder_groups: {}, theme: 'system', mail_sound: 'notice14', mail_window: 5, mail_window_seller: 5, mail_sort: 'date_desc', mail_sort_seller: 'date_desc', update_mode: 'auto', unified_cal: false, rooms: [], sched_cons: {not_before_10: true, lunch: true, fri_late: true, room: true}};
+let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 1, cal_view: 'week', links: [], favorite_folders: [], folders_collapsed: [], folders_hidden: [], folder_groups: {}, theme: 'system', mail_sound: 'notice14', mail_window: 5, mail_window_seller: 5, mail_sort: 'date_desc', mail_sort_seller: 'date_desc', update_mode: 'auto', unified_cal: false, cal_both: false, cal_new_acct: 'main', cal_last_acct: 'main', rooms: [], sched_cons: {not_before_10: true, lunch: true, fri_late: true, room: true}};
 /* Period and order are per-account (Bank ⇄ Seller keep their own): main on the base
    key, the Seller mailbox on the *_seller key — same split as signature/signature2. */
 const winKeyFor = a => a === 'main' ? 'mail_window' : 'mail_window_seller';
@@ -919,7 +924,7 @@ function openModal(html) {
   const m = $('#modal');
   if (!$('#ov').classList.contains('floating')) resetModalPos();  // a floating window keeps its place
   m.classList.remove('aas-modal--wide', 'aas-modal--actions-top', 'aas-dropping');  // each open starts from a normal width
-  m.innerHTML = html; delete m.dataset.dirty;
+  m.innerHTML = html; delete m.dataset.dirty; formAcct = null;
   m.ondragover = m.ondragleave = m.ondrop = null;
   m.classList.toggle('aas-modal--actions-top', !!m.querySelector(':scope > .aas-modal__scroll'));
   $('#ov').classList.add('on'); return m;
@@ -2862,7 +2867,7 @@ function bindPeopleInput(inp) {
     paint(local, {loading: true});
     const my = ++tok;
     try {
-      const j = await api('people', {action: 'find', query: q, limit: 10});
+      const j = await api('people', {action: 'find', query: q, limit: 10}, fAcct());
       if (my !== tok || lastQ !== q) return;
       const seen = new Set(local.map(p => (p.address || '').toLowerCase()));
       const remote = (j.items || []).filter(p => p.address && !seen.has(p.address.toLowerCase()));
@@ -3262,6 +3267,10 @@ $('#setbtn').onclick = async () => {
       <div class="f"><label>Рабочий день: конец</label><select id="swend">${[...Array(15)].map((_, i) => i + 10).map(h => `<option value="${h}" ${prefs.work_end === h ? 'selected' : ''}>${pad(h)}:00</option>`).join('')}</select>
         <div class="hint">По нему подбирается «Свободно у всех» при создании встречи</div></div>
     </div>
+    ${hasTwoAccts() ? `<div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="scboth" ${prefs.cal_both ? 'checked' : ''}> Оба календаря в одной сетке</label>
+      <div class="hint">Вкладка «Календарь» показывает встречи обоих ящиков вместе; пересечения между ящиками обведены красным. Мини-календарь у почты — по открытому ящику. Включается и кнопкой «Оба календаря» над сеткой.</div></div>
+    <div class="f"><label>Новые встречи в режиме «Оба» создавать в</label><select id="scnew">${[['main', acctName('main')], ['seller', acctName('seller')], ['last', 'ящике, где создавали в прошлый раз']].map(([v, t]) => `<option value="${v}" ${prefs.cal_new_acct === v ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
+      <div class="hint">В форме встречи ящик можно сменить.</div></div>` : ''}
     <div class="f"><label>Сохранённые ссылки для встреч (по одной в строке: «Название | https://…»)</label>
       <textarea id="slinks" rows="4" placeholder="Моя комната Telemost | https://telemost.yandex.ru/j/…">${esc((prefs.links || []).map(l => l.name + ' | ' + l.url).join('\n'))}</textarea></div>
     ${accounts.map(a => { const names = [...new Set([...Object.keys(prefs[catPref(a.id)] || {}), ...(seenCats[a.id] || [])])].filter(Boolean).sort((x, y) => x.localeCompare(y, 'ru'));
@@ -3348,6 +3357,7 @@ $('#setbtn').onclick = async () => {
       sig_replies: $('#ssigr') ? $('#ssigr').checked : prefs.sig_replies, threads: $('#sthr') ? $('#sthr').checked : prefs.threads,
       auto_sync: $('#sauto') ? +$('#sauto').value : prefs.auto_sync, cal_view: $('#scal') ? $('#scal').value : prefs.cal_view,
       work_start: $('#swstart') ? +$('#swstart').value : prefs.work_start, work_end: $('#swend') ? +$('#swend').value : prefs.work_end,
+      cal_both: $('#scboth') ? $('#scboth').checked : prefs.cal_both, cal_new_acct: $('#scnew') ? $('#scnew').value : prefs.cal_new_acct,
       reminder_minutes: $('#sremind') ? +$('#sremind').value : (prefs.reminder_minutes ?? 5),
       mail_sound: $('#smailsound') ? $('#smailsound').value : (prefs.mail_sound || 'notice14'),
       links: $('#slinks') ? parseLinks($('#slinks').value) : prefs.links, favorite_folders: prefs.favorite_folders || [],
@@ -3390,9 +3400,52 @@ $('#calmode').onclick = e => { const m = e.target.dataset?.m; if (!m) return; ca
 let events = [];
 const normEv = acct => e => { const s = new Date(e.start_iso); let en = e.end ? localDate(e.end) : s; if (isNaN(en) || en < s) en = s; (e.categories || []).forEach(c => seenCat(c)); return {...e, s, e: en, _acct: acct, _join: joinURL(e.location, e.body, e.online_meeting), _cat: uniqCats(e.categories)[0] || ''}; };
 
+/* ---------- both calendars: Alfa-Bank + Alfa-Seller in one grid (calendar tab only;
+   the mini calendar beside the mail keeps following the open mailbox) ---------- */
+const hasTwoAccts = () => accounts.some(a => a.id === 'main') && accounts.some(a => a.id === 'seller');
+const calBoth = () => !!prefs.cal_both && hasTwoAccts();
+const calKey = () => calBoth() ? 'both' : ACCT;
+const calHide = new Set();  // mailboxes hidden by the legend chips — this session only
+const acctName = id => (accounts.find(a => a.id === id) || {}).name || id;
+/** The mailbox a new meeting starts in: the open one, or in «both» mode the one from Settings. */
+function newEventAcct() {
+  if (!calBoth()) return ACCT;
+  const p = prefs.cal_new_acct === 'last' ? prefs.cal_last_acct : prefs.cal_new_acct;
+  return accounts.some(a => a.id === p) ? p : ACCT;
+}
+/** Both mailboxes' events → one list. A meeting in both (same uid and start: invited at both
+ *  addresses) shows once, marked `_both`; live meetings of different mailboxes that overlap
+ *  are marked `_clash` — the point of the view is seeing that double booking. */
+function mergeAccts(lists) {
+  const seen = new Map(), out = [];
+  // ponytail: the first list's copy wins (Alfa-Bank) — answering it answers that mailbox only.
+  lists.flat().forEach(e => {
+    const k = e.uid ? e.uid + '|' + e.start_iso : '', o = k && seen.get(k);
+    if (o) { if (o._acct !== e._acct) o._both = true; return; }
+    if (k) seen.set(k, e);
+    out.push(e);
+  });
+  const live = out.filter(e => !e.is_all_day && !isCancelled(e) && e.busy_status !== 'free');
+  live.forEach(e => { e._clash = !e._both && live.some(o => o._acct !== e._acct && !o._both && o.s < e.e && e.s < o.e); });
+  return out;
+}
+function paintCalBoth() {
+  const b = $('#calboth'), box = $('#calacc'); if (!b || !box) return;
+  b.hidden = !hasTwoAccts(); b.setAttribute('aria-pressed', String(calBoth())); b.classList.toggle('on', calBoth());
+  box.hidden = !calBoth();
+  box.innerHTML = calBoth() ? ['main', 'seller'].map(id => `<button type="button" class="aas-calacc__chip aas-acct--${id}${calHide.has(id) ? ' off' : ''}" data-acct="${id}" aria-pressed="${!calHide.has(id)}" title="${calHide.has(id) ? 'Показать' : 'Скрыть'} встречи «${esc(acctName(id))}»"><span class="aas-calacc__dot"></span>${esc(acctName(id))}</button>`).join('') : '';
+}
+$('#calboth').onclick = async () => { await savePrefs({cal_both: !prefs.cal_both}); calHide.clear(); loadCal(); };
+$('#calacc').onclick = e => {
+  const b = e.target.closest('[data-acct]'); if (!b) return;
+  const id = b.dataset.acct; calHide.has(id) ? calHide.delete(id) : calHide.add(id);
+  paintCalBoth(); drawCal();
+};
+
 const loadCal = guard(async (quiet = false) => {
   if (view !== 'cal') return loadRail(quiet);  // the grid reloads on entering the tab anyway
-  const acct = ACCT;
+  const acct = calKey();
+  paintCalBoth();
   document.querySelectorAll('#calmode button').forEach(b => b.classList.toggle('on', b.dataset.m === calMode));
   const days = visibleDays(), end = new Date(days[days.length - 1]); end.setDate(end.getDate() + 1);
   const fmt = d => d.toLocaleDateString('ru-RU', {day: 'numeric', month: 'long'});
@@ -3403,16 +3456,25 @@ const loadCal = guard(async (quiet = false) => {
   // (they could be opened, answered and deleted under the wrong mailbox).
   if (calDrawnFor !== acct) drawCal();
   let j;
-  try { j = await api('events', {action: 'list', start: isoDay(days[0]), end: isoDay(end), limit: 300}); }
-  catch (e) { if (acct === ACCT) { $('#caltitle').textContent = title; $('#dot').className = 'aas-status-dot aas-status-dot--err'; } throw e; }
-  if (acct !== ACCT) return;
+  const q = {action: 'list', start: isoDay(days[0]), end: isoDay(end), limit: 300};
+  try {
+    if (acct === 'both') {  // both mailboxes at once; one that fails doesn't blank the other
+      const ids = ['main', 'seller'], rs = await Promise.allSettled(ids.map(id => api('events', q, id)));
+      if (rs.every(r => r.status === 'rejected')) throw rs[0].reason;
+      j = {lists: [], truncated: false, cached_age: 0, bad: ids.filter((_, i) => rs[i].status === 'rejected')};
+      rs.forEach((r, i) => { if (r.status !== 'fulfilled') return;
+        j.lists.push(r.value.items.map(normEv(ids[i]))); j.truncated ||= !!r.value.truncated; j.cached_age = Math.max(j.cached_age, r.value.cached_age || 0); });
+    } else j = await api('events', q);
+  }
+  catch (e) { if (acct === calKey()) { $('#caltitle').textContent = title; $('#dot').className = 'aas-status-dot aas-status-dot--err'; } throw e; }
+  if (acct !== calKey()) return;
   // Stale cache answers instantly and refreshes behind the scenes: look again once it is done.
   if (j.cached_age > 180 && view === 'cal') setTimeout(() => { if (view === 'cal') loadCal(); }, 40000);
   // Join links are parsed once per load, not on every redraw of the grid.
-  events = j.items.map(normEv(acct));
+  events = j.lists ? mergeAccts(j.lists) : j.items.map(normEv(acct));
   // AAS-24-02: the server is still paging the calendar in (Seller sends 1–2 events
   // per round) — say so and look again shortly instead of showing a stub day.
-  $('#caltitle').textContent = title + (j.truncated ? ' — календарь ещё загружается…' : ''); drawCal();
+  $('#caltitle').textContent = title + (j.truncated ? ' — календарь ещё загружается…' : '') + (j.bad?.length ? ` — ${acctName(j.bad[0])} не ответил` : ''); drawCal();
   clearTimeout(calMoreT);
   if (j.truncated && view === 'cal' && calMoreTries++ < 30) calMoreT = setTimeout(() => { if (view === 'cal') loadCal(true); }, 5000);
   if (!j.truncated) calMoreTries = 0;
@@ -3648,7 +3710,8 @@ function bindEvDrag(el, e, cols, days, sc) {
 
 let calDrawnFor = null;
 function drawCal() {
-  calDrawnFor = ACCT;
+  calDrawnFor = calKey();
+  const both = calBoth(), shown = both ? events.filter(e => e._both || !calHide.has(e._acct)) : events;
   const today = isoDay(new Date()), days = visibleDays(), wide = days.length === 1;
   HP = wide ? 72 : 48;
   $('#weekwrap').style.setProperty('--n', days.length); $('#weekwrap').style.setProperty('--hp', HP + 'px');
@@ -3678,10 +3741,11 @@ function drawCal() {
   const cols = [...$('#grid').children].slice(1);
   days.forEach((d, i) => {
     const day0 = d.getTime(), day1 = day0 + 864e5;
-    const todays = events.filter(e => e.s.getTime() < day1 && Math.max(e.e.getTime(), e.s.getTime() + 1) > day0);
+    const todays = shown.filter(e => e.s.getTime() < day1 && Math.max(e.e.getTime(), e.s.getTime() + 1) > day0);
     todays.filter(e => e.is_all_day).forEach(e => {
       const c = document.createElement('div'); c.className = 'aas-chip' + (isCancelled(e) ? ' aas-chip--cancelled' : ''); c.textContent = evTitle(e); c.title = e.subject || ''; c.onclick = () => eventView(e);
       if (e._cat) c.style.setProperty('--evc', mutedCat(catColor(e._cat)));
+      if (both) { c.classList.add('aas-acct--' + (e._both ? 'both' : e._acct)); c.title += `\n${e._both ? 'в обоих календарях' : acctName(e._acct)}`; }
       cells[i].appendChild(c);
     });
     const timed = todays.filter(e => !e.is_all_day && e.e.getTime() > day0).sort((a, b) => a.s - b.s || b.e - a.e);
@@ -3712,7 +3776,8 @@ function drawCal() {
       if (e._n > MAXL && e._l >= MAXL - 1) { (hidden.get(e._g) || hidden.set(e._g, []).get(e._g)).push({e, top}); return; }
       const el = document.createElement('div');
       el.className = 'aas-ev' + (e.busy_status ? ' aas-ev--' + e.busy_status : '') + (wide ? ' wide' : '') + (e._cat ? ' aas-ev--cat' : '') +
-        (isCancelled(e) ? ' aas-ev--cancelled' : '') + (e.response_type === 'not_responded' ? ' aas-ev--pending' : '') + (h < 30 ? ' aas-ev--short' : '');
+        (isCancelled(e) ? ' aas-ev--cancelled' : '') + (e.response_type === 'not_responded' ? ' aas-ev--pending' : '') + (h < 30 ? ' aas-ev--short' : '') +
+        (both ? ' aas-acct--' + (e._both ? 'both' : e._acct) + (e._clash ? ' aas-ev--clash' : '') : '');
       el.style.cssText = `top:${top}px;height:${h}px;left:${e._l * 100 / slots}%;width:calc(${100 / slots}% - 3px)`;
       if (e._cat) el.style.setProperty('--evc', mutedCat(catColor(e._cat)));
       const t1 = `${pad(e.s.getHours())}:${pad(e.s.getMinutes())}–${pad(e.e.getHours())}:${pad(e.e.getMinutes())}`;
@@ -3721,7 +3786,9 @@ function drawCal() {
       el.innerHTML = xMark + (wide ? `<div class="l1">${title}<small>${t1}${e.location ? ' · ' + esc(e.location) : ''}${hasJoin ? ' · ссылка' : ''}</small></div>`
         : `<b>${title}</b><small>${t1.slice(0, 5)}${e.location ? ' · ' + esc(e.location) : ''}</small>`) +
         (wide && h > 46 && e.organizer ? `<small>${esc(who(e.organizer))}${(e.attendees || []).length > 1 ? ' · участников: ' + e.attendees.length : ''}</small>` : '');
-      el.title = `${e.subject}\n${t1}\n${e.location || ''}${hasJoin ? '\nесть ссылка для подключения' : ''}`;
+      el.title = `${e.subject}\n${t1}\n${e.location || ''}${hasJoin ? '\nесть ссылка для подключения' : ''}` +
+        (both ? `\n${e._both ? 'в обоих календарях' : acctName(e._acct)}${e._clash ? ' — пересекается со встречей другого ящика' : ''}` : '');
+      if (both) el.insertAdjacentHTML('afterbegin', `<span class="aas-ev__acct">${e._both ? 'Б+С' : e._acct === 'seller' ? 'С' : 'Б'}</span>`);
       el.onclick = ev => { ev.stopPropagation(); if (!el._dragged) eventView(e); };
       bindEvDrag(el, e, cols, days, sc);
       cols[i].appendChild(el);
@@ -3987,6 +4054,7 @@ function openMenu(anchor, items) {
 const avDot = c => `<span class="aas-avdot aas-avdot--${c || 'unk'}" aria-hidden="true"></span>`;
 function eventForm(e, opts = {}) {
   const editing = !!(e && e.item_id);
+  const acct = e?._acct || opts.acct || newEventAcct();
   const now = new Date(); now.setMinutes(0, 0, 0); now.setHours(now.getHours() + 1);
   if (!e && opts.start instanceof Date && !isNaN(opts.start)) {
     now.setTime(opts.start.getTime());
@@ -4007,9 +4075,11 @@ function eventForm(e, opts = {}) {
   const attOf = type => e ? (e.attendees || []).filter(a => a.address && a.address !== e.organizer?.address && (a.type || 'required') === type)
     .map(a => formatPerson(a)).join(', ').replace(/.$/, '$&, ') : '';  // ends with «, »: the next name can be typed at once
   const series = editing && e.is_recurring;  // the series' subject, place, roster — never one date's time
-  const formGreen = !!(accounts.find(a => a.id === (e?._acct || ACCT)) || {}).green;  // Seller: ActiveSync 14.1, no attachments on meetings
+  const formGreen = !!(accounts.find(a => a.id === acct) || {}).green;  // Seller: ActiveSync 14.1, no attachments on meetings
   const efiles = [];
   openModal(`<h3>${editing ? (series ? 'Изменить серию' : 'Изменить событие') : 'Новое событие'}</h3><div class="aas-evwrap"><div class="aas-evform">
+    ${!editing && hasTwoAccts() ? `<div class="f"><label>Календарь</label><div class="aas-seg aas-evacct" id="eacct">${['main', 'seller'].map(id => `<button type="button" data-acct="${id}" class="aas-acct--${id}${id === acct ? ' on' : ''}" aria-pressed="${id === acct}">${esc(acctName(id))}</button>`).join('')}</div>
+      <div class="hint">Приглашения уйдут от ${esc((accounts.find(a => a.id === acct) || {}).email || acctName(acct))}</div></div>` : ''}
     ${series ? '<div class="hint aas-hint-tight">Меняются тема, место, описание и участники всей серии. Время серии и отдельных встреч меняйте в Outlook или OWA — сервер не даёт сделать это отсюда.</div>' : ''}
     <div class="f"><label>Тема</label><input type="text" id="esub" value="${esc(e?.subject || '')}"></div>
     <div class="frow"><div class="f"><label>Начало</label><input type="datetime-local" id="est" value="${isoLocal(s)}"></div>
@@ -4040,8 +4110,8 @@ function eventForm(e, opts = {}) {
     <div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="epriv" ${e?.sensitivity === 'private' ? 'checked' : ''}> Частная — другие видят только «занят»</label></div>
     <div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="ersvp" ${e?.response_requested === false ? '' : 'checked'}> Запрашивать ответы участников</label></div>
     <div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="ecounter" ${e?.disallow_counter ? '' : 'checked'}> Участники могут предложить другое время</label></div>
-    ${editing || !(accounts.find(a => a.id === ACCT) || {}).green ? '' : `<div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="emime" checked> Разослать участникам приглашения письмом</label>
-      <div class="hint">Сервер ${esc((accounts.find(a => a.id === ACCT) || {}).name || 'Seller')} сам приглашения не отправляет — без этой галочки участники не узнают о встрече. В Alfa-Bank приглашения рассылает Exchange, поэтому там этой опции нет.</div></div>`}
+    ${editing || !(accounts.find(a => a.id === acct) || {}).green ? '' : `<div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="emime" checked> Разослать участникам приглашения письмом</label>
+      <div class="hint">Сервер ${esc((accounts.find(a => a.id === acct) || {}).name || 'Seller')} сам приглашения не отправляет — без этой галочки участники не узнают о встрече. В Alfa-Bank приглашения рассылает Exchange, поэтому там этой опции нет.</div></div>`}
     <div class="f" id="repw" ${editing ? 'style="display:none"' : ''}><label for="erep">Повторять</label><select id="erep"><option value="">Не повторять</option><option value="daily">Каждый день</option><option value="weekdays">По будням (пн–пт)</option><option value="weekly">Каждую неделю</option><option value="monthly">Каждый месяц</option><option value="yearly">Каждый год</option><option value="custom">Настроить…</option></select>
       <div class="aas-rep" id="erepx" hidden><span>Каждые</span><input type="number" id="erepn" min="1" max="99" value="1" aria-label="Интервал">
         <select id="erepu" aria-label="Единица"><option value="daily">дн.</option><option value="weekly" selected>нед.</option><option value="monthly">мес.</option><option value="yearly">г.</option></select></div>
@@ -4052,6 +4122,16 @@ function eventForm(e, opts = {}) {
     <div class="acts2"><button class="aas-btn" id="ecancel">Отмена</button><button class="aas-btn aas-btn--primary" id="esave">${editing ? 'Сохранить' : 'Создать'}</button></div>
     </div><div class="aas-sched" id="sched"></div></div>`);
   $('#modal').classList.add('aas-modal--wide');
+  formAcct = acct;
+  // Another mailbox: the form is rebuilt for it (Seller has no attachments, sends invitations
+  // itself…), carrying over what was typed.
+  $('#eacct')?.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-acct]'); if (!b || b.dataset.acct === acct) return;
+    const keep = {};
+    $('#modal').querySelectorAll('input[id], textarea[id], select[id]').forEach(x => { if (x.type !== 'file') keep[x.id] = x.type === 'checkbox' ? x.checked : x.value; });
+    delete $('#modal').dataset.dirty;
+    eventForm(null, {...opts, acct: b.dataset.acct, keep});
+  });
   if (series) ['#est', '#een', '#eall'].forEach(id => { const x = $(id); if (x) x.disabled = true; });
   ['#eatt', '#eopt', '#eroom'].forEach(id => bindPeopleInput($(id)));
   // A big roster must be seen whole (31 people in a one-line field looked like «one loaded»):
@@ -4064,7 +4144,7 @@ function eventForm(e, opts = {}) {
     f.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.defaultPrevented) e.preventDefault(); });  // a list, not lines
     requestAnimationFrame(fit);
   });
-  const extPaint = () => paintExtHint($('#eext'), [$('#eatt'), $('#eopt')], e?._acct || ACCT);
+  const extPaint = () => paintExtHint($('#eext'), [$('#eatt'), $('#eopt')], acct);
   ['#eatt', '#eopt'].forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, extPaint)));
   extPaint();
   bindTwins();
@@ -4108,7 +4188,7 @@ function eventForm(e, opts = {}) {
   if (sel) sel.onchange = () => {
     const l = prefs.links[+sel.value]; sel.value = ''; if (l) putLink(l.url);
   };
-  $('#ektalk').onclick = () => putLink(ktalkRoom(accounts.find(a => a.id === (e?._acct || ACCT))?.email));
+  $('#ektalk').onclick = () => putLink(ktalkRoom(accounts.find(a => a.id === acct)?.email));
   // If the start is pushed past the end, carry the end along (keep a 30-min meeting).
   $('#est')?.addEventListener('change', () => {
     const st = new Date($('#est').value), en = new Date($('#een').value);
@@ -4180,18 +4260,27 @@ function eventForm(e, opts = {}) {
     if (editing) {
       if (series) { delete p.start; delete p.end; delete p.all_day; }  // the server refuses a series' time from here
       p.attendees = att;  // an empty list clears the roster (update patch)
-      await api('events', {action: 'update', item_id: e.item_id, ...p}, e._acct || ACCT);
+      await api('events', {action: 'update', item_id: e.item_id, ...p}, acct);
       remember();
     } else {
       if (att.length) p.attendees = att;
       Object.assign(p, repeatParams(readRepeat()) || {});
       if (att.length && $('#emime')?.checked) p.mime_invite = true;
-      const r = await api('events', {action: 'create', ...p});
+      const r = await api('events', {action: 'create', ...p}, acct);
+      if (prefs.cal_last_acct !== acct) savePrefs({cal_last_acct: acct});
       remember();
       if (r.mime_invite_pending) { mimeFailed = true; toast('Событие создано. Приглашения отправляются письмом — сообщу, когда уйдут.'); watchNotices(); }
     }
     closeModal(); if (!mimeFailed) toast(editing ? 'Сохранено' : 'Событие создано'); loadCal();
   });
+  if (opts.keep) {
+    Object.entries(opts.keep).forEach(([id, v]) => {
+      const x = document.getElementById(id); if (!x || !$('#modal').contains(x)) return;
+      if (x.type === 'checkbox') x.checked = v; else x.value = v;
+      x.dispatchEvent(new Event('change', {bubbles: true}));
+    });
+    $('#modal').dataset.dirty = '1';
+  }
 }
 
 /* Narrow window: the folder column becomes a drawer over the list (☰ in the list

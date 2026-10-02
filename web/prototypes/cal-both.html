@@ -1,0 +1,210 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Оба календаря</title>
+<link rel="stylesheet" href="../ui-kit/fonts.css">
+<link rel="stylesheet" href="../ui-kit/tokens.css">
+<style>
+:root{--b:var(--aas-bank-fill);--s:#0b8a6f;--hr:46px}
+body{margin:0;background:var(--aas-bg);color:var(--aas-text);font:14px/1.4 var(--aas-font)}
+.page{max-width:1240px;margin:20px auto;padding:0 16px;display:grid;grid-template-columns:1fr 300px;gap:16px}
+@media (max-width:980px){.page{grid-template-columns:1fr}}
+.card{background:var(--aas-panel);border:1px solid var(--aas-line);border-radius:var(--aas-r-lg);overflow:hidden}
+/* calendar header */
+.hd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--aas-line)}
+.hd h2{margin:0;font-size:16px;flex:1;min-width:180px}
+.seg{display:inline-flex;border:1px solid var(--aas-line-strong);border-radius:var(--aas-r-pill);padding:2px;gap:2px}
+.seg button{font:inherit;font-size:13px;border:0;background:none;color:var(--aas-text);padding:4px 12px;border-radius:var(--aas-r-pill);cursor:pointer;display:flex;align-items:center;gap:6px}
+.seg button.on{background:var(--aas-accent);color:var(--aas-on-accent)}
+.seg button[data-a=s].on{background:var(--s)}
+.seg button[data-a=both].on{background:var(--aas-text);color:var(--aas-panel)}
+.dot{width:8px;height:8px;border-radius:2px;background:var(--c)}
+.btn{font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--aas-line-strong);border-radius:var(--aas-r-sm);background:var(--aas-panel);color:var(--aas-text);cursor:pointer}
+.btn.pri{background:var(--aas-accent);border-color:var(--aas-accent);color:var(--aas-on-accent)}
+.legend{display:flex;gap:6px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--aas-line);font-size:12px;color:var(--aas-muted);align-items:center}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--aas-line-strong);border-radius:var(--aas-r-pill);padding:3px 10px;background:none;font:inherit;color:var(--aas-text);cursor:pointer}
+.chip.off{opacity:.45;text-decoration:line-through}
+.chip input{margin:0}
+/* week grid */
+.grid{display:grid;grid-template-columns:44px repeat(5,1fr);position:relative}
+.dh{padding:8px 6px;font-size:12px;color:var(--aas-muted);border-bottom:1px solid var(--aas-line);text-align:center}
+.dh b{display:block;font-size:16px;color:var(--aas-text)}
+.dh.today b{color:var(--aas-accent-text)}
+.times{position:relative}
+.times div{height:var(--hr);font-size:11px;color:var(--aas-muted);text-align:right;padding-right:6px;transform:translateY(-7px)}
+.col{position:relative;border-left:1px solid var(--aas-line);background:repeating-linear-gradient(to bottom,transparent 0 calc(var(--hr) - 1px),var(--aas-line) calc(var(--hr) - 1px) var(--hr));cursor:copy}
+.ev{position:absolute;border-radius:6px;padding:3px 6px 3px 9px;font-size:12px;line-height:1.25;overflow:hidden;cursor:pointer;
+  background:color-mix(in srgb,var(--c) 14%,var(--aas-panel));color:var(--aas-text);border:1px solid color-mix(in srgb,var(--c) 35%,transparent)}
+.ev::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--c)}
+.ev.dup::before{background:linear-gradient(var(--b) 0 50%,var(--s) 50% 100%)}
+.ev b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev small{color:var(--aas-muted)}
+.ev .tag{position:absolute;right:4px;top:3px;font-size:10px;font-weight:700;color:var(--c)}
+.ev.clash{box-shadow:inset 0 0 0 1.5px var(--aas-danger)}
+.ev.clash small::after{content:" · пересечение";color:var(--aas-danger);font-weight:600}
+.ev.sel{outline:2px solid var(--aas-text);outline-offset:1px}
+.now{position:absolute;left:0;right:0;height:2px;background:var(--aas-danger);pointer-events:none}
+/* side */
+aside{display:grid;gap:16px;align-content:start}
+.pad{padding:14px 16px}
+aside h3{margin:0 0 10px;font-size:14px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0}
+.row label{font-size:13px}
+.hint{font-size:12px;color:var(--aas-muted);margin:4px 0 0}
+select{font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--aas-line-strong);border-radius:var(--aas-r-sm);background:var(--aas-panel);color:var(--aas-text)}
+.switch{appearance:none;width:34px;height:20px;border-radius:20px;background:var(--aas-line-strong);position:relative;cursor:pointer;flex:none;margin:0}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform var(--aas-dur) var(--aas-ease)}
+.switch:checked{background:var(--aas-accent)}
+.switch:checked::after{transform:translateX(14px)}
+.det{font-size:13px}
+.det .acc{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:2px 8px;border-radius:var(--aas-r-pill);background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--aas-text)}
+.det p{margin:6px 0;color:var(--aas-muted)}
+.det .warn{color:var(--aas-danger)}
+/* modal */
+.ov{position:fixed;inset:0;background:rgb(0 0 0 / 35%);display:none;place-items:center;padding:16px}
+.ov.on{display:grid}
+.modal{width:min(480px,100%);background:var(--aas-panel);border-radius:var(--aas-r-lg);box-shadow:var(--aas-shadow);border-top:4px solid var(--c);padding:16px 18px}
+.modal h3{margin:0 0 12px;font-size:16px}
+.f{display:grid;gap:4px;margin:10px 0}
+.f label{font-size:12px;color:var(--aas-muted)}
+.f input{font:inherit;padding:7px 10px;border:1px solid var(--aas-line-strong);border-radius:var(--aas-r-control);background:var(--aas-panel);color:var(--aas-text)}
+.from{font-size:12px;color:var(--aas-muted)}
+.note{font-size:12px;padding:8px 10px;border-radius:var(--aas-r-sm);background:color-mix(in srgb,var(--aas-danger) 10%,transparent);color:var(--aas-text);margin:8px 0}
+.note.info{background:var(--aas-panel-2)}
+.acts{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.intro{grid-column:1/-1}
+.intro h1{margin:0 0 4px;font-size:20px}
+.intro p{margin:0;color:var(--aas-muted);max-width:80ch}
+</style></head><body>
+<div class="page">
+  <div class="intro"><h1>Оба календаря</h1><p>Прототип для обсуждения: данные выдуманные, всё кликается. Попробуйте переключатель «Оба», клик по событию и по пустому месту в сетке.</p></div>
+  <div class="card">
+    <div class="hd">
+      <h2>28 сентября – 2 октября</h2>
+      <div class="seg" id="seg" role="group" aria-label="Чей календарь">
+        <button data-a="b"><span class="dot" style="--c:var(--b)"></span>Альфа-Банк</button>
+        <button data-a="s"><span class="dot" style="--c:var(--s)"></span>Альфа-Селлер</button>
+        <button data-a="both">Оба</button>
+      </div>
+      <button class="btn pri" id="create">Создать</button>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+  <aside>
+    <div class="card pad det" id="det"><h3>Событие</h3><p>Нажмите на встречу в сетке.</p></div>
+    <div class="card pad">
+      <h3>Настройки → Календарь</h3>
+      <div class="row"><label for="optBoth">Показывать «Оба» в календаре</label><input type="checkbox" class="switch" id="optBoth" checked></div>
+      <p class="hint">Выключено: календарь снова следует за вкладкой ящика, как сейчас.</p>
+      <div class="row"><label for="optDef">Новые встречи создавать в</label>
+        <select id="optDef"><option value="b">Альфа-Банк</option><option value="s">Альфа-Селлер</option><option value="last">где создавали в прошлый раз</option></select></div>
+      <div class="row"><label for="optClash">Отмечать пересечения между ящиками</label><input type="checkbox" class="switch" id="optClash" checked></div>
+      <div class="row"><label for="optDup">Одна встреча в обоих: показывать один раз</label><input type="checkbox" class="switch" id="optDup" checked></div>
+    </div>
+  </aside>
+</div>
+<div class="ov" id="ov"><div class="modal" id="modal"></div></div>
+<script>
+const ACC = {b: {name: 'Альфа-Банк', short: 'Б', mail: 'o.smirnova@alfabank.ru', c: 'var(--b)'},
+             s: {name: 'Альфа-Селлер', short: 'С', mail: 'o.smirnova@seller.example.ru', c: 'var(--s)'}};
+const DAYS = ['Пн 28', 'Вт 29', 'Ср 30', 'Чт 1', 'Пт 2'], H0 = 9, H1 = 19, TODAY = 4;
+const E = [ // [day, start, end, acct, title, uid]
+  [0, 10, 10.5, 'b', 'Дейли'], [0, 11, 12, 's', 'Синк по релизу'], [0, 11.5, 12.5, 'b', 'Планирование спринта'],
+  [0, 15, 16, 'b', 'Демо для партнёров', 'u1'], [0, 15, 16, 's', 'Демо для партнёров', 'u1'],
+  [1, 9.5, 10, 'b', 'Дейли'], [1, 13, 14, 's', 'Обзор витрины'], [1, 16, 17, 'b', '1:1 с руководителем'],
+  [2, 10, 11.5, 's', 'Ретро'], [2, 14, 15, 'b', 'Архкомитет'], [2, 14.5, 15.5, 's', 'Звонок с партнёром'],
+  [3, 10, 10.5, 'b', 'Дейли'], [3, 12, 13, 's', 'Kickoff маркетплейса'], [3, 17, 18, 'b', 'Бриф по запуску', 'u2'], [3, 17, 18, 's', 'Бриф по запуску', 'u2'],
+  [4, 10, 10.25, 'b', 'Дейли'], [4, 11, 12, 'b', 'Демо спринта'], [4, 15, 16, 's', 'Ретро недели'],
+].map(([d, s, e, a, t, uid], i) => ({i, d, s, e, a, t, uid}));
+let mode = 'both', show = {b: true, s: true}, sel = null, lastCreated = 's';
+const $ = s => document.querySelector(s);
+const fmt = h => `${Math.floor(h)}:${String(Math.round(h % 1 * 60)).padStart(2, '0')}`;
+const opt = id => $(id).checked;
+
+function visible() {
+  let list = E.filter(e => mode === 'both' ? show[e.a] : e.a === mode);
+  if (mode === 'both' && opt('#optDup')) {  // the same meeting in both mailboxes → one card
+    const seen = new Map();
+    list = list.filter(e => { if (!e.uid) return true; const o = seen.get(e.uid); if (o) { o.dup = true; return false; } seen.set(e.uid, e); e.dup = false; return true; });
+  } else list.forEach(e => e.dup = false);
+  // overlap between the two mailboxes = you are double-booked
+  list.forEach(e => e.clash = mode === 'both' && opt('#optClash') && !e.dup &&
+    list.some(o => o !== e && o.d === e.d && o.a !== e.a && !o.dup && o.s < e.e && e.s < o.e));
+  return list;
+}
+function lanes(list) {  // side by side when they overlap
+  for (let d = 0; d < 5; d++) {
+    const day = list.filter(e => e.d === d).sort((a, b) => a.s - b.s), end = [];
+    day.forEach(e => { let l = end.findIndex(x => x <= e.s); if (l < 0) l = end.length; end[l] = e.e; e.lane = l; });
+    day.forEach(e => e.of = Math.max(1, ...day.filter(o => o.s < e.e && e.s < o.e).map(o => o.lane + 1)));
+  }
+}
+function render() {
+  const both = opt('#optBoth');
+  $('#seg [data-a=both]').hidden = !both;
+  if (!both && mode === 'both') mode = 'b';
+  document.querySelectorAll('#seg button').forEach(b => b.classList.toggle('on', b.dataset.a === mode));
+  $('#legend').style.display = mode === 'both' ? '' : 'none';
+  const list = visible(); lanes(list);
+  const clashes = list.filter(e => e.clash).length / 2;
+  $('#legend').innerHTML = ['b', 's'].map(a => `<button class="chip${show[a] ? '' : ' off'}" data-show="${a}" aria-pressed="${show[a]}"><span class="dot" style="--c:${ACC[a].c}"></span>${ACC[a].name}</button>`).join('')
+    + (clashes ? `<span style="margin-left:auto">Пересечений на неделе: ${Math.round(clashes)}</span>` : '');
+  let h = '<div class="dh"></div>' + DAYS.map((d, i) => `<div class="dh${i === TODAY ? ' today' : ''}">${d.split(' ')[0]}<b>${d.split(' ')[1]}</b></div>`).join('');
+  h += `<div class="times">${Array.from({length: H1 - H0}, (_, k) => `<div>${H0 + k}:00</div>`).join('')}</div>`;
+  for (let d = 0; d < 5; d++) {
+    h += `<div class="col" data-day="${d}" style="height:calc(var(--hr) * ${H1 - H0})">`;
+    list.filter(e => e.d === d).forEach(e => {
+      const w = 100 / e.of;
+      h += `<div class="ev${e.dup ? ' dup' : ''}${e.clash ? ' clash' : ''}${sel === e.i ? ' sel' : ''}" data-ev="${e.i}" style="--c:${ACC[e.a].c};top:calc(var(--hr) * ${e.s - H0});height:calc(var(--hr) * ${e.e - e.s} - 2px);left:calc(${e.lane * w}% + 2px);width:calc(${w}% - 4px)" title="${e.t}">`
+        + (mode === 'both' ? `<span class="tag">${e.dup ? 'Б+С' : ACC[e.a].short}</span>` : '')
+        + `<b>${e.t}</b><small>${fmt(e.s)}–${fmt(e.e)}</small></div>`;
+    });
+    if (d === TODAY) h += `<div class="now" style="top:calc(var(--hr) * 1.8)"></div>`;
+    h += '</div>';
+  }
+  $('#grid').innerHTML = h;
+}
+function detail(e) {
+  sel = e.i; render();
+  const twin = e.uid && E.find(o => o.uid === e.uid && o !== e);
+  const other = E.filter(o => o.d === e.d && o.a !== e.a && o.uid !== e.uid && o.s < e.e && e.s < o.e);
+  $('#det').innerHTML = `<h3>${e.t}</h3>
+    <span class="acc" style="--c:${ACC[e.a].c}"><span class="dot"></span>${e.dup ? 'в обоих календарях' : ACC[e.a].name}</span>
+    <p>${DAYS[e.d]}, ${fmt(e.s)}–${fmt(e.e)}</p>
+    <p>Ответ уйдёт от <b>${ACC[e.a].mail}</b>${twin ? `. Встреча есть и в ${ACC[twin.a].name}: ответить можно из любого, второй ящик подтянется сам, если организатор пригласил оба адреса.` : ''}</p>
+    ${other.length ? `<p class="warn">Пересекается в ${ACC[other[0].a].name}: «${other[0].t}», ${fmt(other[0].s)}–${fmt(other[0].e)}</p>` : ''}
+    <div class="acts" style="justify-content:flex-start"><button class="btn">Принять</button><button class="btn">Под вопросом</button><button class="btn">Отклонить</button></div>`;
+}
+function form(day = TODAY, start = 14) {
+  let a = $('#optDef').value === 'last' ? lastCreated : $('#optDef').value;
+  const paint = () => {
+    const end = start + 1, clash = E.filter(o => o.d === day && o.s < end && start < o.e);
+    $('#modal').style.setProperty('--c', ACC[a].c);
+    $('#modal').innerHTML = `<h3>Новая встреча</h3>
+      <div class="f"><label>Календарь</label>
+        <div class="seg" id="fseg">${['b', 's'].map(k => `<button data-a="${k}" class="${k === a ? 'on' : ''}"><span class="dot" style="--c:${ACC[k].c}"></span>${ACC[k].name}</button>`).join('')}</div>
+        <span class="from">Приглашения уйдут от ${ACC[a].mail}</span></div>
+      <div class="f"><label for="ft">Тема</label><input id="ft" placeholder="О чём встреча"></div>
+      <div class="f"><label>Когда</label><input value="${DAYS[day]} октября, ${fmt(start)}–${fmt(end)}" readonly></div>
+      ${clash.length ? `<div class="note">В это время уже ${clash.map(o => `«${o.t}» (${ACC[o.a].name})`).join(', ')}.</div>` : ''}
+      ${a === 's' ? '<div class="note info">В Альфа-Селлер к встрече нельзя приложить файлы: сервер их не принимает.</div>' : ''}
+      <div class="acts"><button class="btn" id="fx">Отмена</button><button class="btn pri" id="fok" style="background:${ACC[a].c};border-color:${ACC[a].c}">Отправить</button></div>`;
+    $('#fseg').onclick = ev => { const b = ev.target.closest('[data-a]'); if (b) { a = b.dataset.a; paint(); } };
+    $('#fx').onclick = () => $('#ov').classList.remove('on');
+    $('#fok').onclick = () => { lastCreated = a; E.push({i: E.length, d: day, s: start, e: end, a, t: $('#ft').value || 'Новая встреча'}); $('#ov').classList.remove('on'); render(); };
+  };
+  paint(); $('#ov').classList.add('on'); $('#ft').focus();
+}
+$('#seg').onclick = e => { const b = e.target.closest('[data-a]'); if (b) { mode = b.dataset.a; render(); } };
+$('#legend').onclick = e => { const b = e.target.closest('[data-show]'); if (b) { show[b.dataset.show] = !show[b.dataset.show]; render(); } };
+$('#grid').onclick = e => {
+  const ev = e.target.closest('[data-ev]'); if (ev) return detail(E[+ev.dataset.ev]);
+  const col = e.target.closest('[data-day]'); if (!col) return;
+  const y = e.clientY - col.getBoundingClientRect().top, hr = col.offsetHeight / (H1 - H0);
+  form(+col.dataset.day, H0 + Math.floor(y / hr * 2) / 2);
+};
+$('#create').onclick = () => form();
+$('#ov').onclick = e => { if (e.target.id === 'ov') $('#ov').classList.remove('on'); };
+document.querySelectorAll('aside input, aside select').forEach(x => x.onchange = render);
+render();
+</script>
+</body></html>

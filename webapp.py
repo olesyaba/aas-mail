@@ -2646,6 +2646,11 @@ DEFAULT_PREFS = {
     "unified_cal": False,
     # Meeting form: a Seller invitee also gets their Alfa-Bank address added.
     "twin_bank": False,
+    # Calendar tab: both mailboxes in one grid; where a new meeting starts in that mode
+    # ("main" | "seller" | "last" = where the previous one was made, kept in cal_last_acct).
+    "cal_both": False,
+    "cal_new_acct": "main",
+    "cal_last_acct": "main",
 }
 MAIL_SORTS = ("date_desc", "date_asc", "from", "subject")
 _prefs_lock = threading.Lock()
@@ -2716,6 +2721,8 @@ def update_prefs(patch: dict) -> dict:
             if k in ("mail_sort", "mail_sort_seller") and v not in MAIL_SORTS:
                 continue
             if k == "update_mode" and v not in ("auto", "manual"):
+                continue
+            if k in ("cal_new_acct", "cal_last_acct") and v not in ("main", "seller", "last")[:3 if k == "cal_new_acct" else 2]:
                 continue
             # Appearance: system | light | dark | StylesBA palettes (dark + light).
             if k == "theme" and v not in (

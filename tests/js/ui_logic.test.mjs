@@ -916,3 +916,21 @@ test('foldRows hides the subtree of a collapsed folder, nothing else', () => {
   assert.deepEqual(ids(['a1']), ['a', 'a1', 'a2', 'b', 'b1']);
   assert.deepEqual(ids(['a1', 'b']), ['a', 'a1', 'a2', 'b']);
 });
+
+test('mergeAccts: one card for a meeting in both mailboxes, clashes only across mailboxes', () => {
+  const {mergeAccts} = load(['mergeAccts']);
+  const ev = (acct, uid, h0, h1, extra = {}) => ({_acct: acct, uid, start_iso: `2026-10-01T${h0}:00`,
+    s: new Date(`2026-10-01T${h0}:00`), e: new Date(`2026-10-01T${h1}:00`), subject: uid, ...extra});
+  const out = plain(mergeAccts([
+    [ev('main', 'demo', '15', '16'), ev('main', 'plan', '11', '12'), ev('main', 'daily', '11', '11'), ev('main', 'x', '09', '10')],
+    [ev('seller', 'demo', '15', '16'), ev('seller', 'sync', '11', '12'), ev('seller', 'free', '09', '10', {busy_status: 'free'})],
+  ]));
+  const by = Object.fromEntries(out.map(e => [e.uid + ':' + e._acct, e]));
+  assert.equal(out.filter(e => e.uid === 'demo').length, 1);
+  assert.equal(by['demo:main']._both, true);
+  assert.equal(by['demo:main']._clash, false);         // the same meeting is not a double booking
+  assert.equal(by['plan:main']._clash, true);
+  assert.equal(by['sync:seller']._clash, true);
+  assert.equal(by['daily:main']._clash, false);        // zero-length, touches nothing
+  assert.equal(by['x:main']._clash, false);            // the other one is «free»
+});
