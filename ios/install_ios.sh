@@ -31,6 +31,8 @@ while IFS=$'\t' read -r UDID NAME; do
   if ! xcodebuild -quiet -project ios/AASMail.xcodeproj -scheme AASMail -configuration Release \
       -destination "id=$UDID" -destination-timeout 30 -derivedDataPath ios/build -allowProvisioningUpdates \
       DEVELOPMENT_TEAM="$AAS_IOS_TEAM" MARKETING_VERSION="$VER" build 2>&1 | grep -E "error:|Developer Mode" | grep -v IDERunDestination; then :; fi
-  if xcrun devicectl device install app --device "$UDID" "$APP" >/dev/null 2>&1; then echo "    установлено"
-  else echo "    не установлено — на устройстве: Настройки → Конфиденциальность и безопасность → Режим разработчика"; fi
+  if OUT="$(xcrun devicectl device install app --device "$UDID" "$APP" 2>&1)"; then echo "    установлено"
+  elif grep -q "locked" <<< "$OUT"; then echo "    не установлено — устройство заблокировано: разблокируйте его и запустите снова"
+  elif grep -qi "developer mode" <<< "$OUT"; then echo "    не установлено — включите Настройки → Конфиденциальность и безопасность → Режим разработчика"
+  else echo "    не установлено: $(grep -m1 -E "ERROR|error" <<< "$OUT" | sed 's/^ *//')"; fi
 done <<< "$UDIDS"
