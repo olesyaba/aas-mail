@@ -2877,18 +2877,18 @@ $('#setbtn').onclick = async () => {
           <span class="aas-themecard__name">${p.name}</span></button>`).join('')}</div>
       <div class="aas-seg aas-thememode" id="sthememode" role="radiogroup" aria-label="Режим">${THEME_MODES.map(([m, t]) =>
         `<button type="button" role="radio" aria-checked="${m === cur.mode}" data-theme-mode="${m}" class="${m === cur.mode ? 'on' : ''}">${t}</button>`).join('')}</div>`; })()}
-      <div class="hint">Сразу на окно, трей и напоминания.</div></div>
+      <div class="hint">${ON_WINDOWS ? 'Сразу на всё окно.' : 'Сразу на окно, трей и напоминания.'}</div></div>
     <div class="f"><label>Напоминать о встрече за</label>
       <select id="sremind">${[[1, '1 минуту'], [2, '2 минуты'], [5, '5 минут'], [10, '10 минут'], [15, '15 минут'], [30, '30 минут'], [0, 'Не напоминать']].map(([v, t]) =>
         `<option value="${v}" ${(prefs.reminder_minutes ?? 5) === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
-      <div class="hint">Всплывающее окно вверху экрана и уведомление macOS перед началом встречи.</div></div>
+      <div class="hint">${ON_WINDOWS ? 'Уведомление Windows у часов перед началом встречи; клик открывает календарь.' : 'Всплывающее окно вверху экрана и уведомление macOS перед началом встречи.'}</div></div>
     <div class="f"><label>Звук нового письма</label>
       <div class="frow" style="align-items:center;gap:8px">
         <select id="smailsound" style="flex:1">${[['notice14', 'Notice'], ['short', 'Short'], ['none', 'Без звука']].map(([v, t]) =>
           `<option value="${v}" ${(prefs.mail_sound || 'notice14') === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <button type="button" class="aas-btn aas-btn--icon" id="smailsound_preview" title="Прослушать" aria-label="Прослушать">${icon('play', 14)}</button>
       </div>
-      <div class="hint">Уведомление macOS, когда во «Входящих» появляется новое непрочитанное. «Без звука» — только баннер.</div></div>
+      <div class="hint">Уведомление ${ON_WINDOWS ? 'Windows' : 'macOS'}, когда во «Входящих» появляется новое непрочитанное. «Без звука» — только ${ON_WINDOWS ? 'уведомление' : 'баннер'}.</div></div>
     <div class="f"><label>Подпись для «${esc(accounts.find(a => a.id === 'main')?.name || 'Alfa-Bank')}» (в новые письма, ответы и пересылки)</label>
       <textarea id="ssig" rows="5" placeholder="С уважением,&#10;Имя Фамилия&#10;Должность, телефон">${esc(prefs.signature)}</textarea></div>
     ${accounts.filter(a => a.green).map(a => `<div class="f"><label>Подпись для «${esc(a.name)}»</label><textarea id="ssig2" rows="4">${esc(prefs.signature2)}</textarea></div>`).join('')}
