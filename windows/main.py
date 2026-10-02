@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import socket
+import subprocess
 import tempfile
 import threading
 import time
@@ -35,10 +36,12 @@ def play(sound: str) -> None:
         winsound.PlaySound(str(f), winsound.SND_FILENAME | winsound.SND_ASYNC)
 
 
-def notify(tray, title: str, text: str) -> None:
+def notify(tray, title: str, text: str, view: str = "mail") -> None:
     """A tray toast without the system sound (ours plays instead): pystray's own
-    notify() plus NIIF_NOSOUND. pystray is pinned in build_win.sh for this private call."""
+    notify() plus NIIF_NOSOUND. pystray is pinned in build_win.sh for this private call.
+    A click on it opens `view` (see make_tray)."""
     from pystray._util import win32
+    tray.aas_click_view = view
     tray._message(win32.NIM_MODIFY, win32.NIF_INFO, szInfo=text[:255], szInfoTitle=title[:63], dwInfoFlags=0x10)
 
 
@@ -88,7 +91,7 @@ def reminders(base: str, prefs, tray, stop: threading.Event) -> None:
                     shown.add(key)
                     left = max(0, round((start - now).total_seconds() / 60))
                     notify(tray, ("🟢 " if acct == "seller" else "🔴 ") + (f"Через {left} мин" if left else "Начинается"),
-                           e.get("subject") or "(без темы)")
+                           e.get("subject") or "(без темы)", view="cal")
                     play(prefs().get("mail_sound") or "notice14")
         except Exception:  # noqa: BLE001 — not set up yet / server busy / offline: next round
             log.debug("reminders round failed", exc_info=True)
@@ -152,6 +155,8 @@ class Api:
             if not dirs:
                 return
             saved = self._fetch(files, Path(dirs[0]))
+        if saved:  # like Finder on the Mac: the saved file, selected
+            subprocess.Popen(["explorer", f"/select,{saved[0]}"])
         total = 1 if mode == "as" else len(files)
         ok = len(saved) == total
         text = (f"Сохранено: {saved[0].name}" if ok else "Не удалось сохранить вложение") if total == 1 \
@@ -187,7 +192,14 @@ def make_tray(api: Api, show, quit_app):
         pystray.MenuItem("Календарь", lambda: show("cal")),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Выход", quit_app))
-    return pystray.Icon("AAS mail", Image.open(icon_png), "AAS mail", menu)
+    icon = pystray.Icon("AAS mail", Image.open(icon_png), "AAS mail", menu)
+    icon.aas_click_view = "mail"
+    # A click on our toast arrives as NIN_BALLOONUSERCLICK on the icon's callback message.
+    from pystray._util import win32
+    on_notify = icon._message_handlers[win32.WM_NOTIFY]
+    icon._message_handlers[win32.WM_NOTIFY] = lambda w, l: (
+        show(icon.aas_click_view) if l == 0x405 else on_notify(w, l))
+    return icon
 
 
 def main() -> None:

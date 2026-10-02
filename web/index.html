@@ -1017,9 +1017,12 @@ let view = 'mail';
 const bindTab = b => b.onclick = () => showView(view, b.dataset.acct || 'main');
 document.querySelectorAll('.aas-tab').forEach(bindTab);
 document.querySelectorAll('#sect [data-view]').forEach(b => b.onclick = () => showView(b.dataset.view, ACCT));
-/* ⌘1 / ⌘2 — mailbox by order; ⌘⇧C — mail ⇄ calendar; ⌘⇧K — calendar beside the mail. Not while a dialog is open. */
+/* ⌘1 / ⌘2 — mailbox by order; ⌘⇧C — mail ⇄ calendar; ⌘⇧K — calendar beside the mail. Not while a dialog is open.
+   Windows: Ctrl instead of ⌘ (there metaKey is the Win key), and the hints say so. */
+const ON_WINDOWS = /Windows/.test(globalThis.navigator?.userAgent || '');
+const keyHint = k => ON_WINDOWS ? 'Ctrl+' + k.replace('⇧', 'Shift+') : '⌘' + k;
 document.addEventListener('keydown', e => {
-  if (!e.metaKey || e.ctrlKey || e.altKey || modalOpen()) return;
+  if (!(ON_WINDOWS ? e.ctrlKey && !e.metaKey : e.metaKey && !e.ctrlKey) || e.altKey || modalOpen()) return;
   const n = /^Digit([1-9])$/.exec(e.code)?.[1];
   if (n && !e.shiftKey) { const a = accounts[+n - 1]; if (a) { e.preventDefault(); showView(view, a.id); } return; }
   if (e.shiftKey && e.code === 'KeyC') { e.preventDefault(); showView(view === 'cal' ? 'mail' : 'cal', ACCT); }
@@ -1035,8 +1038,9 @@ function buildAccountTabs() {
     bindTab(b); box.appendChild(b);
   });
   box.classList.toggle('aas-accts--single', accounts.length < 2);
-  box.querySelectorAll('.aas-tab').forEach((t, i) => t.dataset.key = `⌘${i + 1}`);
-  document.querySelectorAll('#sect [data-view]').forEach(t => t.title = '⌘⇧C: почта ⇄ календарь');
+  box.querySelectorAll('.aas-tab').forEach((t, i) => t.dataset.key = keyHint(`${i + 1}`));
+  document.querySelectorAll('#sect [data-view]').forEach(t => t.title = `${keyHint('⇧C')}: почта ⇄ календарь`);
+  const rail = $('#railbtn'); if (rail) rail.title = rail.title.replace('⌘⇧K', keyHint('⇧K'));
   paintTabBadges();
 }
 function setBrand() {
