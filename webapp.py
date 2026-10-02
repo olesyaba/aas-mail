@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import email
 import email.policy
+import html as html_mod
 import json
 import logging
 import mimetypes
@@ -717,8 +718,14 @@ def call(a: Acct, domain: str, params: dict) -> dict:
         return {"ok": False, "action": action, "count": 0, "items": [], "error": "send_down",
                 "message": str(_send_down_error(a))}
     if domain == "mail" and action in ("reply", "forward") and params.get("item_id") and not params.get("no_quote_header"):
-        params["body"] = (params.get("body") or "").rstrip() + _outlook_quote_header(a, params["item_id"])
+        hdr = _outlook_quote_header(a, params["item_id"])
+        params["body"] = (params.get("body") or "").rstrip() + hdr
+        if params.get("html") and hdr:
+            params["html"] += "<div>" + html_mod.escape(hdr).replace("\n", "<br>") + "</div>"
     params.pop("no_quote_header", None)
+    # Formatted letter from the compose editor: `body` stays its plain text, the HTML
+    # rides past upstream (whose `html` is a bool) to the patched build_message.
+    letter_html = str(params.pop("html", "") or "") if domain == "mail" and action in ("send", "reply", "forward") else ""
     backend = a.get()
     write = action in _WRITE_ACTIONS
     if not backend.lock.acquire(timeout=LOCK_WAIT_WRITE_S if write else LOCK_WAIT_S):
@@ -727,10 +734,12 @@ def call(a: Acct, domain: str, params: dict) -> dict:
         _ATT.types = ({str(k).lower(): v for k, v in roles.items() if v in _ATT_TYPE_CODE}
                       if isinstance(roles, dict) else {})
         _ATT.extra = extra
+        _ATT.html = letter_html
         return _call_locked(a, backend, mod, domain, action, params)
     finally:
         _ATT.types = {}
         _ATT.extra = {}
+        _ATT.html = ""
         backend.lock.release()
 
 
@@ -4328,6 +4337,18 @@ def _patch_unreachable_fail_fast():
     EasClient.command = _fail_fast_command(EasClient.command)
 
 
+def _with_html_part(build, letter: str, *args, **kwargs) -> bytes:
+    """Upstream html=True puts «(see HTML part)» in text/plain; keep our real plain text
+    there (`body`) beside the formatted HTML — both Exchange and Stalwart take the MIME as is."""
+    plain = kwargs.get("body") or ""
+    raw = build(*args, **{**kwargs, "body": letter, "html": True})
+    msg = email.message_from_bytes(raw, policy=email.policy.default)
+    part = next((p for p in msg.walk() if p.get_content_type() == "text/plain"), None)
+    if part is not None:
+        part.set_content(plain)
+    return msg.as_bytes(policy=email.policy.default.clone(linesep="\r\n"))
+
+
 def _patch_message_date():
     """Upstream build_message sets neither Date nor Message-ID. Exchange adds them on
     SendMail; Alfa-Seller's server (Stalwart) stores the letter as is, so our sent
@@ -4342,7 +4363,8 @@ def _patch_message_date():
         return
 
     def dated(*args, **kwargs) -> bytes:
-        raw = build(*args, **kwargs)
+        letter = getattr(_ATT, "html", "")
+        raw = build(*args, **kwargs) if not letter else _with_html_part(build, letter, *args, **kwargs)
         head = raw.split(b"\r\n\r\n", 1)[0].lower()
         extra = b"" if head.startswith(b"date:") or b"\r\ndate:" in head else \
             f"Date: {formatdate(localtime=True)}\r\n".encode()

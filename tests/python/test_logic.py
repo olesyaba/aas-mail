@@ -2031,3 +2031,24 @@ class OutgoingDateTest(unittest.TestCase):
         self.assertTrue(msg["Message-ID"].startswith("<"))
         self.assertEqual(msg["Subject"], "Test")
         self.assertIn(b"\r\n\r\n", raw)  # headers still end with CRLF CRLF
+
+    def test_formatted_letter_goes_as_plain_plus_html(self):
+        from email import message_from_bytes, policy
+
+        from outlook_activesync_mcp.commands import mail_write
+        webapp._patch_message_date()
+        webapp._ATT.html = '<div><b>Жирный</b> <font color="#c00000">красный</font></div>'
+        try:
+            raw = mail_write.build_message(from_addr="me@x.ru", to=["a@x.ru"], subject="T", body="Жирный красный",
+                                           attachments=[{"data": b"x", "maintype": "text", "subtype": "plain", "name": "a.txt"}])
+        finally:
+            webapp._ATT.html = ""
+        msg = message_from_bytes(raw, policy=policy.default)
+        self.assertEqual(msg.get_body(("plain",)).get_content().strip(), "Жирный красный")
+        self.assertIn('<font color="#c00000">', msg.get_body(("html",)).get_content())
+        self.assertEqual([p.get_filename() for p in msg.iter_attachments()], ["a.txt"])
+        self.assertTrue(msg["Date"] and msg["Message-ID"])
+        self.assertNotIn(b"\n", raw.replace(b"\r\n", b""))  # CRLF only
+        # without a letter HTML the old plain path stays
+        plain = message_from_bytes(mail_write.build_message(from_addr="me@x.ru", to=["a@x.ru"], subject="T", body="x"))
+        self.assertEqual(plain.get_content_type(), "text/plain")

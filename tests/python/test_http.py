@@ -324,7 +324,7 @@ class UiContractTest(unittest.TestCase):
                      if p.kind is p.KEYWORD_ONLY or (p.kind is p.POSITIONAL_OR_KEYWORD and n != "client")}
             unknown = keys - named - {"mime_invite", "cache_only", "note", "to", "cc", "attendee_types", "body",
                                      "propose_start", "propose_end", "response_requested", "disallow_counter",
-                                     "attachments"}  # app-level, handled in webapp
+                                     "attachments", "html"}  # app-level, handled in webapp
             self.assertFalse(unknown, f"{domain}/{action}: UI sends {sorted(unknown)} not accepted by upstream")
             checked += 1
         self.assertGreater(checked, 15)

@@ -875,3 +875,17 @@ test('mail selection: Shift ranges in list order, either direction', () => {
   assert.deepEqual(plain(keyRange(order, 'c', 'c')), ['c']);
   assert.deepEqual(plain(keyRange(order, 'gone', 'e')), ['e'], 'an anchor that left the list: just the row');
 });
+
+test('letter editor: pasted styles and links keep only what mail clients render', () => {
+  const {rteStyle, rteHref, rteTableHtml} = load(['rteStyle', 'rteHref', 'rteTableHtml']);
+  assert.equal(rteStyle('mso-bidi-font-size:11pt; COLOR: #c00000;font-family:"Calibri";background:url(x);font-size: 14pt'),
+    'color:#c00000;font-size:14pt');
+  assert.equal(rteStyle('border:1px solid #a6a6a6;padding:4px 8px;position:absolute;width:expression(1)'), 'border:1px solid #a6a6a6;padding:4px 8px');
+  assert.equal(rteHref(' https://ya.ru/a?b=1 '), 'https://ya.ru/a?b=1');
+  assert.equal(rteHref('mailto:a@b.ru'), 'mailto:a@b.ru');
+  assert.equal(rteHref('javascript:alert(1)'), '');
+  assert.equal(rteHref('https://x" onclick="y'), '');
+  const t = rteTableHtml(2, 3);
+  assert.equal(t.match(/<tr>/g).length, 2);
+  assert.equal(t.match(/<td /g).length, 6);
+});

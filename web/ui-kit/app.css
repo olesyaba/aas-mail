@@ -1910,3 +1910,39 @@ body.unified .aas-rail {
 .aas-people__ta { display: block; width: 100%; box-sizing: border-box; resize: none; overflow-y: auto; min-height: 2.4em;
   font: inherit; line-height: 1.45; }
 .aas-cnt { color: var(--aas-muted); font-weight: 400; }
+
+/* Compose editor: the letter on white paper, as the recipient sees it, under a bar of
+   the few formats Outlook, OWA and phones all render. */
+.aas-rte { border: 1px solid var(--aas-line); border-radius: var(--aas-r-control); background: var(--aas-panel); }
+.aas-rte:focus-within { outline: 2px solid var(--aas-accent-text); outline-offset: -1px; }
+.aas-rte__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 4px; border-bottom: 1px solid var(--aas-line); }
+.aas-rte__b { min-width: 30px; height: 30px; padding: 0 6px; border: 0; border-radius: var(--aas-r-sm); background: none; color: var(--aas-text);
+  display: inline-flex; align-items: center; justify-content: center; gap: 2px; font-size: 15px; }
+.aas-rte__b:hover { background: var(--aas-panel-2); }
+.aas-rte__b[aria-pressed="true"] { background: var(--aas-accent-bg); color: var(--aas-accent-text); }
+.aas-rte__b small { font-size: 9px; color: var(--aas-muted); }
+.aas-rte__a { font-weight: 600; line-height: 1; border-bottom: 3px solid #c00000; }
+.aas-rte__dd { position: relative; display: inline-flex; }
+.aas-rte__pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; padding: 6px; background: var(--aas-panel);
+  border: 1px solid var(--aas-line); border-radius: var(--aas-r-md); box-shadow: var(--aas-shadow); }
+.aas-rte__pop--end { left: auto; right: 0; }
+.aas-rte__pop[hidden] { display: none; }
+.aas-rte__pop--sw { display: grid; grid-template-columns: repeat(5, 22px); gap: 6px; }
+.aas-rte__pop--link { display: flex; gap: 6px; width: min(380px, 80vw); }
+.aas-rte__pop--link input { flex: 1; min-width: 0; }
+.aas-rte__mi { display: block; width: 100%; padding: 4px 10px; border: 0; border-radius: var(--aas-r-sm); background: none;
+  color: var(--aas-text); text-align: left; white-space: nowrap; }
+.aas-rte__mi:hover { background: var(--aas-panel-2); }
+.aas-rte__sw { width: 22px; height: 22px; padding: 0; border: 1px solid rgba(0, 0, 0, .15); border-radius: 50%; background: var(--sw); }
+.aas-rte__sw:hover { transform: scale(1.15); }
+.aas-rte__sw[data-v="transparent"] { background: linear-gradient(135deg, #fff 45%, #d33 45% 55%, #fff 55%); }
+.aas-rte__grid { display: grid; grid-template-columns: repeat(8, 16px); gap: 3px; }
+.aas-rte__grid button { width: 16px; height: 16px; padding: 0; border: 1px solid var(--aas-line-strong); border-radius: 2px; background: var(--aas-panel); }
+.aas-rte__grid button.on { border-color: var(--aas-accent-text); background: var(--aas-accent-bg); }
+.aas-rte__gl { margin: 6px 0 2px; font-size: 12px; color: var(--aas-muted); text-align: center; }
+.aas-rte__tops { margin-top: 6px; padding-top: 4px; border-top: 1px solid var(--aas-line); }
+.aas-rte__ed { min-height: 220px; padding: 10px 12px; background: #fff; color: #1f2328; font-size: 15px; line-height: 1.45;
+  border-radius: 0 0 var(--aas-r-control) var(--aas-r-control); outline: none; overflow-wrap: anywhere; }
+.aas-rte__ed a { color: #0563c1; }
+.aas-rte__ed ul, .aas-rte__ed ol { margin: 4px 0; padding-left: 24px; }
+.aas-rte__ed table { border-collapse: collapse; }

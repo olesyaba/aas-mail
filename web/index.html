@@ -788,6 +788,12 @@ const ICONS = {
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  list: '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>',
+  listOl: '<path d="M10 6h11"/><path d="M10 12h11"/><path d="M10 18h11"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  table: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/>',
+  eraser: '<path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/>',
+  marker: '<path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/>',
 };
 /** One wording for meeting times everywhere: «пн, 21 сент., 10:05–10:50»; the year
  *  only when it is not this one; a second date only when the meeting spans days. */
@@ -2730,6 +2736,153 @@ function dropInlineCompose() {
   if (x.dataset.dirty === '1' && !confirm('Закрыть недописанный ответ? Текст пропадёт.')) return false;
   x.remove(); return true;
 }
+/* ---------- letter editor: only formats Outlook, OWA and phones all render ---------- */
+const RTE_SIZES = [['2', 'Мелкий'], ['3', 'Обычный'], ['5', 'Крупный'], ['6', 'Заголовок']];
+const RTE_COLORS = [['#000000', 'Чёрный'], ['#595959', 'Серый'], ['#c00000', 'Тёмно-красный'], ['#ff0000', 'Красный'], ['#e36c09', 'Оранжевый'],
+  ['#00b050', 'Зелёный'], ['#0070c0', 'Синий'], ['#002060', 'Тёмно-синий'], ['#7030a0', 'Фиолетовый']];
+const RTE_MARKS = [['#ffff00', 'Жёлтый'], ['#c6efce', 'Зелёный'], ['#bdd7ee', 'Голубой'], ['#fce4d6', 'Персиковый'], ['#ffc7ce', 'Розовый'], ['transparent', 'Без выделения']];
+const RTE_TD = 'border:1px solid #a6a6a6;padding:4px 8px;min-width:60px;vertical-align:top';
+/** The whole letter goes in this wrapper: without a font Outlook falls back to Times New Roman. */
+const RTE_WRAP = 'font-family:Calibri,Arial,sans-serif;font-size:12pt';
+const RTE_STYLE_OK = /^(color|background(-color)?|font-(size|weight|style)|text-decoration(-line)?|text-align|vertical-align|width|min-width|border(-(top|right|bottom|left|collapse|color|style|width))*|padding(-(top|right|bottom|left))?)$/;
+/** Inline style → only what mail clients honour (Word's mso-*, fonts, positions go). */
+function rteStyle(s) {
+  const out = [];
+  for (const d of String(s || '').split(';')) {
+    const i = d.indexOf(':'); if (i < 0) continue;
+    const k = d.slice(0, i).trim().toLowerCase(), v = d.slice(i + 1).trim();
+    if (RTE_STYLE_OK.test(k) && v && !/expression|url\(|javascript:|[<>"]/i.test(v)) out.push(`${k}:${v}`);
+  }
+  return out.join(';');
+}
+const rteHref = h => { const s = String(h || '').trim(); return /^(https?:|mailto:)/i.test(s) && !/[\s"<>]/.test(s) ? s : ''; };
+const RTE_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'FONT', 'SPAN', 'DIV', 'BR', 'UL', 'OL', 'LI', 'A',
+  'TABLE', 'THEAD', 'TBODY', 'TR', 'TD', 'TH', 'BLOCKQUOTE']);
+const RTE_DROP = new Set(['SCRIPT', 'STYLE', 'META', 'LINK', 'TITLE', 'HEAD', 'IFRAME', 'OBJECT', 'EMBED', 'IMG', 'SVG', 'MATH',
+  'TEMPLATE', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'FORM']);
+const RTE_ATTRS = {FONT: ['color', 'size'], A: ['href'], TD: ['colspan', 'rowspan'], TH: ['colspan', 'rowspan'], TABLE: ['border', 'cellpadding', 'cellspacing']};
+/** Pasted (Word, sites) and outgoing HTML → the tags and attributes above; other tags are
+ *  unwrapped (P becomes DIV: without Word's classes its margins would double the spacing). */
+function rteClean(html) {
+  const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+  const walk = node => {
+    for (const child of [...node.childNodes]) {
+      if (child.nodeType === 8) { child.remove(); continue; }  // comments: Word's <!--[if …]>
+      if (child.nodeType !== 1) continue;
+      let el = child, tag = el.tagName.toUpperCase();
+      if (RTE_DROP.has(tag)) { el.remove(); continue; }
+      walk(el);
+      if (tag === 'P' || /^H[1-6]$/.test(tag)) {
+        const d = doc.createElement('div');
+        for (const at of el.attributes) d.setAttribute(at.name, at.value);
+        d.append(...el.childNodes); el.replaceWith(d); el = d; tag = 'DIV';
+      }
+      if (!RTE_TAGS.has(tag)) { el.replaceWith(...el.childNodes); continue; }
+      for (const at of [...el.attributes]) {
+        const n = at.name.toLowerCase();
+        const v = n === 'style' ? rteStyle(at.value) : n === 'href' && tag === 'A' ? rteHref(at.value) : (RTE_ATTRS[tag] || []).includes(n) ? at.value : '';
+        if (v) el.setAttribute(n, v); else el.removeAttribute(at.name);
+      }
+      if (tag === 'TABLE') el.style.borderCollapse = 'collapse';  // the editor's insertHTML drops it: double borders
+    }
+  };
+  walk(doc.body);
+  return doc.body.innerHTML;
+}
+const rteTableHtml = (rows, cols) => `<table border="1" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${
+  `<tr>${`<td style="${RTE_TD}"><br></td>`.repeat(cols)}</tr>`.repeat(rows)}</table><div><br></div>`;
+function rteTableOp(td, op) {
+  const tr = td.parentElement, table = td.closest('table'), i = td.cellIndex;
+  const blank = c => { const n = c.cloneNode(false); n.innerHTML = '<br>'; return n; };
+  if (op === 'row+') { const r = tr.cloneNode(false); for (const c of tr.cells) r.append(blank(c)); tr.after(r); }
+  else if (op === 'col+') { for (const r of table.rows) { const c = r.cells[Math.min(i, r.cells.length - 1)]; c?.after(blank(c)); } }
+  else if (op === 'row-') tr.remove();
+  else if (op === 'col-') { for (const r of [...table.rows]) r.cells[i]?.remove(); }
+  if (op === 'tbl-' || !table.rows.length || !table.rows[0].cells.length) table.remove();
+}
+function rteBar() {
+  const b = (x, label, inner, end = '') => `<button type="button" class="aas-rte__b" data-x="${x}" title="${label}" aria-label="${label}"${x === 'menu' ? ' aria-haspopup="true"' : ''}>${inner}</button>${end}`;
+  const dd = (label, inner, pop, cls = '') => `<span class="aas-rte__dd">${b('menu', label, inner)}<div class="aas-rte__pop ${cls}" hidden>${pop}</div></span>`;
+  const sw = (x, list) => list.map(([c, n]) => `<button type="button" class="aas-rte__sw" data-x="${x}" data-v="${c}" title="${n}" aria-label="${n}" style="--sw:${c}"></button>`).join('');
+  const grid = Array.from({length: 6}, (_, r) => Array.from({length: 8}, (_, c) => `<button type="button" data-x="table" data-v="${r + 1},${c + 1}" aria-label="Таблица ${c + 1} × ${r + 1}"></button>`).join('')).join('');
+  const op = (x, n) => `<button type="button" class="aas-rte__mi" data-x="tbl" data-v="${x}">${n}</button>`;
+  const more = '<small>▾</small>';
+  return `<div class="aas-rte__bar" role="toolbar" aria-label="Форматирование">
+    ${dd('Размер текста', 'Aa' + more, RTE_SIZES.map(([v, n]) => `<button type="button" class="aas-rte__mi" data-x="fontSize" data-v="${v}"><font size="${v}">${n}</font></button>`).join(''))}
+    ${b('bold', 'Жирный', '<b>Ж</b>')}${b('italic', 'Курсив', '<i>К</i>')}${b('underline', 'Подчёркнутый', '<u>Ч</u>')}${b('strikeThrough', 'Зачёркнутый', '<s>S</s>')}
+    ${dd('Цвет текста', '<span class="aas-rte__a">A</span>' + more, sw('foreColor', RTE_COLORS), 'aas-rte__pop--sw')}
+    ${dd('Выделение цветом', icon('marker') + more, sw('hiliteColor', RTE_MARKS), 'aas-rte__pop--sw')}
+    ${b('insertUnorderedList', 'Маркированный список', icon('list'))}${b('insertOrderedList', 'Нумерованный список', icon('listOl'))}
+    ${dd('Ссылка', icon('link'), `<input type="text" inputmode="url" placeholder="https://… или адрес почты" aria-label="Адрес ссылки">
+      <button type="button" class="aas-btn aas-btn--sm aas-btn--primary" data-x="link">Вставить</button><button type="button" class="aas-btn aas-btn--sm" data-x="unlink">Убрать</button>`, 'aas-rte__pop--end aas-rte__pop--link')}
+    ${dd('Таблица', icon('table') + more, `<div class="aas-rte__grid">${grid}</div><div class="aas-rte__gl">Вставить таблицу</div>
+      <div class="aas-rte__tops">${op('row+', 'Добавить строку')}${op('col+', 'Добавить столбец')}${op('row-', 'Удалить строку')}${op('col-', 'Удалить столбец')}${op('tbl-', 'Удалить таблицу')}</div>`, 'aas-rte__pop--end')}
+    ${b('removeFormat', 'Убрать форматирование', icon('eraser'))}
+  </div>`;
+}
+/** Wire the toolbar to its editor. Buttons keep the letter's selection (mousedown is
+ *  swallowed); only the link field takes focus, so its menu remembers the range. */
+function bindRte(box) {
+  const ed = box.querySelector('.aas-rte__ed'), bar = box.querySelector('.aas-rte__bar');
+  let saved = null;
+  const here = () => { const s = getSelection(); return s.rangeCount && ed.contains(s.anchorNode) ? s.getRangeAt(0) : null; };
+  const near = sel => { const n = getSelection().anchorNode; const el = (n?.nodeType === 1 ? n : n?.parentElement)?.closest(sel); return el && ed.contains(el) ? el : null; };
+  const closePops = () => bar.querySelectorAll('.aas-rte__pop').forEach(p => { p.hidden = true; });
+  const pressed = () => { for (const x of ['bold', 'italic', 'underline', 'strikeThrough', 'insertUnorderedList', 'insertOrderedList'])
+    bar.querySelector(`[data-x="${x}"]`).setAttribute('aria-pressed', String(!!here() && document.queryCommandState(x))); };
+  const run = (cmd, v) => { document.execCommand('styleWithCSS', false, false); document.execCommand(cmd, false, v); };
+  bar.addEventListener('mousedown', e => { if (!e.target.closest('input')) e.preventDefault(); });
+  bar.addEventListener('mouseover', e => {
+    const g = e.target.closest('[data-x="table"]'); if (!g) return;
+    const [r, c] = g.dataset.v.split(',').map(Number);
+    bar.querySelectorAll('[data-x="table"]').forEach(x => { const [rr, cc] = x.dataset.v.split(',').map(Number); x.classList.toggle('on', rr <= r && cc <= c); });
+    bar.querySelector('.aas-rte__gl').textContent = `${c} × ${r}`;
+  });
+  bar.addEventListener('click', e => {
+    const t = e.target.closest('[data-x]'); if (!t) return;
+    const x = t.dataset.x, v = t.dataset.v;
+    if (x === 'menu') {
+      const pop = t.nextElementSibling, open = pop.hidden;
+      closePops(); pop.hidden = !open;
+      if (!open) return;
+      saved = here()?.cloneRange() || null;
+      const ops = pop.querySelector('.aas-rte__tops'); if (ops) ops.hidden = !near('td, th');
+      const inp = pop.querySelector('input');
+      if (inp) { inp.value = near('a')?.getAttribute('href') || ''; inp.focus(); }
+      return;
+    }
+    closePops();
+    ed.focus();
+    if (saved) { const s = getSelection(); s.removeAllRanges(); s.addRange(saved); saved = null; }
+    if (x === 'link') {
+      const raw = t.parentElement.querySelector('input').value.trim();
+      const url = rteHref(/^[^@\s]+@[^@\s]+\.\w+$/.test(raw) ? 'mailto:' + raw : /^[\w-]+(\.[\w-]+)+([/?#]|$)/.test(raw) ? 'https://' + raw : raw);
+      if (!url) { if (raw) toast('Ссылка должна начинаться с https:// или быть адресом почты'); return; }
+      const a = near('a');
+      if (a) a.setAttribute('href', url);
+      else if (getSelection().isCollapsed) run('insertHTML', `<a href="${esc(url)}">${esc(raw)}</a>`);
+      else run('createLink', url);
+    } else if (x === 'unlink') {
+      const a = near('a');
+      if (a) a.replaceWith(...a.childNodes); else run('unlink');
+    } else if (x === 'table') run('insertHTML', rteTableHtml(...v.split(',').map(Number)));
+    else if (x === 'tbl') { const td = near('td, th'); if (td) rteTableOp(td, v); }
+    else run(x, v);
+    pressed();
+    ed.dispatchEvent(new Event('input', {bubbles: true}));
+  });
+  bar.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.stopPropagation(); closePops(); ed.focus(); }
+    if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); e.target.parentElement.querySelector('[data-x="link"]').click(); }
+  });
+  const outside = e => { if (!box.isConnected) return document.removeEventListener('mousedown', outside); if (!e.target.closest?.('.aas-rte__dd')) closePops(); };
+  document.addEventListener('mousedown', outside);
+  ed.addEventListener('keyup', pressed); ed.addEventListener('mouseup', pressed);
+  ed.addEventListener('paste', e => {
+    const h = e.clipboardData?.getData('text/html'); if (!h) return;
+    e.preventDefault(); run('insertHTML', rteClean(h));
+  });
+}
 /** New letter: a dialog. Reply / forward from the reader: a form under the conversation,
  *  so the letter stays readable while answering (the dialog stays for «Создать»). */
 function composeForm(ctx) {
@@ -2755,7 +2908,7 @@ function composeForm(ctx) {
       <div class="hint">Начните вводить: подсказки из недавних и каталога. Enter или Tab подставляют выбранного.</div></div>
     <div class="f" id="ccrow" ${mode === 'new' ? 'hidden' : ''}><label for="ccc">Копия</label><div class="aas-people"><input type="text" id="ccc" placeholder="фамилия или email"></div></div>
     ${mode === 'fwd' ? `<div class="f"><label>Тема</label><div>Fwd: ${esc(ctx.j.subject)}</div></div>` : '<div class="f"><label>Тема</label><input type="text" id="csub"></div>'}`}
-    <div class="f"><label>Текст</label><textarea id="cbody" rows="10"></textarea></div>
+    <div class="f"><label id="cbodyl">Текст</label><div class="aas-rte">${rteBar()}<div id="cbody" class="aas-rte__ed" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="cbodyl"></div></div></div>
     ${`<div class="f aas-attrow"><label class="aas-btn aas-btn--sm aas-attbtn">${icon('clip', 14)}Прикрепить<input type="file" id="cfile" multiple hidden></label>
       <span class="hint">или перетащите файлы в окно</span><div id="cfiles"></div></div>`}
     ${mode !== 'new' && ctx?.j ? quotedOriginal(ctx.j) : ''}
@@ -2767,7 +2920,8 @@ function composeForm(ctx) {
     root.addEventListener('input', () => { root.dataset.dirty = '1'; });
     close = () => root.remove();
   } else { root = openModal(html); close = closeModal; }
-  $('#cbody').value = sigBlock(mode);
+  $('#cbody').innerHTML = esc(sigBlock(mode)).replace(/\n/g, '<br>');
+  bindRte(root.querySelector('.aas-rte'));
   for (const id of ['cto', 'ccc']) { const el = $('#' + id); if (el) bindPeopleInput(el); }
   const fi = $('#cfile');
   const addFiles = async list => { for (const f of list) files.push({name: f.name, content_base64: await toB64(f), size: f.size}); drawFiles(); };
@@ -2785,33 +2939,33 @@ function composeForm(ctx) {
   $('#csend').onclick = guard(async () => {
     const btn = $('#csend'); btn.disabled = true; btn.textContent = 'Отправка…';
     try {
-      const body = $('#cbody').value, atts = files.map(({name, content_base64}) => ({name, content_base64}));
+      const ed = $('#cbody'), body = ed.innerText.replace(/\u00a0/g, ' '), letter = `<div style="${RTE_WRAP}">${rteClean(ed.innerHTML)}</div>`, atts = files.map(({name, content_base64}) => ({name, content_base64}));
       if (mode === 'new') {
         const toRaw = splitAddrs($('#cto').value), ccRaw = splitAddrs($('#ccc').value);
         const to = toRaw.map(addrOnly).filter(Boolean);
         const cc = ccRaw.map(addrOnly).filter(Boolean);
         if (!to.length) throw new Error('Укажите получателя');
-        await api('mail', {action: 'send', to, cc, subject: $('#csub').value, body, attachments: atts});
+        await api('mail', {action: 'send', to, cc, subject: $('#csub').value, body, html: letter, attachments: atts});
         rememberAddrsFromFields($('#cto').value, $('#ccc').value);
       } else if (mode === 'fwd') {
         const toRaw = splitAddrs($('#cto').value);
         const to = toRaw.map(addrOnly).filter(Boolean);
         if (!to.length) throw new Error('Укажите получателя');
-        await api('mail', {action: 'forward', item_id: ctx.m.item_id, to, body, attachments: atts});
+        await api('mail', {action: 'forward', item_id: ctx.m.item_id, to, body, html: letter, attachments: atts});
         rememberAddrsFromFields($('#cto').value);
       } else {
         const to = splitAddrs($('#cto').value).map(addrOnly).filter(Boolean), cc = splitAddrs($('#ccc').value).map(addrOnly).filter(Boolean);
         if (!to.length) throw new Error('Укажите получателя');
-        await api('mail', {action: 'reply', item_id: ctx.m.item_id, body, reply_all: !!ctx.all, to, cc, attachments: atts});
+        await api('mail', {action: 'reply', item_id: ctx.m.item_id, body, html: letter, reply_all: !!ctx.all, to, cc, attachments: atts});
         rememberAddrsFromFields($('#cto').value, $('#ccc').value);
       }
       close(); toast('Отправлено');
     } finally { btn.disabled = false; btn.textContent = 'Отправить'; }
   });
-  const ta = $('#cbody'); ta.setSelectionRange(0, 0);
+  const ta = $('#cbody');
   if (inline) root.scrollIntoView({block: 'start', behavior: 'smooth'});
   (mode === 'reply' ? ta : $('#cto')).focus({preventScroll: inline});
-  if (mode === 'reply') ta.setSelectionRange(0, 0);
+  if (mode === 'reply') getSelection().collapse(ta, 0);
 }
 function drawFiles() {
   $('#cfiles').innerHTML = files.map((f, i) => `<span class="aas-attendee">${esc(f.name)} <small>${fmtSize(f.size)}</small><button type="button" data-i="${i}" aria-label="Убрать ${esc(f.name)}">${icon('x', 12)}</button></span>`).join('');
