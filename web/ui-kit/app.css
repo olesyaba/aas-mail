@@ -515,10 +515,13 @@ body.green #folders {
   inset: 0;
   background: rgb(0 0 0 / 40%);
   display: none;
-  align-items: center;
+  /* Pinned to the top, not centred: switching Settings tabs (or the scheduler's tabs)
+     changes the height, and a centred dialog jumped — the tabs slid from under the mouse. */
+  align-items: flex-start;
   justify-content: center;
   z-index: 50;
   padding: 16px;
+  padding-top: max(16px, 6vh);
 }
 
 #ov.on {
@@ -531,7 +534,7 @@ body.green #folders {
   border-radius: var(--aas-r-md);
   box-shadow: var(--aas-shadow);
   width: min(680px, 100%);
-  max-height: 92vh;
+  max-height: calc(100vh - max(16px, 6vh) - 16px);
   overflow: auto;
   padding: 18px;
 }
