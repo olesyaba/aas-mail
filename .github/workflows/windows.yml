@@ -1,0 +1,30 @@
+# Windows 10/11 port: the shared server + web UI tests on Windows (docs: Windows plan, stage 0–1).
+name: windows
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"  # the app runs with -X utf8 too (windows_entry.run)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Vendored ActiveSync client (the commit the Mac build ships)
+        run: |
+          git clone https://github.com/mainpart/outlook-activesync-mcp vendor-src
+          git -C vendor-src checkout 2d69742e7ea2fdcf330123266a60857abc38e298
+          pip install requests urllib3 python-dateutil keyring
+      - name: Python
+        run: |
+          $env:PYTHONPATH = "$pwd\vendor-src\src;$pwd\tests\python"
+          python -m unittest discover -s tests/python -t tests/python -q -b
+      - name: Web UI
+        run: node --test "tests/js/*.test.mjs"

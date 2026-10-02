@@ -27,6 +27,10 @@ os.environ["EAS_BRIDGE_CONFIG"] = str(TMP / "config.json")
 os.environ["EAS_BRIDGE_DATA_DIR"] = str(TMP)
 os.environ["EAS_MAIL_PORT"] = str(_free_port())
 sys.path.insert(0, str(ROOT))
+if os.name == "nt":  # the vendored client imports fcntl at module level
+    sys.path.insert(0, str(ROOT / "windows"))
+    import windows_entry  # noqa: E402
+    sys.modules.setdefault("fcntl", windows_entry.fcntl_shim())
 
 import webapp  # noqa: E402
 

@@ -30,6 +30,8 @@ def private_dir(name: str) -> str:
 
 def drop_legacy_tmp():
     """Old builds left mail/calendar dumps in /tmp: remove ours (never another user's)."""
+    if os.name != "posix":  # no /tmp dumps (and no os.getuid) on Windows
+        return
     for d in LEGACY_TMP:
         try:
             if os.stat(d).st_uid == os.getuid():

@@ -2501,6 +2501,9 @@ def _ver_tuple(v: str) -> tuple:
     return tuple(int(x) for x in re.findall(r"\d+", v or "")[:4])
 
 
+ASSET_SUFFIX = "-mac.zip"  # the release file this build updates from (Windows: -win.zip)
+
+
 def _app_bundle() -> Path | None:
     """The .app this server runs from (dist build), or None for a dev checkout."""
     for p in Path(__file__).resolve().parents:
@@ -2517,7 +2520,7 @@ def _latest_release() -> dict:
                      headers={**ua, "Accept": "application/vnd.github+json"})
     if r.status_code == 200:
         j = r.json()
-        asset = next((a for a in j.get("assets") or [] if str(a.get("name", "")).endswith("-mac.zip")), None)
+        asset = next((a for a in j.get("assets") or [] if str(a.get("name", "")).endswith(ASSET_SUFFIX)), None)
         digest = str((asset or {}).get("digest") or "")
         return {"tag": str(j.get("tag_name") or ""), "notes": str(j.get("body") or "")[:3000],
                 "url": (asset or {}).get("browser_download_url") or "",
@@ -2530,7 +2533,7 @@ def _latest_release() -> dict:
         raise RuntimeError(f"GitHub ответил {r.status_code}")
     ver = tag.lstrip("v")
     return {"tag": tag, "notes": "", "sha256": "",
-            "url": f"https://github.com/{UPDATE_REPO}/releases/download/{tag}/AAS-mail-{ver}-mac.zip"}
+            "url": f"https://github.com/{UPDATE_REPO}/releases/download/{tag}/AAS-mail-{ver}{ASSET_SUFFIX}"}
 
 
 def update_check(force: bool = False) -> dict:
@@ -3756,7 +3759,8 @@ def _write_runtime_token():
     bridge.DATA_DIR.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
-        os.fchmod(fd, 0o600)  # an already-existing file keeps its old mode otherwise
+        if hasattr(os, "fchmod"):  # Windows (Python 3.12): none, and %APPDATA% is per-user anyway
+            os.fchmod(fd, 0o600)  # an already-existing file keeps its old mode otherwise
         with os.fdopen(fd, "w") as f:
             fd = -1
             f.write(TOKEN)

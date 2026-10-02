@@ -17,7 +17,9 @@ grep -q "^AAS mail $VERSION " RELEASE_NOTES.txt || { echo "Нет раздела
 
 bash tests/run_tests.sh py js swift
 [ -f "$ZIP" ] || bash app/build_dist.sh
-ASSETS=("$ZIP")
+WINZIP="dist/AAS-mail-$VERSION-win.zip"   # Windows apps update from this asset
+[ -f "$WINZIP" ] || bash windows/build_win.sh
+ASSETS=("$ZIP" "$WINZIP")
 for apk in "dist/AAS-mail-$VERSION-android.apk" "dist/AAS-mail-$VERSION-android-universal.apk"; do
   [ -f "$apk" ] && ASSETS+=("$apk")
 done
