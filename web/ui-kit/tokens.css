@@ -892,6 +892,254 @@ body.green {
     --aas-oof: #7d3a5c;
 }
 
+/* ——— 2026-10-02: «Полночный океан», «Солнечное утро», «Нордик» — всё, что читается, ≥ 4.5:1 ——— */
+
+/* Midnight — «Полночный океан»: почти чёрная для OLED. Bank коралл, Seller бирюза. */
+:root[data-theme="midnight"] {
+    color-scheme: dark;
+    --aas-bg: #05080c;
+    --aas-panel: #0c1218;
+    --aas-panel-2: #091015;
+    --aas-line: #18222c;
+    --aas-line-strong: #223040;
+    --aas-text: #d6e2ec;
+    --aas-muted: #8597a8;
+    --aas-on-accent: #05080c;
+    --aas-danger: #ff7b7b;
+    --aas-ok: #5edc9a;
+    --aas-warning-text: #ffcb6b;
+    --aas-shadow: 0 8px 32px rgb(0 0 0 / 50%);
+    --aas-cat-lift: 40%;
+    --aas-bank: #ff8c6b;
+    --aas-bank-fill: #ff8c6b;
+    --aas-bank-ink: #ffa286;
+    --aas-bank-bg: #2e1a14;
+    --aas-bank-mid: #d9704f;
+    --aas-bank-soft: #6a3c2f;
+    --aas-seller-fill: #4fd1e0;
+    --aas-seller-ink: #74dce8;
+    --aas-seller-bg: #0f2f35;
+}
+:root[data-theme="midnight"] body.theme-bank,
+:root[data-theme="midnight"] body:not(.green):not(.theme-seller) {
+    --aas-on-accent: #05080c;
+    --aas-busy: #ff8c6b;
+    --aas-tent: #d9704f;
+    --aas-free: #613d35;
+    --aas-oof: #4fd1e0;
+}
+:root[data-theme="midnight"] body.theme-seller,
+:root[data-theme="midnight"] body.green {
+    --aas-on-accent: #05080c;
+    --aas-busy: #4fd1e0;
+    --aas-tent: #3b98a4;
+    --aas-free: #204b54;
+    --aas-oof: #ff8c6b;
+}
+:root[data-theme="midnight-light"] {
+    color-scheme: light;
+    --aas-bg: #eef3f8;
+    --aas-panel: #fbfcfe;
+    --aas-panel-2: #f3f6fa;
+    --aas-line: #d9e1ea;
+    --aas-line-strong: #c3cfdc;
+    --aas-text: #142231;
+    --aas-muted: #4f6275;
+    --aas-on-accent: #ffffff;
+    --aas-danger: #b3261e;
+    --aas-ok: #1f7a4d;
+    --aas-warning-text: #8a5a00;
+    --aas-shadow: 0 8px 32px rgb(20 34 49 / 12%);
+    --aas-cat-lift: 0%;
+    --aas-bank: #ad3a1b;
+    --aas-bank-fill: #ad3a1b;
+    --aas-bank-ink: #a83818;
+    --aas-bank-bg: #f8e3dc;
+    --aas-bank-mid: #d0694a;
+    --aas-bank-soft: #eab3a1;
+    --aas-seller-fill: #0b6b7a;
+    --aas-seller-ink: #095f6d;
+    --aas-seller-bg: #dceff2;
+}
+:root[data-theme="midnight-light"] body.theme-bank,
+:root[data-theme="midnight-light"] body:not(.green):not(.theme-seller) {
+    --aas-busy: #ad3a1b;
+    --aas-tent: #d0694a;
+    --aas-free: #dcaea3;
+    --aas-oof: #0b6b7a;
+}
+:root[data-theme="midnight-light"] body.theme-seller,
+:root[data-theme="midnight-light"] body.green {
+    --aas-busy: #0b6b7a;
+    --aas-tent: #5396a2;
+    --aas-free: #9bc2c9;
+    --aas-oof: #ad3a1b;
+}
+
+/* Morning — «Солнечное утро»: тёплый кремовый свет. Bank томат, Seller бирюза. */
+:root[data-theme="morning"] {
+    color-scheme: dark;
+    --aas-bg: #1f1c16;
+    --aas-panel: #28241c;
+    --aas-panel-2: #232019;
+    --aas-line: #3a3427;
+    --aas-line-strong: #4a4232;
+    --aas-text: #f0e6cf;
+    --aas-muted: #b2a68a;
+    --aas-on-accent: #1f1c16;
+    --aas-danger: #ff9585;
+    --aas-ok: #a4d48c;
+    --aas-warning-text: #f6cf6a;
+    --aas-shadow: 0 8px 32px rgb(0 0 0 / 50%);
+    --aas-cat-lift: 40%;
+    --aas-bank: #f39a7f;
+    --aas-bank-fill: #f39a7f;
+    --aas-bank-ink: #f7ae96;
+    --aas-bank-bg: #432a20;
+    --aas-bank-mid: #cf7a60;
+    --aas-bank-soft: #76503f;
+    --aas-seller-fill: #6fcab9;
+    --aas-seller-ink: #8ad5c7;
+    --aas-seller-bg: #1f3a34;
+}
+:root[data-theme="morning"] body.theme-bank,
+:root[data-theme="morning"] body:not(.green):not(.theme-seller) {
+    --aas-on-accent: #1f1c16;
+    --aas-busy: #f39a7f;
+    --aas-tent: #cf7a60;
+    --aas-free: #6f4d3f;
+    --aas-oof: #6fcab9;
+}
+:root[data-theme="morning"] body.theme-seller,
+:root[data-theme="morning"] body.green {
+    --aas-on-accent: #1f1c16;
+    --aas-busy: #6fcab9;
+    --aas-tent: #5a988a;
+    --aas-free: #3d564b;
+    --aas-oof: #f39a7f;
+}
+:root[data-theme="morning-light"] {
+    color-scheme: light;
+    --aas-bg: #fbf6e9;
+    --aas-panel: #fffdf6;
+    --aas-panel-2: #fdf9ef;
+    --aas-line: #eee5cc;
+    --aas-line-strong: #e0d3ae;
+    --aas-text: #2f2a1d;
+    --aas-muted: #6b6249;
+    --aas-on-accent: #ffffff;
+    --aas-danger: #b3261e;
+    --aas-ok: #2e6b2c;
+    --aas-warning-text: #7d5400;
+    --aas-shadow: 0 8px 32px rgb(47 42 29 / 12%);
+    --aas-cat-lift: 0%;
+    --aas-bank: #b3361f;
+    --aas-bank-fill: #b3361f;
+    --aas-bank-ink: #ab331c;
+    --aas-bank-bg: #fbe4d9;
+    --aas-bank-mid: #d6684d;
+    --aas-bank-soft: #efb7a4;
+    --aas-seller-fill: #0e6d61;
+    --aas-seller-ink: #0b6358;
+    --aas-seller-bg: #dcefe9;
+}
+:root[data-theme="morning-light"] body.theme-bank,
+:root[data-theme="morning-light"] body:not(.green):not(.theme-seller) {
+    --aas-busy: #b3361f;
+    --aas-tent: #d6684d;
+    --aas-free: #e1ada0;
+    --aas-oof: #0e6d61;
+}
+:root[data-theme="morning-light"] body.theme-seller,
+:root[data-theme="morning-light"] body.green {
+    --aas-busy: #0e6d61;
+    --aas-tent: #56988e;
+    --aas-free: #9fc3ba;
+    --aas-oof: #b3361f;
+}
+
+/* Nord — «Нордик»: холодный серо-голубой по мотивам Nord, текст ~11:1. Bank клюква, Seller полярный мох. */
+:root[data-theme="nord"] {
+    color-scheme: dark;
+    --aas-bg: #2b303b;
+    --aas-panel: #323844;
+    --aas-panel-2: #2e343f;
+    --aas-line: #3f4656;
+    --aas-line-strong: #4c5466;
+    --aas-text: #e5e9f0;
+    --aas-muted: #a3adbf;
+    --aas-on-accent: #2b303b;
+    --aas-danger: #f29ca3;
+    --aas-ok: #a3be8c;
+    --aas-warning-text: #ebcb8b;
+    --aas-shadow: 0 8px 32px rgb(0 0 0 / 50%);
+    --aas-cat-lift: 40%;
+    --aas-bank: #e0868f;
+    --aas-bank-fill: #e0868f;
+    --aas-bank-ink: #eba0a7;
+    --aas-bank-bg: #47353c;
+    --aas-bank-mid: #bf616a;
+    --aas-bank-soft: #6b4a52;
+    --aas-seller-fill: #a3be8c;
+    --aas-seller-ink: #b4cc9f;
+    --aas-seller-bg: #384236;
+}
+:root[data-theme="nord"] body.theme-bank,
+:root[data-theme="nord"] body:not(.green):not(.theme-seller) {
+    --aas-on-accent: #2b303b;
+    --aas-busy: #e0868f;
+    --aas-tent: #bf616a;
+    --aas-free: #6f535e;
+    --aas-oof: #a3be8c;
+}
+:root[data-theme="nord"] body.theme-seller,
+:root[data-theme="nord"] body.green {
+    --aas-on-accent: #2b303b;
+    --aas-busy: #a3be8c;
+    --aas-tent: #819676;
+    --aas-free: #54605a;
+    --aas-oof: #e0868f;
+}
+:root[data-theme="nord-light"] {
+    color-scheme: light;
+    --aas-bg: #eceff4;
+    --aas-panel: #fafbfc;
+    --aas-panel-2: #f2f4f8;
+    --aas-line: #d8dee9;
+    --aas-line-strong: #c3cbd9;
+    --aas-text: #2e3440;
+    --aas-muted: #56607a;
+    --aas-on-accent: #ffffff;
+    --aas-danger: #a3222f;
+    --aas-ok: #3b6e2e;
+    --aas-warning-text: #7d5800;
+    --aas-shadow: 0 8px 32px rgb(46 52 64 / 12%);
+    --aas-cat-lift: 0%;
+    --aas-bank: #9a3540;
+    --aas-bank-fill: #9a3540;
+    --aas-bank-ink: #963340;
+    --aas-bank-bg: #f3e1e3;
+    --aas-bank-mid: #bf616a;
+    --aas-bank-soft: #dba7ad;
+    --aas-seller-fill: #4a6b33;
+    --aas-seller-ink: #44632f;
+    --aas-seller-bg: #e2ebda;
+}
+:root[data-theme="nord-light"] body.theme-bank,
+:root[data-theme="nord-light"] body:not(.green):not(.theme-seller) {
+    --aas-busy: #9a3540;
+    --aas-tent: #bf616a;
+    --aas-free: #d4acb1;
+    --aas-oof: #4a6b33;
+}
+:root[data-theme="nord-light"] body.theme-seller,
+:root[data-theme="nord-light"] body.green {
+    --aas-busy: #4a6b33;
+    --aas-tent: #7f966f;
+    --aas-free: #b4c1ac;
+    --aas-oof: #9a3540;
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --aas-dur: 0ms;

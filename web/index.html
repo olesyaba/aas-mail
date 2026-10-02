@@ -828,6 +828,9 @@ const THEME_PALETTES = [
   {id: 'eclipse-almond', name: 'Eclipse + Almond', sw: ['#f4ebe0', '#c4a878', '#40534c', '#1a3636']},
   {id: 'amber', name: 'Янтарный вечер', sw: ['#eeeeec', '#8c3b2e', '#4d6b3a', '#1e1b18']},
   {id: 'dusk', name: 'Сумеречная лаванда', sw: ['#f0eff5', '#7d3a5c', '#2f6f6a', '#1d1c24']},
+  {id: 'midnight', name: 'Полночный океан', sw: ['#eef3f8', '#ad3a1b', '#0b6b7a', '#05080c']},
+  {id: 'morning', name: 'Солнечное утро', sw: ['#fbf6e9', '#b3361f', '#0e6d61', '#1f1c16']},
+  {id: 'nord', name: 'Нордик', sw: ['#eceff4', '#9a3540', '#4a6b33', '#2b303b']},
 ];
 const THEME_MODES = [['auto', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']];
 /** Palette + mode → stored theme id. */
@@ -3008,7 +3011,7 @@ $('#setbtn').onclick = async () => {
   const sellerBefore = acctCfg.seller || {name: '', url: '', username: '', email: ''};
   const defs = acctCfg.defaults || {};
   openModal(`<h3>Настройки</h3>
-    <div class="aas-settings-tabs"><button class="aas-btn on" data-sp="acct">Аккаунты</button><button class="aas-btn" data-sp="mail">Почта</button><button class="aas-btn" data-sp="upd">Обновления</button><button class="aas-btn" data-sp="about">О приложении</button></div>
+    <div class="aas-settings-tabs"><button class="aas-btn on" data-sp="acct">Аккаунты</button><button class="aas-btn" data-sp="mail">Почта</button><button class="aas-btn" data-sp="look">Оформление</button><button class="aas-btn" data-sp="upd">Обновления</button><button class="aas-btn" data-sp="about">О приложении</button></div>
     <div class="acts2"><button class="aas-btn" id="scancel">Отмена</button><button class="aas-btn aas-btn--primary" id="ssave">Сохранить</button></div>
     <div class="aas-modal__scroll">
     <div data-pane="acct">
@@ -3022,8 +3025,8 @@ $('#setbtn').onclick = async () => {
       `<div class="aas-passtip">Нужен <b>пароль приложения</b>, а не пароль входа: <a href="https://mail.platops.ru/settings/account" target="_blank" rel="noopener noreferrer">mail.platops.ru</a> → Аккаунт → Пароли приложений → «Добавить». Скопируйте его сюда.</div>`)}
     <div class="hint">Изменения переподключаются сразу после сохранения. Адреса серверов по умолчанию сохранены в форме.</div>
     </div>
-    <div data-pane="mail" hidden>
-    <div class="f"><label>Оформление</label>
+    <div data-pane="look" hidden>
+    <div class="f"><label>Тема</label>
       ${(() => { const cur = themeParts(prefs.theme || 'system'); return `
       <div class="aas-themegrid" id="stheme" role="radiogroup" aria-label="Палитра">${THEME_PALETTES.map(p =>
         `<button type="button" role="radio" aria-checked="${p.id === cur.pal}" data-theme-pal="${p.id}" class="aas-themecard${p.id === cur.pal ? ' on' : ''}">
@@ -3032,6 +3035,8 @@ $('#setbtn').onclick = async () => {
       <div class="aas-seg aas-thememode" id="sthememode" role="radiogroup" aria-label="Режим">${THEME_MODES.map(([m, t]) =>
         `<button type="button" role="radio" aria-checked="${m === cur.mode}" data-theme-mode="${m}" class="${m === cur.mode ? 'on' : ''}">${t}</button>`).join('')}</div>`; })()}
       <div class="hint">${ON_WINDOWS ? 'Сразу на всё окно.' : 'Сразу на окно, трей и напоминания.'}</div></div>
+    </div>
+    <div data-pane="mail" hidden>
     <div class="f"><label>Напоминать о встрече за</label>
       <select id="sremind">${[[1, '1 минуту'], [2, '2 минуты'], [5, '5 минут'], [10, '10 минут'], [15, '15 минут'], [30, '30 минут'], [0, 'Не напоминать']].map(([v, t]) =>
         `<option value="${v}" ${(prefs.reminder_minutes ?? 5) === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
