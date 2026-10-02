@@ -957,10 +957,26 @@ document.addEventListener('keydown', e => {
   }
   if (e.key === 'c' || e.key === 'с') { e.preventDefault(); guard(() => composeForm())(); return; }  // Latin or Cyrillic «с»
   if (e.key === '/') { e.preventDefault(); $('#search').focus(); return; }
+  // Space: pick / unpick the current letter (read with ↑↓, collect with Space, Delete them).
+  if (e.key === ' ') {
+    const k = selCursor || curKey; if (!k || t?.closest?.('button, a, summary')) return;  // Space on a button presses it
+    e.preventDefault();
+    if (selectedKeys.has(k)) selectedKeys.delete(k); else selectedKeys.add(k);
+    selRestart(k); syncBulkBar();
+    return;
+  }
+  if (e.key === 'Escape' && selectedKeys.size) { e.preventDefault(); selectedKeys = new Set(); selRestart(curKey); syncBulkBar(); return; }
   const dir = {ArrowDown: 1, j: 1, ArrowUp: -1, k: -1}[e.key];
   if (!dir) return;
   e.preventDefault();
-  listStep(dir);
+  if (e.shiftKey) {  // Shift+↑↓: grow the selection without opening each letter (100 letters in a second)
+    const order = rowKeys(), from = selCursor || curKey || selAnchor || order[0];
+    if (!from) return;
+    if (!selAnchor) selAnchor = from;
+    const i = order.indexOf(from), next = order[Math.max(0, Math.min(order.length - 1, (i < 0 ? 0 : i) + dir))];
+    return selectRange(next);
+  }
+  selRestart(listStep(dir) || curKey);
 });
 
 let modalOff = {x: 0, y: 0};
@@ -1414,6 +1430,27 @@ let folderItems = [], folders = [], curFolder = null, nextCursor = null, searchQ
 const LIST_FIELDS = ['subject', 'from', 'received', 'is_read', 'has_attachments', 'preview', 'thread_topic', 'categories'];
 /** Selected group keys for bulk read/unread. */
 let selectedKeys = new Set();
+/** Keyboard / Shift-click selection: the anchor a range starts from, the row the range
+ *  ends on (moved by Shift+↑/↓ without opening letters) and what was chosen before it. */
+let selAnchor = null, selCursor = null, selBase = null;
+/** Keys from `a` to `b` in list order, both included (either direction). */
+function keyRange(order, a, b) {
+  const i = order.indexOf(a), j = order.indexOf(b);
+  if (i < 0 || j < 0) return j >= 0 ? [b] : [];
+  return order.slice(Math.min(i, j), Math.max(i, j) + 1);
+}
+function selectRange(toKey) {
+  const order = rowKeys(), from = selAnchor || curKey || order[0];
+  if (!from || !toKey) return;
+  if (!selBase) selBase = new Set(selectedKeys);
+  selectedKeys = new Set([...selBase, ...keyRange(order, from, toKey)]);
+  selAnchor = from; selCursor = toKey;
+  syncBulkBar();
+  const row = document.querySelector(`#rows .aas-row[data-key="${CSS.escape(toKey)}"]`);
+  row?.scrollIntoView?.({block: 'nearest'}); row?.focus?.();
+}
+/** A plain click / Space / ↑↓ starts a new range from here. */
+const selRestart = key => { selAnchor = key || null; selCursor = null; selBase = null; };
 /** Row keys being dragged onto a folder (null when no mail drag is in progress). */
 let dragKeys = null;
 /** Quick filter above the list: all / unread / with attachments (client-side, loaded mail). */
@@ -1822,6 +1859,8 @@ function rowEl(g) {
   el.onkeydown = e => { if (e.key === 'Enter' && e.target === el) { e.preventDefault(); openGroup(g); } };
   el.querySelector('.aas-row__chk input').onclick = e => {
     e.stopPropagation();
+    if (e.shiftKey) { e.preventDefault(); return selectRange(g.key); }  // Shift: everything from the last pick to here
+    selRestart(g.key);
     if (e.target.checked) selectedKeys.add(g.key); else selectedKeys.delete(g.key);
     el.classList.toggle('sel', e.target.checked);
     syncBulkBar();
@@ -1837,7 +1876,7 @@ function rowEl(g) {
     treeKey = g.key;
     if (curKey === g.key) paintTree(); else openGroup(g);
   });
-  el.onclick = () => openGroup(g);
+  el.onclick = e => { if (e.shiftKey) { e.preventDefault(); return selectRange(g.key); } selRestart(g.key); openGroup(g); };
   // Drag onto a folder: the whole selection if this row is in it, else just this row.
   el.draggable = true;
   el.ondragstart = e => {
@@ -1873,7 +1912,7 @@ function showReaderEmpty() {
   box.innerHTML = `<div class="aas-rempty">
       <div class="aas-rempty__head"></div><div class="aas-rempty__sub"></div>
       <div class="aas-rempty__meet" hidden></div>
-      <div class="aas-rempty__keys"><span>${kbd('↑')}${kbd('↓')} листать</span><span>${kbd('C')} новое письмо</span><span>${kbd('/')} поиск</span><span>${kbd('Delete')} удалить</span></div>
+      <div class="aas-rempty__keys"><span>${kbd('↑')}${kbd('↓')} листать</span><span>${kbd('C')} новое письмо</span><span>${kbd('/')} поиск</span><span>${kbd('Пробел')} выбрать</span><span>${kbd('Shift')}${kbd('↑')}${kbd('↓')} выбрать подряд</span><span>${kbd('Delete')} удалить</span></div>
     </div>`;
   paintReaderEmptyHead();
   if (view !== 'mail') return;
@@ -2302,6 +2341,7 @@ async function removeGroups(keys, folder = null) {
   const gone = new Set(item_ids);
   allItems = allItems.filter(m => !gone.has(m.item_id));
   keys.forEach(k => selectedKeys.delete(k));
+  selRestart(null);  // a later Shift range must not bring the removed letters back
   const openGone = curGroup && curGroup.items.some(m => gone.has(m.item_id));
   if (openGone) { curKey = null; curGroup = null; }
   renderList(!!nextCursor); syncBulkBar(); recountOpenFolder();

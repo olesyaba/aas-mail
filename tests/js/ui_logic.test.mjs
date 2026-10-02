@@ -866,3 +866,12 @@ test('people field: the next name is searched even without a comma after «…>�
   assert.equal(P('"Иванов, Иван" <i@x.ru>, пет').token, 'пет', 'a comma inside quotes is not a separator');
   assert.equal(P('Иванов <i@x').token, 'Иванов <i@x', 'an unfinished address is still being typed');
 });
+
+test('mail selection: Shift ranges in list order, either direction', () => {
+  const {keyRange} = load(['keyRange']);
+  const order = ['a', 'b', 'c', 'd', 'e'];
+  assert.deepEqual(plain(keyRange(order, 'b', 'd')), ['b', 'c', 'd']);
+  assert.deepEqual(plain(keyRange(order, 'd', 'b')), ['b', 'c', 'd'], 'Shift+↑ selects upwards');
+  assert.deepEqual(plain(keyRange(order, 'c', 'c')), ['c']);
+  assert.deepEqual(plain(keyRange(order, 'gone', 'e')), ['e'], 'an anchor that left the list: just the row');
+});
