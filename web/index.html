@@ -2146,7 +2146,7 @@ document.addEventListener('click', e => {
 });
 function inviteCard(inv) {
   const cancelled = inv.method === 'cancel';
-  const link = joinURL(inv.location, '', inv.online);
+  const link = joinURL(inv.location, inv.description, inv.online);
   const org = inv.organizer?.name || inv.organizer?.address || '';
   return `<div class="aas-invite${cancelled ? ' aas-invite--cancel' : ''}">
     <div class="aas-invite__kind">${cancelled ? 'Встреча отменена' : 'Приглашение на встречу'}</div>
@@ -2156,6 +2156,7 @@ function inviteCard(inv) {
     ${org ? `<div class="aas-invite__row aas-invite__muted">Организатор: ${esc(org)}</div>` : ''}
     ${cancelled ? '' : `<div class="aas-invite__acts">
       ${link ? `<a class="aas-btn aas-btn--primary" href="${esc(link)}" target="_blank" rel="noopener noreferrer" title="Открыть ссылку встречи в браузере: ${esc(link)}">Подключиться</a><span class="aas-invite__sep"></span>` : ''}
+      ${inv.wrapped && !inv.in_calendar ? `<button type="button" class="aas-btn" data-addcal title="Сервер не создал эту встречу в календаре — добавить её самой">Добавить в календарь</button><span class="aas-invite__sep"></span>` : ''}
       <span class="aas-rsvpseg"><button type="button" class="aas-btn" data-rsvp="accept">Принять</button><button type="button" class="aas-btn" data-rsvp="tentative">Под вопросом</button><button type="button" class="aas-btn" data-rsvp="decline">Отклонить</button></span>
     </div>${rsvpNoteHtml()}<div class="aas-invite__status" hidden></div>`}
   </div>`;
@@ -2169,6 +2170,18 @@ function bindInviteCard(mb, c) {
     status.textContent = RSVP_DONE[resp] + (via === 'mail' ? ' — ответ отправлен организатору письмом.' : ' — организатор получит уведомление.');
   };
   if (c.rsvp) show(c.rsvp.resp, c.rsvp.via);
+  const add = box.querySelector('[data-addcal]');
+  if (add) add.onclick = guard(async () => {
+    const inv = c.j.invite, t = v => v.length > 10 ? v.replace(' ', 'T') : v + 'T00:00';
+    const link = joinURL(inv.location, inv.description, inv.online);
+    add.disabled = true;
+    try {
+      await api('events', {action: 'create', subject: inv.subject || '(без темы)', start: t(inv.start), end: t(inv.end || inv.start),
+        all_day: !!inv.all_day, location: inv.location || link, body: inv.description || ''});
+    } catch (e) { add.disabled = false; throw e; }
+    inv.in_calendar = true; add.nextElementSibling?.remove(); add.remove();
+    toast('Встреча добавлена в календарь'); loadCal();
+  });
   box.querySelectorAll('[data-rsvp]').forEach(b => b.onclick = guard(async () => {
     const resp = b.dataset.rsvp;
     box.querySelectorAll('[data-rsvp]').forEach(x => x.disabled = true);

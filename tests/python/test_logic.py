@@ -823,6 +823,38 @@ def _invite_mime(ics=_ICS) -> bytes:
     return bytes(m)
 
 
+class WrappedInvitationTest(unittest.TestCase):
+    """Alfa-Seller's server cuts the .ics out of Ktalk invitations and attaches the
+    original as «original-message.txt»; the link is only in LOCATION / DESCRIPTION."""
+
+    def test_invitation_read_from_the_attached_original(self):
+        ics = _ICS.replace("LOCATION:https://alfabank.ktalk.ru/vladena\r\n", "").replace(
+            "DESCRIPTION:длинное описание, которое", "DESCRIPTION:Ссылка:\\nhttps://alfaseller").replace(
+            " продолжается на следующей строке", " .ktalk.ru/mail0d4")
+        w = EmailMessage()
+        w["Subject"] = "Приглашение на встречу: Встреча"
+        w.set_content("Часть письма с приглашением удалена, исходное письмо приложено файлом.")
+        w.add_attachment(_invite_mime(ics), maintype="application", subtype="octet-stream",
+                         filename="original-message.txt")
+        inv, _part, _props = webapp._find_invite(webapp.parse_raw(bytes(w)))
+        self.assertEqual(inv["uid"], "abc-123")
+        self.assertEqual(webapp._invite_link(inv), "https://alfaseller.ktalk.ru/mail0d4")
+        # No calendar item for it: the letter offers «Добавить в календарь» until one appears.
+        a = make_acct(email="me@seller.test", backend=FakeBackend({"14:9": bytes(w)}))
+        inv = webapp.render_message(a, "14:9")["invite"]
+        self.assertTrue(inv["wrapped"])
+        self.assertFalse(inv["in_calendar"])
+        a.cal["items"] = [{"item_id": "c1", "subject": inv["subject"], "start": inv["start"]}]
+        a.mime_cache.clear()
+        self.assertTrue(webapp.render_message(a, "14:9")["invite"]["in_calendar"])
+
+    def test_plain_letter_is_no_invitation(self):
+        w = EmailMessage()
+        w.set_content("text")
+        w.add_attachment(b"just a file", maintype="application", subtype="octet-stream", filename="a.txt")
+        self.assertIsNone(webapp._find_invite(webapp.parse_raw(bytes(w)))[0])
+
+
 class JoinLinkFromInvitationTest(unittest.TestCase):
     """Alfa-Seller (Stalwart) drops the meeting link from the calendar item; the
     invitation letter still has it — «Подключиться» must show on the meeting too."""

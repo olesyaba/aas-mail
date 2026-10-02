@@ -2976,7 +2976,7 @@ def _ics_time(prop: tuple[str, str] | None) -> tuple[str, str, bool]:
         return "", "", False
 
 
-def _find_invite(msg) -> tuple[dict | None, object | None, dict]:
+def _find_invite(msg, _nested: bool = False) -> tuple[dict | None, object | None, dict]:
     """(invite for the UI, the text/calendar part, raw VEVENT props) or (None, None, {})."""
     for p in msg.walk():
         if p.get_content_type() != "text/calendar":
@@ -2999,6 +2999,7 @@ def _find_invite(msg) -> tuple[dict | None, object | None, dict]:
             "method": method.lower(), "uid": props.get("UID", ("", ""))[1].strip(),
             "subject": _ics_unescape(props.get("SUMMARY", ("", ""))[1]),
             "location": _ics_unescape(props.get("LOCATION", ("", ""))[1]),
+            "description": _ics_unescape(props.get("DESCRIPTION", ("", ""))[1]),
             # The separate «Ссылка на встречу» field, as calendars write it into iCalendar.
             "online": next((_ics_unescape(props[k][1]).strip() for k in
                             ("CONFERENCE", "X-MICROSOFT-SKYPETEAMSMEETINGURL", "X-GOOGLE-CONFERENCE", "URL")
@@ -3008,6 +3009,18 @@ def _find_invite(msg) -> tuple[dict | None, object | None, dict]:
                           "address": re.sub(r"^mailto:", "", org_val.strip(), flags=re.I)},
         }
         return invite, p, props
+    # Alfa-Seller's mail server cuts the iCalendar out of some invitations (Ktalk's,
+    # for one) and attaches the whole original as «original-message.txt»: read it there.
+    if not _nested:
+        for p in msg.walk():
+            if p.is_multipart() or p.get_content_maintype() == "message":
+                continue
+            data = p.get_payload(decode=True) or b""
+            if re.search(rb"(?im)^content-type:\s*text/calendar", data):
+                got = _find_invite(parse_raw(data), True)
+                if got[0]:
+                    got[0]["wrapped"] = True  # the server never saw it: no calendar item was made
+                    return got
     return None, None, {}
 
 
@@ -3051,10 +3064,13 @@ def _send_imip_reply(a: Acct, item_id: str, response: str, note: str = "") -> st
         event_lines=[raw(n) for n in ("DTSTART", "DTEND", "SEQUENCE", "RECURRENCE-ID", "ORGANIZER", "SUMMARY") if n in props])
 
 
-def _cal_item(a: Acct, *, item_id: str | None = None, uid: str | None = None) -> dict | None:
+def _cal_cached(a: Acct) -> list[dict]:
     with a.cv:
-        items = _cal_overlay(a.cal, a.cal.get("items") or [])
-    for e in items:
+        return _cal_overlay(a.cal, a.cal.get("items") or [])
+
+
+def _cal_item(a: Acct, *, item_id: str | None = None, uid: str | None = None) -> dict | None:
+    for e in _cal_cached(a):
         if (item_id and e.get("item_id") == item_id) or (uid and e.get("uid") and e.get("uid") == uid):
             return e
     return None
@@ -3103,8 +3119,11 @@ def _invite_link(invite: dict | None) -> str:
         return ""
     if invite.get("online"):
         return invite["online"]
-    m = re.search(r"https?://\S+", invite.get("location") or "")
-    return m.group(0) if m else ""
+    for k in ("location", "description"):
+        m = re.search(r"https?://[^\s<>'\")\]]+", invite.get(k) or "")
+        if m:
+            return m.group(0).rstrip(".,;")
+    return ""
 
 
 def remember_join(a: Acct, invite: dict | None):
@@ -3116,7 +3135,7 @@ def remember_join(a: Acct, invite: dict | None):
 
 
 def _has_link(e: dict) -> bool:
-    return bool(e.get("online_meeting")) or bool(re.search(r"https?://", f"{e.get('location') or ''} {e.get('body') or ''}"))
+    return bool(re.search(r"https?://", f"{e.get('online_meeting') or ''} {e.get('location') or ''} {e.get('body') or ''}"))
 
 
 def with_join_links(a: Acct, items: list[dict]) -> list[dict]:
@@ -3537,6 +3556,9 @@ def render_message(a: Acct, item_id: str, has_att: bool = False) -> dict:
     parts = _attachment_parts(msg, html_doc)
     invite, invite_part, _ = _find_invite(msg)
     remember_join(a, invite)
+    if invite and invite.get("wrapped"):
+        invite["in_calendar"] = _cal_item(a, uid=invite["uid"]) is not None or any(
+            e.get("start") == invite["start"] and e.get("subject") == invite["subject"] for e in _cal_cached(a))
     # The .ics is shown as the invitation card — don't list it as a file too.
     atts = [{"idx": i, "name": _att_name(p, i), "type": p.get_content_type(), "size": len(_part_bytes(p))}
             for i, p in enumerate(parts) if p is not invite_part]
