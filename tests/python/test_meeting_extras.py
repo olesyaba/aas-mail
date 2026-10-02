@@ -115,3 +115,15 @@ class CalendarExtrasTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SeriesCancelTest(unittest.TestCase):
+    def test_series_cancel_hides_every_occurrence(self):
+        a = make_acct()
+        other = pack_item_id("3", "10", instance="20261005T070000Z")
+        a.cal["items"] = [{"item_id": OCC, "is_recurring": True}, {"item_id": other, "is_recurring": True}]
+        self.assertEqual(webapp._series_id(OCC), CAL)
+        with mock.patch.object(webapp, "_cal_forget"):
+            webapp._cal_after_write(a, {"action": "cancel", "item_id": webapp._series_id(OCC)}, {})
+        self.assertIn(OCC, a.cal["hidden"])
+        self.assertNotIn(other, a.cal["hidden"])

@@ -2311,6 +2311,16 @@ def _cal_overlay_prune(c: dict, before: float) -> None:
     c["pending"] = [e for e in (c.get("pending") or []) if e.get("_ts", 0) >= before]
 
 
+def _series_id(item_id: str) -> str:
+    """The series an occurrence id belongs to (the id itself when it has no instance)."""
+    from outlook_activesync_mcp.errors import BadItemId
+    from outlook_activesync_mcp.models import pack_item_id, unpack_item_id
+    try:
+        return pack_item_id(*unpack_item_id(item_id))
+    except BadItemId:
+        return item_id
+
+
 def _cal_after_write(a: Acct, params: dict, res: dict) -> None:
     action, iid, now = params.get("action"), params.get("item_id"), time.time()
     if action in ("cancel", "respond", "update", "create"):
@@ -2322,6 +2332,9 @@ def _cal_after_write(a: Acct, params: dict, res: dict) -> None:
         pending = c.setdefault("pending", [])
         if action == "cancel" and iid:
             hidden[iid] = now
+            if _series_id(iid) == iid:  # a whole series: hide every cached occurrence of it
+                hidden.update({e["item_id"]: now for e in c.get("items") or []
+                               if e.get("is_recurring") and _series_id(e.get("item_id") or "") == iid})
         elif action == "respond" and iid:
             resp = str(params.get("response") or "").lower()
             if resp == "decline":
@@ -3738,6 +3751,8 @@ class Handler(BaseHTTPRequestHandler):
                 invite = params.pop("mime_invite", False) if path == "/api/events" else False
                 gone = (cancel_notice_target(a, params.get("item_id") or "")
                         if path == "/api/events" and params.get("action") == "cancel" else None)
+                if path == "/api/events" and params.pop("series", False) and params.get("item_id"):
+                    params["item_id"] = _series_id(params["item_id"])  # no instance = the whole series
                 res = call(a, path[5:], dict(params))
                 if gone and res.get("ok", True):
                     threading.Thread(target=_send_cancel_bg, args=(a, gone, params["item_id"]), daemon=True).start()

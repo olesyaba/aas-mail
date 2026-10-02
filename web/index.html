@@ -921,6 +921,8 @@ function closeModal() {
   const done = onModalClose; onModalClose = null;
   $('#ov').classList.remove('on');
   const m = $('#modal'); m.innerHTML = ''; m.classList.remove('aas-modal--actions-top', 'aas-dropping', 'aas-modal--wide');
+  // Suggestion lists are portalled out of the dialog; a removed field never blurs in WebKit.
+  document.querySelectorAll('.aas-people__dd').forEach(d => { d.hidden = true; d.innerHTML = ''; });
   m.ondragover = m.ondragleave = m.ondrop = null;
   delete m.dataset.dirty; resetModalPos();
   done?.();
@@ -2605,6 +2607,8 @@ function bindPeopleInput(inp) {
   const prefixAndToken = () => peopleToken(inp.value);
 
   const paint = (list, {loading, empty} = {}) => {
+    // A late catalogue answer must not reopen the list after the field lost focus or left the page.
+    if (!inp.isConnected || document.activeElement !== inp) { hide(); return; }
     items = list || [];
     idx = items.length ? 0 : -1;
     place();
@@ -3542,12 +3546,15 @@ function drawCal() {
       off.style.cssText = `top:${sc.Y[a]}px;height:${sc.Y[b] - sc.Y[a]}px`; cols[i].prepend(off); });
     if (isoDay(d) === today) {
       const now = new Date(), line = document.createElement('div'); line.className = 'aas-nowline';
-      line.style.top = sc.yOf((now - d) / 36e5) + 'px'; cols[i].appendChild(line);
+      line._at = () => { line.style.top = sc.yOf((new Date() - d) / 36e5) + 'px'; };
+      line._at(); cols[i].appendChild(line);
     }
   });
   const wrap = $('#weekwrap');
   if (!wrap._scrolled) { const h = days.some(d => isoDay(d) === today) ? Math.max(0, new Date().getHours() - 2) : 8; wrap.scrollTop = Math.max(0, sc.Y[h] - 10); wrap._scrolled = true; }
 }
+// The «now» line follows the clock between renders.
+setInterval(() => document.querySelectorAll('.aas-nowline').forEach(l => l._at?.()), 30000);
 let calOffOpen = false;
 const OFF_H = 6;  // px per folded hour
 /** Hour heights for the grid. An hour folds when it is outside the working day, holds
@@ -3732,6 +3739,7 @@ function eventView(e) {
     // Someone else's meeting is changed by its organizer (an attendee's edit would rewrite their roster).
     ...(iAmOrg || !isMeeting ? [{label: e.is_recurring ? 'Изменить серию' : 'Изменить', run: () => eventForm(e)}] : []),
     {label: iAmOrg && isMeeting ? 'Отменить встречу' : 'Удалить', danger: true, run: removeEvent},
+    ...(e.is_recurring ? [{label: iAmOrg && isMeeting ? 'Отменить всю серию' : 'Удалить всю серию', danger: true, run: () => removeEvent(true)}] : []),
   ]);
   el.querySelectorAll('[data-r]').forEach(b => b.onclick = guard(async () => {
     const note = (el.querySelector('.aas-rsvpnote textarea')?.value || '').trim();
@@ -3750,9 +3758,12 @@ function eventView(e) {
       propose_start: isoLocal(ps), propose_end: isoLocal(pe), ...(note ? {note} : {})}, e._acct || ACCT);
     closeModal(); toast(r.items?.[0]?.proposed ? 'Предложение нового времени отправлено организатору' : 'Ответ отправлен, новое время — в комментарии'); loadCal();
   }));
-  const removeEvent = guard(async () => {
-    if (!confirm(e.is_recurring ? 'Отменить это событие серии?' : (iAmOrg && isMeeting ? 'Отменить событие? Участникам уйдёт уведомление.' : 'Удалить событие?'))) return;
-    await api('events', {action: 'cancel', item_id: e.item_id}, e._acct || ACCT); closeModal(); toast(iAmOrg && isMeeting ? 'Событие отменено' : 'Удалено'); loadCal();
+  const removeEvent = guard(async (series = false) => {
+    const org = iAmOrg && isMeeting;
+    if (!confirm(series ? (org ? 'Отменить всю серию? Участникам уйдёт уведомление.' : 'Удалить всю серию из календаря?')
+      : e.is_recurring ? 'Отменить это событие серии?' : (org ? 'Отменить событие? Участникам уйдёт уведомление.' : 'Удалить событие?'))) return;
+    await api('events', {action: 'cancel', item_id: e.item_id, ...(series ? {series: true} : {})}, e._acct || ACCT);
+    closeModal(); toast(series ? (org ? 'Серия отменена' : 'Серия удалена') : org ? 'Событие отменено' : 'Удалено'); loadCal();
   });
 }
 
