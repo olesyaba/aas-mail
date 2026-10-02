@@ -72,6 +72,13 @@ test('esc escapes every HTML-significant character', () => {
   assert.equal(esc(null), '');
 });
 
+test('ktalkRoom: a fresh room in the mailbox space, named like the web calendar does', () => {
+  const {ktalkRoom, ctx} = load(['ktalkRoom']);
+  ctx.crypto = {getRandomValues: a => a.fill(171)};
+  assert.equal(ktalkRoom('obabakaeva@alfaseller.ru'), 'https://alfaseller.ktalk.ru/mailababababababababab');
+  assert.match(ktalkRoom('x@AlfaBank.ru'), /^https:\/\/alfabank\.ktalk\.ru\/mail[0-9a-f]{18}$/);
+});
+
 test('joinURL prefers meeting hosts, strips HTML and trailing punctuation', () => {
   const {joinURL} = load(['joinURL']);
   assert.equal(joinURL('Room 5', 'Agenda https://wiki.test/page. Join: <a href="https://teams.microsoft.com/l/meetup-join/abc">link</a>'),

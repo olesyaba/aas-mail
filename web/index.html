@@ -162,6 +162,13 @@ const linkify = h => h.replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g, u => `<
 /** The join link of a meeting. It can sit in three places: the separate «Ссылка на
  *  встречу» field (`online`), «Место» and the description; they are read in that
  *  order, and a video-meeting host wins over any other link wherever it is. */
+/** A fresh Ktalk room in the mailbox's own space, named like the web calendar names
+ *  them (mail + 18 hex): https://alfaseller.ktalk.ru/mail0d432a67d7ea4de973. */
+function ktalkRoom(email) {
+  const space = (String(email || '').split('@')[1] || 'alfabank.ru').split('.')[0].toLowerCase();
+  const hex = [...crypto.getRandomValues(new Uint8Array(9))].map(b => b.toString(16).padStart(2, '0')).join('');
+  return `https://${space}.ktalk.ru/mail${hex}`;
+}
 function joinURL(location, body, online = '') {
   const preferred = ['teams.microsoft', 'teams.live', 'zoom.us', 'ktalk', 'kontur',
     'meet.google', 'trueconf', 'jazz.sber', 'telemost.yandex', 'webex.com'];
@@ -769,6 +776,7 @@ function mountScheduler(box) {
 }
 /** Stroke icons (one set, 1.8 px) instead of emoji and text glyphs. */
 const ICONS = {
+  video: '<path d="m16 13 5.2 3.5a.5.5 0 0 0 .8-.4V7.9a.5.5 0 0 0-.8-.4L16 11"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
   clip: '<path d="m21.4 11.6-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/>',
   replyOne: '<path d="m9 17-5-5 5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>',
   replyAll: '<path d="m7 17-5-5 5-5"/><path d="m12 17-5-5 5-5"/><path d="M22 18v-2a4 4 0 0 0-4-4H7"/>',
@@ -3836,6 +3844,7 @@ function eventForm(e, opts = {}) {
     <div class="f"><label>Место или ссылка на встречу</label>
       <div class="aas-locrow"><input type="text" id="eloc" value="${esc(e?.location || '')}" placeholder="Переговорная или https://…">
       ${(prefs.links || []).length ? `<select id="elink" title="Подставить сохранённую ссылку"><option value="">Мои ссылки…</option>${prefs.links.map((l, i) => `<option value="${i}">${esc(l.name)}</option>`).join('')}</select>` : ''}</div>
+      <button type="button" class="aas-linkbtn aas-ktalkgen" id="ektalk" title="Новая комната Ktalk — ссылка встанет в «Место» и в описание">${icon('video', 14)} Сгенерировать ссылку в Ktalk</button>
       ${(prefs.links || []).length ? '' : '<div class="hint">Свои ссылки на встречи (Telemost, KTalk…) можно сохранить в «Настройки → Почта».</div>'}</div>
     ${accounts.some(a => a.id === 'seller') ? `<div class="f"><label class="chk aas-toggle"><input type="checkbox" class="aas-sw" id="etwin" ${prefs.twin_bank ? 'checked' : ''}> Добавлять к участникам Alfa-Seller их адрес в Alfa-Bank</label>
       <div class="hint" id="etwinhint" hidden></div></div>` : ''}
@@ -3914,14 +3923,17 @@ function eventForm(e, opts = {}) {
     f.dispatchEvent(new Event('change', {bubbles: true}));
   });
   const sel = $('#elink');
-  // A saved link goes where people look for it: «Место» (the Join button reads it
+  // A meeting link goes where people look for it: «Место» (the Join button reads it
   // in the calendar, tray and attendees' Outlook) and, bare, into the description.
-  if (sel) sel.onchange = () => {
-    const l = prefs.links[+sel.value]; sel.value = ''; if (!l) return;
-    $('#eloc').value = l.url;
+  const putLink = url => {
+    $('#eloc').value = url;
     const b = $('#ebody');
-    if (!b.value.includes(l.url)) b.value = (b.value.trim() ? b.value.replace(/\s*$/, '\n\n') : '') + l.url;
+    if (!b.value.includes(url)) b.value = (b.value.trim() ? b.value.replace(/\s*$/, '\n\n') : '') + url;
   };
+  if (sel) sel.onchange = () => {
+    const l = prefs.links[+sel.value]; sel.value = ''; if (l) putLink(l.url);
+  };
+  $('#ektalk').onclick = () => putLink(ktalkRoom(accounts.find(a => a.id === (e?._acct || ACCT))?.email));
   // If the start is pushed past the end, carry the end along (keep a 30-min meeting).
   $('#est')?.addEventListener('change', () => {
     const st = new Date($('#est').value), en = new Date($('#een').value);

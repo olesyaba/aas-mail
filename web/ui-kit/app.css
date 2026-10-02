@@ -1337,6 +1337,7 @@ kbd {
 /* Compose: Cc on request, a real attach button, drop files anywhere */
 .aas-flabel { display: flex; justify-content: space-between; align-items: baseline; }
 .aas-linkbtn { border: 0; background: none; padding: 0; color: var(--aas-accent-text); font: inherit; font-size: 12px; cursor: pointer; }
+.aas-ktalkgen { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 13px; }
 .aas-attrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .aas-attrow #cfiles { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; }
 .aas-attrow #cfiles:empty { display: none; }
