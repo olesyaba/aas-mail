@@ -1,0 +1,204 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Папки: дерево и разделители</title>
+<link rel="stylesheet" href="../ui-kit/fonts.css">
+<link rel="stylesheet" href="../ui-kit/tokens.css">
+<style>
+body{margin:0;background:var(--aas-bg);color:var(--aas-text);font:14px/1.4 var(--aas-font)}
+.wrap{display:grid;grid-template-columns:240px 1fr;max-width:1100px;margin:24px auto;border:1px solid var(--aas-line);border-radius:var(--aas-r-lg);overflow:hidden;background:var(--aas-panel);min-height:640px}
+@media (max-width:720px){.wrap{grid-template-columns:1fr;margin:0;border-radius:0}}
+#side{background:var(--aas-panel-2);border-right:1px solid var(--aas-line);padding:8px;overflow:auto;user-select:none}
+.total{display:flex;justify-content:space-between;padding:6px 10px 8px;font-size:12px;font-weight:600;color:var(--aas-muted);border-bottom:1px solid var(--aas-line);margin-bottom:4px}
+.badge{min-width:18px;padding:0 6px;border-radius:var(--aas-r-pill);background:var(--aas-accent);color:var(--aas-on-accent);font-size:11px;font-weight:600;line-height:18px;text-align:center}
+.badge.sum{background:none;color:var(--aas-muted);box-shadow:inset 0 0 0 1px var(--aas-line-strong)}
+/* section + group headers */
+.sec{display:flex;align-items:center;gap:6px;padding:10px 10px 4px;font-size:11px;color:var(--aas-muted);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;border-radius:var(--aas-r-sm)}
+.sec:hover{color:var(--aas-text)}
+.sec .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sec .chev{opacity:0;transition:opacity .15s}
+.sec:hover .chev,.sec:focus-visible .chev,.sec.shut .chev{opacity:1}
+.grp{margin-top:8px;border-top:1px solid var(--aas-line);padding-top:12px;text-transform:none;letter-spacing:0;font-size:12px;font-weight:600}
+.grp::before{content:"";width:3px;height:12px;border-radius:2px;background:var(--g)}
+.grp.drop{background:var(--aas-accent-bg);box-shadow:inset 0 0 0 2px var(--aas-accent)}
+.grp .more{border:0;background:none;color:var(--aas-muted);cursor:pointer;visibility:hidden;font:inherit;padding:0 4px}
+.grp:hover .more{visibility:visible}
+.grp input{font:inherit;width:100%;border:1px solid var(--aas-accent);border-radius:4px;padding:1px 4px;background:var(--aas-panel);color:var(--aas-text)}
+/* rows */
+.f{display:flex;align-items:center;gap:4px;padding:5px 10px 5px 0;border-radius:var(--aas-r-sm);cursor:pointer}
+.f:hover{background:var(--aas-accent-bg)}
+.f.on{background:var(--aas-accent-bg);color:var(--aas-accent-text);font-weight:600}
+.f.drop{box-shadow:inset 0 0 0 2px var(--aas-accent)}
+.f.dragging{opacity:.4}
+.f .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tw{flex:none;width:18px;height:18px;display:grid;place-items:center;border:0;background:none;padding:0;color:var(--aas-muted);cursor:pointer;border-radius:4px}
+.tw:hover{background:color-mix(in srgb,var(--aas-text) 8%,transparent)}
+.chev{width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg) translate(-1px,-1px);transition:transform .18s cubic-bezier(.16,1,.3,1)}
+.shut .chev,.tw.shut .chev{transform:rotate(-45deg)}
+.kids{display:grid;grid-template-rows:1fr;transition:grid-template-rows .2s cubic-bezier(.16,1,.3,1)}
+.kids.shut{grid-template-rows:0fr}
+.kids>div{overflow:hidden}
+@media (prefers-reduced-motion:reduce){.kids,.chev{transition:none}}
+.tools{display:flex;gap:6px;flex-wrap:wrap;padding:12px 4px 4px;border-top:1px solid var(--aas-line);margin-top:10px}
+.btn{font:inherit;font-size:12px;padding:5px 10px;border:1px solid var(--aas-line-strong);border-radius:var(--aas-r-sm);background:var(--aas-panel);color:var(--aas-text);cursor:pointer}
+.btn:hover:not(:disabled){border-color:var(--aas-accent)}
+.btn:disabled{opacity:.45;cursor:default}
+.menu{position:fixed;z-index:10;min-width:200px;padding:4px;background:var(--aas-panel);border:1px solid var(--aas-line);border-radius:var(--aas-r-md);box-shadow:var(--aas-shadow)}
+.menu button{display:flex;gap:8px;align-items:center;width:100%;text-align:left;font:inherit;padding:6px 10px;border:0;border-radius:var(--aas-r-sm);background:none;color:var(--aas-text);cursor:pointer}
+.menu button:hover:not(:disabled){background:var(--aas-accent-bg)}
+.menu button:disabled{color:var(--aas-muted);cursor:default}
+.menu hr{border:0;border-top:1px solid var(--aas-line);margin:4px 0}
+.menu .sw{width:8px;height:8px;border-radius:2px;background:var(--g)}
+/* right panel */
+main{padding:24px 28px;overflow:auto}
+main h1{margin:0 0 6px;font-size:20px}
+main p,main li{color:var(--aas-muted);max-width:62ch}
+main h2{font-size:14px;margin:22px 0 6px;color:var(--aas-text)}
+main ul{padding-left:18px;margin:4px 0}
+kbd{font:12px var(--aas-font-mono);padding:0 5px;border:1px solid var(--aas-line-strong);border-radius:4px;background:var(--aas-panel-2)}
+.letter{display:inline-flex;gap:8px;align-items:center;margin:6px 0;padding:8px 12px;border:1px dashed var(--aas-line-strong);border-radius:var(--aas-r-md);cursor:grab;background:var(--aas-panel-2);color:var(--aas-text)}
+</style></head><body>
+<div class="wrap">
+  <nav id="side" aria-label="Папки"></nav>
+  <main>
+    <h1>Папки: дерево и разделители</h1>
+    <p>Прототип для обсуждения. Всё кликается, данные выдуманные.</p>
+    <h2>Попробовать</h2>
+    <ul>
+      <li>Стрелка у папки сворачивает её подпапки. <kbd>⌥</kbd>+клик сворачивает всё дерево под ней.</li>
+      <li>Клик по заголовку «Почта», «Папки» или разделителю сворачивает весь блок.</li>
+      <li>Свёрнутое показывает сумму непрочитанных внутри (серый счётчик), чтобы ничего не потерялось.</li>
+      <li>Правый клик по папке: перенести в другой разделитель. Или перетащите папку на заголовок разделителя.</li>
+      <li>Двойной клик по разделителю: переименовать. Максимум три.</li>
+      <li>С клавиатуры: <kbd>←</kbd> свернуть, <kbd>→</kbd> развернуть, <kbd>↑</kbd><kbd>↓</kbd> ходить.</li>
+    </ul>
+    <h2>Автораскрытие при перетаскивании письма</h2>
+    <p>Потащите это «письмо» и задержите над свёрнутой папкой или разделителем на полсекунды: раскроется, как в Finder.</p>
+    <div class="letter" draggable="true" id="letter">✉ Счёт за сентябрь</div>
+  </main>
+</div>
+<script>
+const GC = ['#3b7ddd', '#d9822b', '#2e9c6a'];
+const F = [ // [id, parent, name, unread]
+  ['inbox', 0, 'Входящие', 12], ['drafts', 0, 'Черновики', 0], ['sent', 0, 'Отправленные', 0], ['trash', 0, 'Удалённые', 0],
+  ['as', 'own', 'Альфа-Селлер', 3], ['as1', 'as', 'Договоры', 2], ['as2', 'as', 'Счета', 0], ['as21', 'as2', '2025', 0], ['as22', 'as2', '2026', 1],
+  ['buh', 'own', 'Бухгалтерия', 0], ['prj', 'own', 'Проекты', 0], ['prj1', 'prj', 'AAS mail', 4], ['prj2', 'prj', 'Ktalk', 0],
+  ['news', 'own', 'Рассылки', 17], ['n1', 'news', 'Jira', 0], ['n2', 'news', 'Confluence', 9],
+  ['hr', 'own', 'HR', 0], ['a24', 'own', 'Архив 2024', 0], ['a25', 'own', 'Архив 2025', 0],
+];
+const by = Object.fromEntries(F.map(([id, p, name, n]) => [id, {id, p, name, n}]));
+const kids = p => F.filter(f => f[1] === p).map(f => by[f[0]]);
+const sum = f => f.n + kids(f.id).reduce((s, k) => s + sum(k), 0);
+let groups = [{name: 'Работа', ids: ['as', 'buh', 'prj']}, {name: 'Шум', ids: ['news']}, {name: 'Архив', ids: ['a24', 'a25']}];
+const shut = new Set(['as2', 'n0', 'g2']);  // folder ids and section/group keys
+let cur = 'inbox', menu = null, renaming = null;
+const esc = s => s.replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const badge = (n, isSum) => n ? `<span class="badge${isSum ? ' sum' : ''}" title="${isSum ? 'Непрочитанных внутри свёрнутого' : 'Непрочитанных'}">${n > 99 ? '99+' : n}</span>` : '';
+
+function row(f, d) {
+  const ks = kids(f.id), closed = shut.has(f.id);
+  const tw = ks.length ? `<button class="tw${closed ? ' shut' : ''}" data-tw="${f.id}" tabindex="-1" aria-label="${closed ? 'Развернуть' : 'Свернуть'}"><span class="chev"></span></button>` : '<span class="tw"></span>';
+  const n = closed ? sum(f) : f.n;
+  let h = `<div class="f${f.id === cur ? ' on' : ''}" data-id="${f.id}" draggable="${f.p !== 0}" role="treeitem" tabindex="0"${ks.length ? ` aria-expanded="${!closed}"` : ''} style="padding-left:${2 + d * 14}px">${tw}<span class="nm">${esc(f.name)}</span>${badge(closed && n !== f.n ? n : f.n, closed && n !== f.n)}</div>`;
+  if (ks.length) h += `<div class="kids${closed ? ' shut' : ''}" role="group"><div>${ks.map(k => row(k, d + 1)).join('')}</div></div>`;
+  return h;
+}
+function block(key, title, list, extra = '') {
+  const closed = shut.has(key), n = list.reduce((s, f) => s + sum(f), 0);
+  return `<div class="sec${extra ? ' grp' : ''}${closed ? ' shut' : ''}" data-sec="${key}" tabindex="0" role="button" aria-expanded="${!closed}"${extra}>
+    <span class="chev"></span><span class="nm">${title}</span>${closed ? badge(n, true) : ''}${key[0] === 'g' ? `<button class="more" data-more="${key}" aria-label="Действия с разделителем">⋯</button>` : ''}</div>
+    <div class="kids${closed ? ' shut' : ''}"><div role="tree">${list.map(f => row(f, 0)).join('')}</div></div>`;
+}
+function render() {
+  const own = kids('own'), inG = new Set(groups.flatMap(g => g.ids));
+  let h = `<div class="total">Непрочитанные${badge(F.reduce((s, f) => s + (f[1] !== 0 || f[0] === 'inbox' ? f[3] : 0), 0))}</div>`;
+  h += block('n0', 'Избранные', [by.inbox]);
+  h += block('n1', 'Почта', kids(0));
+  h += block('n2', 'Папки', own.filter(f => !inG.has(f.id)));
+  groups.forEach((g, i) => {
+    const title = renaming === i ? `<input data-ren="${i}" value="${esc(g.name)}" maxlength="24">` : esc(g.name);
+    h += block('g' + i, title, g.ids.map(id => by[id]), ` style="--g:${GC[i]}" data-g="${i}"`);
+  });
+  h += `<div class="tools"><button class="btn">+ Папка</button><button class="btn" id="addg"${groups.length >= 3 ? ' disabled title="Не больше трёх разделителей"' : ''}>+ Разделитель</button></div>`;
+  side.innerHTML = h;
+  const inp = side.querySelector('[data-ren]');
+  if (inp) { inp.focus(); inp.select(); const done = () => { groups[renaming].name = inp.value.trim() || groups[renaming].name; renaming = null; render(); };
+    inp.onblur = done; inp.onkeydown = e => { if (e.key === 'Enter') done(); if (e.key === 'Escape') { renaming = null; render(); } }; inp.onclick = e => e.stopPropagation(); }
+}
+const side = document.getElementById('side');
+function toggle(id, deep) {
+  const open = shut.has(id);
+  const walk = f => { open ? shut.delete(f.id) : shut.add(f.id); if (deep) kids(f.id).forEach(walk); };
+  by[id] ? walk(by[id]) : (open ? shut.delete(id) : shut.add(id));
+  render(); side.querySelector(`[data-id="${id}"],[data-sec="${id}"]`)?.focus();
+}
+function closeMenu() { menu?.remove(); menu = null; }
+function openMenu(x, y, items) {
+  closeMenu(); menu = document.createElement('div'); menu.className = 'menu';
+  menu.innerHTML = items.map((it, i) => it === '-' ? '<hr>' : `<button data-i="${i}"${it.off ? ' disabled' : ''}>${it.sw ? `<span class="sw" style="--g:${it.sw}"></span>` : ''}${it.t}</button>`).join('');
+  document.body.append(menu);
+  menu.style.left = Math.min(x, innerWidth - menu.offsetWidth - 8) + 'px'; menu.style.top = Math.min(y, innerHeight - menu.offsetHeight - 8) + 'px';
+  menu.onclick = e => { const b = e.target.closest('[data-i]'); if (b && !b.disabled) { items[b.dataset.i].do(); closeMenu(); } };
+}
+function moveTo(id, gi) {  // gi = -1: back to «Папки»
+  groups.forEach(g => g.ids = g.ids.filter(x => x !== id));
+  if (gi >= 0) { groups[gi].ids.push(id); groups[gi].ids.sort((a, b) => by[a].name.localeCompare(by[b].name, 'ru')); shut.delete('g' + gi); }
+  render();
+}
+const topOf = id => { let f = by[id]; while (f.p !== 'own' && f.p !== 0) f = by[f.p]; return f; };
+function addGroup(withId) {
+  if (groups.length >= 3) return;
+  groups.push({name: 'Новый разделитель', ids: []}); renaming = groups.length - 1;
+  if (withId) moveTo(withId, groups.length - 1); else render();
+}
+
+side.addEventListener('click', e => {
+  const tw = e.target.closest('[data-tw]'); if (tw) { e.stopPropagation(); return toggle(tw.dataset.tw, e.altKey); }
+  const more = e.target.closest('[data-more]');
+  if (more) { e.stopPropagation(); const i = +more.dataset.more.slice(1), r = more.getBoundingClientRect();
+    return openMenu(r.left, r.bottom + 4, [{t: 'Переименовать', do: () => { renaming = i; render(); }},
+      {t: 'Удалить разделитель', do: () => { groups.splice(i, 1); render(); }}]); }
+  if (e.target.id === 'addg') return addGroup();
+  const sec = e.target.closest('[data-sec]'); if (sec) return toggle(sec.dataset.sec);
+  const f = e.target.closest('[data-id]'); if (f) { cur = f.dataset.id; render(); side.querySelector(`[data-id="${cur}"]`).focus(); }
+});
+side.addEventListener('dblclick', e => { const g = e.target.closest('[data-g]'); if (g) { renaming = +g.dataset.g; render(); } });
+side.addEventListener('contextmenu', e => {
+  const f = e.target.closest('[data-id]'); if (!f || by[f.dataset.id].p === 0) return;
+  e.preventDefault(); const t = topOf(f.dataset.id), gi = groups.findIndex(g => g.ids.includes(t.id));
+  openMenu(e.clientX, e.clientY, [
+    ...groups.map((g, i) => ({t: (i === gi ? '✓ ' : '') + 'В «' + esc(g.name) + '»', sw: GC[i], off: i === gi, do: () => moveTo(t.id, i)})),
+    {t: 'В «Папки» (без разделителя)', off: gi < 0, do: () => moveTo(t.id, -1)}, '-',
+    {t: 'Новый разделитель с «' + esc(t.name) + '»', off: groups.length >= 3, do: () => addGroup(t.id)},
+  ]);
+});
+document.addEventListener('click', e => { if (menu && !menu.contains(e.target)) closeMenu(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+// keyboard tree navigation
+side.addEventListener('keydown', e => {
+  const el = e.target.closest('[data-id],[data-sec]'); if (!el || e.target.tagName === 'INPUT') return;
+  const id = el.dataset.id || el.dataset.sec, has = el.dataset.sec || kids(id).length;
+  if (e.key === 'ArrowLeft' && has && !shut.has(id)) { e.preventDefault(); toggle(id); }
+  else if (e.key === 'ArrowRight' && has && shut.has(id)) { e.preventDefault(); toggle(id); }
+  else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault(); const all = [...side.querySelectorAll('[data-id],[data-sec]')].filter(x => !x.closest('.kids.shut'));
+    all[all.indexOf(el) + (e.key === 'ArrowDown' ? 1 : -1)]?.focus();
+  } else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
+});
+// drag: folders onto group headers; the letter spring-opens collapsed things
+let dragId = null, springT = null, springEl = null;
+side.addEventListener('dragstart', e => { const f = e.target.closest('[data-id]'); if (f) { dragId = topOf(f.dataset.id).id; f.classList.add('dragging'); } });
+document.getElementById('letter').addEventListener('dragstart', e => { dragId = null; e.dataTransfer.setData('text/plain', 'letter'); });
+document.addEventListener('dragend', () => { dragId = null; clearTimeout(springT); side.querySelectorAll('.drop,.dragging').forEach(x => x.classList.remove('drop', 'dragging')); });
+side.addEventListener('dragover', e => {
+  const t = e.target.closest('[data-g],[data-sec],[data-id]'); if (!t) return;
+  const key = t.dataset.id || t.dataset.sec;
+  if (dragId ? t.dataset.g != null || t.dataset.sec === 'n2' : t.dataset.id) { e.preventDefault(); t.classList.add('drop'); }
+  if (springEl !== t) { clearTimeout(springT); springEl = t; if (shut.has(key)) springT = setTimeout(() => { shut.delete(key); render(); }, 600); }
+});
+side.addEventListener('dragleave', e => { e.target.closest?.('.drop')?.classList.remove('drop'); });
+side.addEventListener('drop', e => {
+  e.preventDefault(); const t = e.target.closest('[data-g],[data-sec],[data-id]');
+  if (dragId && t) { if (t.dataset.g != null) moveTo(dragId, +t.dataset.g); else if (t.dataset.sec === 'n2') moveTo(dragId, -1); }
+});
+render();
+</script>
+</body></html>

@@ -905,3 +905,14 @@ test('letter editor: pasted styles and links keep only what mail clients render'
   assert.equal(t.match(/<tr>/g).length, 2);
   assert.equal(t.match(/<td /g).length, 6);
 });
+
+test('foldRows hides the subtree of a collapsed folder, nothing else', () => {
+  const {foldRows} = load(['foldRows']);
+  const r = (id, d) => [{folder_id: id}, d];
+  const rows = [r('a', 0), r('a1', 1), r('a11', 2), r('a2', 1), r('b', 0), r('b1', 1)];
+  const ids = shut => plain(foldRows(rows, id => shut.includes(id))).map(([f]) => f.folder_id);
+  assert.deepEqual(ids([]), ['a', 'a1', 'a11', 'a2', 'b', 'b1']);
+  assert.deepEqual(ids(['a']), ['a', 'b', 'b1']);
+  assert.deepEqual(ids(['a1']), ['a', 'a1', 'a2', 'b', 'b1']);
+  assert.deepEqual(ids(['a1', 'b']), ['a', 'a1', 'a2', 'b']);
+});

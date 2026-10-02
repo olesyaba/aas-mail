@@ -42,6 +42,19 @@ class PrefsTest(unittest.TestCase):
         self.assertEqual(webapp.load_prefs(), out)
         self.assertEqual(os.stat(webapp.PREFS_PATH).st_mode & 0o777, 0o600)
 
+    def test_folder_sidebar_prefs(self):
+        out = webapp.update_prefs({
+            "folders_collapsed": ["main:7", "main:#mail", 3], "folders_hidden": "main:1",
+            "folder_groups": {"main": [{"name": "Работа", "ids": ["4", 5], "shut": True}, {"name": "", "shut": 1, "c": 2}, "junk",
+                                       {"name": "a"}, {"name": "b"}], "seller": "junk"},
+        })
+        self.assertEqual(out["folders_collapsed"], ["main:7", "main:#mail"])
+        self.assertEqual(out["folders_hidden"], [])  # not a list: ignored
+        self.assertEqual(out["folder_groups"], {"main": [{"name": "Работа", "ids": ["4"], "shut": True, "c": 0},
+                                                         {"name": "Разделитель", "ids": [], "shut": False, "c": 2},
+                                                         {"name": "a", "ids": [], "shut": False, "c": 2}]})
+        self.assertEqual(webapp.load_prefs(), out)
+
     def test_scheduler_prefs(self):
         out = webapp.update_prefs({"rooms": [{"name": "Байкал", "address": "baikal@x.ru"}, {"name": "x", "address": "nope"}, 5],
                                    "sched_cons": {"lunch": False, "evil": 1}})

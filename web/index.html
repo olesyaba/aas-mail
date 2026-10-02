@@ -816,7 +816,7 @@ function fmtRange(s, e, allDay = false, now = new Date()) {
 const icon = (name, size = 16) => `<svg class="aas-ic" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
 /* ---------- preferences (kept on the server) ---------- */
-let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 1, cal_view: 'week', links: [], favorite_folders: [], theme: 'system', mail_sound: 'notice14', mail_window: 5, mail_window_seller: 5, mail_sort: 'date_desc', mail_sort_seller: 'date_desc', update_mode: 'auto', unified_cal: false, rooms: [], sched_cons: {not_before_10: true, lunch: true, fri_late: true, room: true}};
+let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 1, cal_view: 'week', links: [], favorite_folders: [], folders_collapsed: [], folders_hidden: [], folder_groups: {}, theme: 'system', mail_sound: 'notice14', mail_window: 5, mail_window_seller: 5, mail_sort: 'date_desc', mail_sort_seller: 'date_desc', update_mode: 'auto', unified_cal: false, rooms: [], sched_cons: {not_before_10: true, lunch: true, fri_late: true, room: true}};
 /* Period and order are per-account (Bank ⇄ Seller keep their own): main on the base
    key, the Seller mailbox on the *_seller key — same split as signature/signature2. */
 const winKeyFor = a => a === 'main' ? 'mail_window' : 'mail_window_seller';
@@ -1198,6 +1198,65 @@ async function toggleFav(fid) {
   if (set.has(k)) set.delete(k); else set.add(k);
   await savePrefs({favorite_folders: [...set]});
   renderFolders(folderItems);
+}
+/* Folder sidebar state, per mailbox, in prefs (so it follows to the phone):
+   collapsed folders and sections («acct:id», «acct:#mail»), folders tucked under «Ещё»,
+   and up to three named, colour-tagged dividers that hold top-level folders. */
+const GROUP_MAX = 3;
+let renamingGroup = -1, dragFolder = null;
+const isShut = k => (prefs.folders_collapsed || []).includes(favKey(k));
+function setShut(keys, shut) {
+  const s = new Set(prefs.folders_collapsed || []);
+  keys.forEach(k => shut ? s.add(favKey(k)) : s.delete(favKey(k)));
+  savePrefs({folders_collapsed: [...s]});
+}
+const isHidden = fid => (prefs.folders_hidden || []).includes(favKey(fid));
+function setHidden(fid, on) {
+  const s = new Set(prefs.folders_hidden || []);
+  on ? s.add(favKey(fid)) : s.delete(favKey(fid));
+  savePrefs({folders_hidden: [...s]}); renderFolders(folderItems);
+  toast(on ? 'Папка убрана в «Ещё» внизу списка' : 'Папка возвращена на место');
+}
+const folderGroups = () => (prefs.folder_groups || {})[ACCT] || [];
+function saveGroups(gs) { savePrefs({folder_groups: {...(prefs.folder_groups || {}), [ACCT]: gs}}); renderFolders(folderItems); }
+function toggleSec(key) {
+  if (key.startsWith('#g')) { const i = +key.slice(2); return saveGroups(folderGroups().map((g, j) => j === i ? {...g, shut: !g.shut} : g)); }
+  setShut([key], !isShut(key)); renderFolders(folderItems);
+}
+function moveToGroup(fid, i) {  // i = -1: back to «Папки»
+  const gs = folderGroups().map(g => ({...g, ids: g.ids.filter(x => x !== fid)}));
+  if (gs[i]) { gs[i].ids.push(fid); gs[i].shut = false; }
+  saveGroups(gs);
+}
+function addGroup(fid) {
+  const gs = folderGroups().map(g => ({...g, ids: g.ids.filter(x => x !== fid)}));
+  if (gs.length >= GROUP_MAX) return;
+  const c = [0, 1, 2].find(c => !gs.some(g => g.c === c));  // a colour no other divider wears
+  gs.push({name: 'Новый разделитель', ids: fid ? [fid] : [], shut: false, c});
+  renamingGroup = gs.length - 1; saveGroups(gs);
+}
+/** Rows [[folder, depth]] in tree order → the visible ones: a collapsed folder's subtree is skipped. */
+function foldRows(rows, shut) {
+  let below = Infinity;
+  return rows.filter(([f, d]) => {
+    if (d > below) return false;
+    below = shut(f.folder_id) ? d : Infinity;
+    return true;
+  });
+}
+function folderMenu(fid, anchor) {
+  const f = folders.find(x => x.folder_id === fid); if (!f || String(f.type) === '2') return;
+  const own = x => ['1', '12'].includes(String(x?.type));
+  const items = [];
+  if (own(f) && !own(folders.find(x => x.folder_id === f.parent_id)) && !isHidden(fid)) {  // a top-level own folder
+    const gs = folderGroups(), at = gs.findIndex(g => g.ids.includes(fid));
+    gs.forEach((g, i) => { if (i !== at) items.push({label: `В разделитель «${g.name}»`, run: () => moveToGroup(fid, i)}); });
+    if (at >= 0) items.push({label: 'Убрать из разделителя', run: () => moveToGroup(fid, -1)});
+    if (gs.length < GROUP_MAX) items.push({label: 'Новый разделитель с этой папкой', run: () => addGroup(fid)});
+  }
+  items.push(isHidden(fid) ? {label: 'Вернуть из «Ещё»', run: () => setHidden(fid, false)} : {label: 'Скрыть в «Ещё»', run: () => setHidden(fid, true)});
+  if (String(f.type) === '12') items.push({label: 'Удалить папку…', danger: true, run: () => confirmFolderDelete(fid)});
+  openMenu(anchor, items);
 }
 function showView(v, acctId = 'main') {
   const was = view + ':' + ACCT, restored = acctId === ACCT || !!acctStates[acctId];
@@ -1596,21 +1655,47 @@ function renderFolders(items) {
   const known = new Set(out.map(([f]) => f.folder_id));
   folders.filter(f => !known.has(f.folder_id)).forEach(f => out.push([f, 0]));
   folderTree = out;
+  const byId = new Map(folders.map(f => [f.folder_id, f]));
+  const kidsOf = new Map();
+  folders.forEach(f => { const p = f.parent_id || '0'; kidsOf.set(p, [...(kidsOf.get(p) || []), f]); });
+  const sub = fid => (kidsOf.get(fid) || []).reduce((s, k) => s + (counts[k.folder_id] || 0) + sub(k.folder_id), 0);
+  // A folder hidden under «Ещё» takes its subfolders with it.
+  const hid = f => { for (let p = f; p; p = byId.get(p.parent_id)) if (isHidden(p.folder_id)) return true; return false; };
   const favs = out.filter(([f]) => isFav(f.folder_id));
   // Mailbox folders (Входящие, Черновики, Отправленные, Удалённые, Исходящие) first,
   // then the user's own tree; a folder kept under Входящие is indented from «Папки».
   const own = f => String(f.type) === '12' || String(f.type) === '1';
-  const byId = new Map(folders.map(f => [f.folder_id, f]));
   const ownDepth = f => { let d = 0, p = byId.get(f.parent_id); while (p) { if (own(p)) d++; p = byId.get(p.parent_id); } return d; };
-  const sys = out.filter(([f]) => !isFav(f.folder_id) && !own(f));
-  const mine = out.filter(([f]) => !isFav(f.folder_id) && own(f)).map(([f]) => [f, ownDepth(f)]);
-  const row = ([f, d]) => {
-    const n = counts[f.folder_id] || 0, more = partial.has(f.folder_id);
-    const badge = n ? `<span class="aas-badge" title="${more ? 'Не меньше ' + n + ' непрочитанных — папка ещё догружается' : n + ' непрочитанных за период'}">${n > 99 ? '99+' : n}${more && n <= 99 ? '+' : ''}</span>` : '';
-    const pin = `<button class="aas-folder__pin ${isFav(f.folder_id) ? 'on' : ''}" data-pin="${esc(f.folder_id)}" tabindex="-1" title="${isFav(f.folder_id) ? 'Убрать из избранного' : 'В избранное'}" aria-label="Избранное">${icon('star', 13)}</button>`;
-    // AAS-24-08: only the user's own folders (EAS type 12) can be deleted.
-    const del = String(f.type) === '12' ? `<button class="aas-folder__del" data-del="${esc(f.folder_id)}" title="Удалить папку" aria-label="Удалить папку «${esc(f.name)}»">${icon('trash', 13)}</button>` : '';
-    return `<div class="aas-folder ${f.folder_id === curFolder ? 'on' : ''}" data-id="${esc(f.folder_id)}" role="button" tabindex="0"${f.folder_id === curFolder ? ' aria-current="true"' : ''} style="padding-left:${10 + d * 16}px" title="${esc(f.name)}"><span class="aas-folder__name">${esc(f.name)}</span>${badge}${del}${pin}</div>`;
+  const sys = out.filter(([f]) => !isFav(f.folder_id) && !own(f) && !hid(f));
+  const mine = out.filter(([f]) => !isFav(f.folder_id) && own(f) && !hid(f)).map(([f]) => [f, ownDepth(f)]);
+  const hidden = out.filter(([f]) => !isFav(f.folder_id) && isHidden(f.folder_id));
+  // Up to three named dividers: each holds top-level folders, their subtrees follow them.
+  const groups = folderGroups(), inGroup = new Map();
+  groups.forEach((g, i) => g.ids.forEach(id => inGroup.set(id, i)));
+  const buckets = groups.map(() => []), loose = [];
+  let to = loose;
+  mine.forEach(r => { if (r[1] === 0) to = inGroup.has(r[0].folder_id) ? buckets[inGroup.get(r[0].folder_id)] : loose; to.push(r); });
+  const row = ([f, d], tree) => {
+    const id = f.folder_id, has = tree && kidsOf.has(id), shut = has && isShut(id);
+    const mineN = counts[id] || 0, n = shut ? mineN + sub(id) : mineN, more = partial.has(id), sum = n !== mineN;
+    const badge = n ? `<span class="aas-badge${sum ? ' aas-badge--sum' : ''}" title="${sum ? n + ' непрочитанных вместе с вложенными папками' : more ? 'Не меньше ' + n + ' непрочитанных — папка ещё догружается' : n + ' непрочитанных за период'}">${n > 99 ? '99+' : n}${more && n <= 99 ? '+' : ''}</span>` : '';
+    const pin = `<button class="aas-folder__pin ${isFav(id) ? 'on' : ''}" data-pin="${esc(id)}" tabindex="-1" title="${isFav(id) ? 'Убрать из избранного' : 'В избранное'}" aria-label="Избранное">${icon('star', 13)}</button>`;
+    const tw = has ? `<button class="aas-folder__tw" data-tw="${esc(id)}" tabindex="-1" aria-label="${shut ? 'Развернуть' : 'Свернуть'} (⌥ — вместе с вложенными)"><span class="aas-chev"></span></button>` : '<span class="aas-folder__tw"></span>';
+    // Inbox can't be hidden, grouped or deleted — nothing to put in its menu.
+    const menu = String(f.type) !== '2' ? `<button class="aas-folder__more" data-fmenu="${esc(id)}" tabindex="-1" title="Действия с папкой" aria-label="Действия с папкой «${esc(f.name)}»">${icon('more', 14)}</button>` : '';
+    const drag = tree && d === 0 ? ' draggable="true"' : '';
+    return `<div class="aas-folder${shut ? ' shut' : ''} ${id === curFolder ? 'on' : ''}" data-id="${esc(id)}" role="button" tabindex="0"${id === curFolder ? ' aria-current="true"' : ''}${has ? ` aria-expanded="${!shut}"` : ''}${drag} style="padding-left:${2 + d * 14}px" title="${esc(f.name)}">${tw}<span class="aas-folder__name">${esc(f.name)}</span>${badge}${menu}${pin}</div>`;
+  };
+  // Section / divider header; a collapsed one still shows how much is unread inside.
+  const sec = (key, title, rows, o = {}) => {
+    const shut = o.g ? o.g.shut : key === '#more' ? !isShut(key) : isShut(key);  // «Ещё» starts closed
+    const n = shut ? rows.reduce((s, [f]) => s + (counts[f.folder_id] || 0), 0) : 0;
+    const name = o.rename ? `<input class="aas-folder-sec__ren" data-ren="${o.i}" value="${esc(title)}" maxlength="24" aria-label="Название разделителя">` : `<span class="aas-folder-sec__nm">${esc(title)}</span>`;
+    const grp = o.g ? ` aas-folder-sec--grp" data-g="${o.i}" style="--g:var(--aas-g${o.g.c ?? o.i})` : '';
+    let h = `<div class="aas-folder-sec${shut ? ' shut' : ''}${grp}" data-sec="${key}" role="button" tabindex="0" aria-expanded="${!shut}"><span class="aas-chev"></span>${name}${n ? `<span class="aas-badge aas-badge--sum" title="${n} непрочитанных в свёрнутом">${n > 99 ? '99+' : n}</span>` : ''}${o.g ? `<button class="aas-folder-sec__more" data-gmenu="${o.i}" tabindex="-1" aria-label="Действия с разделителем">${icon('more', 14)}</button>` : ''}</div>`;
+    if (!shut) h += foldRows(rows, id => kidsOf.has(id) && isShut(id)).map(r => row(r, o.tree)).join('');
+    if (!shut && o.g && !rows.length) h += `<div class="aas-folder-hint">Перетащите сюда папку</div>`;
+    return h;
   };
   let html = '';
   const total = u.total || 0;
@@ -1618,19 +1703,74 @@ function renderFolders(items) {
   // counted total (e.g. one unread) reads «1», not a misleading «1+».
   const totalMore = total > 0 && [...partial].some(f => (counts[f] || 0) > 0);
   html += `<div class="aas-folder-total" title="Входящие и свои папки, за выбранный период (без Отправленных, Черновиков и Удалённых)">Непрочитанные<span class="aas-badge"${total ? '' : ' hidden'}>${total > 999 ? '999+' : total}${totalMore && total <= 999 ? '+' : ''}</span></div>`;
-  if (favs.length) html += `<div class="aas-folder-sec">Избранные</div>` + favs.map(([f]) => row([f, 0])).join('');
-  if (sys.length) html += `<div class="aas-folder-sec">Почта</div>` + sys.map(([f]) => row([f, 0])).join('');
-  if (mine.length) html += `<div class="aas-folder-sec">Папки</div>` + mine.map(row).join('');
-  html += `<div class="aas-folder-tools"><button class="aas-btn" id="newfolder" title="Создать новую папку">${icon('plus', 14)}Папка</button></div>`;
+  if (favs.length) html += sec('#fav', 'Избранные', favs.map(([f]) => [f, 0]));
+  if (sys.length) html += sec('#mail', 'Почта', sys.map(([f]) => [f, 0]));
+  if (loose.length) html += sec('#own', 'Папки', loose, {tree: true});
+  groups.forEach((g, i) => { html += sec('#g' + i, g.name, buckets[i], {g, i, tree: true, rename: renamingGroup === i}); });
+  if (hidden.length) html += sec('#more', `Ещё (${hidden.length})`, hidden.map(([f]) => [f, 0]));
+  html += `<div class="aas-folder-tools"><button class="aas-btn" id="newfolder" title="Создать новую папку">${icon('plus', 14)}Папка</button><button class="aas-btn" id="newgroup"${groups.length >= GROUP_MAX ? ` disabled title="Не больше ${GROUP_MAX} разделителей"` : ' title="Разделитель: свой сворачиваемый блок папок"'}>${icon('plus', 14)}Разделитель</button></div>`;
   $('#folders').innerHTML = html;
   paintListHead();
+  const subtree = id => [id, ...(kidsOf.get(id) || []).flatMap(k => subtree(k.folder_id))].filter(x => kidsOf.has(x));
+  const twist = (id, deep) => { setShut(deep ? subtree(id) : [id], !isShut(id)); renderFolders(folderItems); $(`#folders [data-id="${CSS.escape(id)}"]`)?.focus(); };
+  const visible = () => [...document.querySelectorAll('#folders .aas-folder[data-id], #folders [data-sec]')];
+  const arrows = (e, el, has, shut, flip) => {
+    if ((e.key === 'ArrowLeft' && has && !shut) || (e.key === 'ArrowRight' && has && shut)) { e.preventDefault(); flip(); return true; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const all = visible(); all[all.indexOf(el) + (e.key === 'ArrowDown' ? 1 : -1)]?.focus(); return true; }
+    return false;
+  };
   document.querySelectorAll('.aas-folder[data-id]').forEach(el => {
-    el.onclick = e => { if (e.target.closest('[data-pin],[data-del]')) return; openFolder(el.dataset.id); };
-    el.onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el) { e.preventDefault(); openFolder(el.dataset.id); } };
+    el.onclick = e => { if (e.target.closest('[data-pin],[data-del],[data-tw],[data-fmenu]')) return; openFolder(el.dataset.id); };
+    el.onkeydown = e => {
+      if (e.target !== el) return;
+      if (arrows(e, el, el.hasAttribute('aria-expanded'), el.classList.contains('shut'), () => twist(el.dataset.id, false))) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFolder(el.dataset.id); }
+    };
+    el.oncontextmenu = e => { e.preventDefault(); folderMenu(el.dataset.id, el); };
   });
+  document.querySelectorAll('[data-tw]').forEach(b => b.onclick = e => { e.stopPropagation(); twist(b.dataset.tw, e.altKey); });
+  document.querySelectorAll('[data-fmenu]').forEach(b => b.onclick = e => { e.stopPropagation(); folderMenu(b.dataset.fmenu, b); });
+  document.querySelectorAll('#folders [data-sec]').forEach(el => {
+    const key = el.dataset.sec, flip = () => { toggleSec(key); $(`#folders [data-sec="${key}"]`)?.focus(); };
+    el.onclick = e => { if (!e.target.closest('[data-gmenu],[data-ren]')) flip(); };
+    el.onkeydown = e => {
+      if (e.target !== el) return;
+      if (!arrows(e, el, true, el.classList.contains('shut'), flip) && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); flip(); }
+    };
+  });
+  document.querySelectorAll('[data-gmenu]').forEach(b => b.onclick = e => {
+    e.stopPropagation(); const i = +b.dataset.gmenu;
+    openMenu(b, [{label: 'Переименовать', run: () => { renamingGroup = i; renderFolders(folderItems); }},
+      {label: 'Удалить разделитель', danger: true, run: () => saveGroups(folderGroups().filter((_, j) => j !== i))}]);
+  });
+  document.querySelectorAll('[data-g]').forEach(el => el.ondblclick = () => { renamingGroup = +el.dataset.g; renderFolders(folderItems); });
+  const ren = $('#folders [data-ren]');
+  if (ren) {
+    ren.focus(); ren.select();
+    let done = false;
+    const finish = keep => {
+      if (done) return; done = true;
+      const i = renamingGroup; renamingGroup = -1;
+      const name = ren.value.trim();
+      if (keep && name) saveGroups(folderGroups().map((g, j) => j === i ? {...g, name} : g)); else renderFolders(folderItems);
+    };
+    ren.onblur = () => finish(true);
+    ren.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
+  }
+  // Drag: letters drop onto folders (move); a top-level folder drops onto a divider
+  // or «Папки». A letter held over a collapsed folder/section opens it (Finder-style).
+  let spring = null;
+  const springOpen = el => {
+    if (spring?.el === el) return;
+    clearTimeout(spring?.t); spring = null;
+    if (!el.classList.contains('shut')) return;
+    spring = {el, t: setTimeout(() => { spring = null; if (!dragKeys) return; el.dataset.sec ? toggleSec(el.dataset.sec) : twist(el.dataset.id, false); }, 600)};
+  };
   document.querySelectorAll('.aas-folder[data-id]').forEach(el => {
     const ok = () => dragKeys && el.dataset.id !== curFolder;
-    el.ondragover = e => { if (!ok()) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; el.classList.add('drop'); };
+    el.ondragstart = e => { if (!el.draggable) return; dragFolder = el.dataset.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', el.title); };
+    el.ondragend = () => { dragFolder = null; };
+    el.ondragover = e => { if (dragKeys) springOpen(el); if (!ok()) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; el.classList.add('drop'); };
     el.ondragleave = () => el.classList.remove('drop');
     el.ondrop = e => {
       el.classList.remove('drop'); if (!ok()) return; e.preventDefault();
@@ -1638,9 +1778,20 @@ function renderFolders(items) {
       guard(() => removeGroups(keys, el.dataset.id))();
     };
   });
+  document.querySelectorAll('#folders [data-sec]').forEach(el => {
+    const target = el.dataset.g != null ? +el.dataset.g : el.dataset.sec === '#own' ? -1 : null;
+    el.ondragover = e => {
+      if (dragKeys) springOpen(el);
+      if (!dragFolder || target === null) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = 'move'; el.classList.add('drop');
+    };
+    el.ondragleave = () => el.classList.remove('drop');
+    el.ondrop = e => { el.classList.remove('drop'); if (!dragFolder || target === null) return; e.preventDefault(); const id = dragFolder; dragFolder = null; moveToGroup(id, target); };
+  });
   fillBulkMove();
   document.querySelectorAll('[data-pin]').forEach(b => b.onclick = e => { e.stopPropagation(); toggleFav(b.dataset.pin); });
-  document.querySelectorAll('[data-del]').forEach(b => b.onclick = e => { e.stopPropagation(); confirmFolderDelete(b.dataset.del); });
+  const ng = $('#newgroup');
+  if (ng) ng.onclick = () => addGroup();
   const nf = $('#newfolder');
   if (nf) nf.onclick = guard(async () => {
     // window.prompt() silently returns null in the app's WKWebView — a real form instead.
@@ -1709,6 +1860,14 @@ function openFolder(id) {
   rememberFolder(id);
   clearTimeout(listRetry.t); clearInterval(listRetry.tick); listRetry.n = 0; listStale = '';
   curFolder = id; searchQ = ''; $('#search').value = '';
+  // Opened from search, a notification or a move: unfold the folders above it.
+  const up = []; let p = folders.find(f => f.folder_id === id);
+  let top = p;
+  while ((p = p && folders.find(f => f.folder_id === p.parent_id))) { top = p; if (isShut(p.folder_id)) up.push(p.folder_id); }
+  if (up.length) setShut(up, false);
+  const gs = folderGroups(), gi = gs.findIndex(g => g.shut && g.ids.includes(top?.folder_id));
+  if (gi >= 0) saveGroups(gs.map((g, j) => j === gi ? {...g, shut: false} : g));
+  else if (up.length) renderFolders(folderItems);
   // Drop the previous folder's letters at once, so a background render (auto-sync)
   // can't paint them under the new folder's title before its own list loads.
   allItems = []; nextCursor = null;
@@ -4044,7 +4203,7 @@ function eventForm(e, opts = {}) {
   document.addEventListener('mousedown', e => {
     if (document.body.classList.contains('aas-folders-open') && !e.target.closest('#folders, #foldtoggle')) set(false);
   });
-  $('#folders').addEventListener('click', e => { if (e.target.closest('.aas-folder[data-id]') && !e.target.closest('[data-pin],[data-del]')) set(false); });
+  $('#folders').addEventListener('click', e => { if (e.target.closest('.aas-folder[data-id]') && !e.target.closest('[data-pin],[data-del],[data-tw],[data-fmenu]')) set(false); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('aas-folders-open')) set(false); });
 })();
 

@@ -2611,6 +2611,12 @@ DEFAULT_PREFS = {
     "auto_sync": 1, "cal_view": "week", "links": [],
     # Pinned mail folders as "acct:folderId" strings (e.g. "main:42").
     "favorite_folders": [],
+    # Folder sidebar, same "acct:id" keys: collapsed folders/sections ("acct:#mail"),
+    # folders hidden under «Ещё», and up to three named dividers per account
+    # ({"main": [{"name": "Работа", "ids": ["42", …]}, …]}).
+    "folders_collapsed": [],
+    "folders_hidden": [],
+    "folder_groups": {},
     # Category name → "#RRGGBB". ActiveSync carries category names but not
     # Outlook's colour table, so colours are picked here (auto or by the user).
     "category_colors": {},
@@ -2643,6 +2649,21 @@ DEFAULT_PREFS = {
 }
 MAIL_SORTS = ("date_desc", "date_asc", "from", "subject")
 _prefs_lock = threading.Lock()
+KEY_LISTS = {"favorite_folders": 80, "folders_collapsed": 300, "folders_hidden": 200}
+
+
+def _clean_keys(v, cap: int) -> list:
+    return [str(x)[:80] for x in v if isinstance(x, str)][:cap]
+
+
+def _clean_groups(v: dict) -> dict:
+    # c = colour slot 0..2, kept when another divider is removed.
+    return {str(acct)[:20]: [{"name": str(g.get("name", ""))[:24] or "Разделитель",
+                              "ids": _clean_keys(g.get("ids") if isinstance(g.get("ids"), list) else [], 80),
+                              "shut": g.get("shut") is True,
+                              "c": g["c"] if g.get("c") in (0, 1, 2) and type(g["c"]) is int else i}
+                             for i, g in enumerate(x for x in gs if isinstance(x, dict)) if i < 3]
+            for acct, gs in list(v.items())[:4] if isinstance(gs, list)}
 
 
 def load_prefs() -> dict:
@@ -2654,8 +2675,10 @@ def load_prefs() -> dict:
     for k, v in saved.items():
         if k not in DEFAULT_PREFS:
             continue
-        if k == "favorite_folders" and isinstance(v, list):
-            out[k] = [str(x)[:80] for x in v if isinstance(x, str)][:80]
+        if k in KEY_LISTS and isinstance(v, list):
+            out[k] = _clean_keys(v, KEY_LISTS[k])
+        elif k == "folder_groups" and isinstance(v, dict):
+            out[k] = _clean_groups(v)
         elif type(v) is type(DEFAULT_PREFS[k]):
             out[k] = v
     return out
@@ -2667,10 +2690,13 @@ def update_prefs(patch: dict) -> dict:
         for k, v in (patch or {}).items():
             if k not in DEFAULT_PREFS:
                 continue
-            if k == "favorite_folders":
-                if not isinstance(v, list):
-                    continue
-                cur[k] = [str(x)[:80] for x in v if isinstance(x, str)][:80]
+            if k in KEY_LISTS:
+                if isinstance(v, list):
+                    cur[k] = _clean_keys(v, KEY_LISTS[k])
+                continue
+            if k == "folder_groups":
+                if isinstance(v, dict):
+                    cur[k] = _clean_groups(v)
                 continue
             if k.startswith("category_colors"):
                 if isinstance(v, dict):
