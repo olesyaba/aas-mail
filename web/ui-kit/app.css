@@ -2081,7 +2081,14 @@ body.one-pane .aas-rt-back { display: inline-flex; padding: 5px 8px; }
   body.reading #sect { display: none; }
   body.reading main { margin-bottom: 0; }
   #newbtn { bottom: calc(16px + var(--aas-tabbar) + env(safe-area-inset-bottom)); }
-  #search:focus, #search:not(:placeholder-shown) { flex-basis: 150px; width: 150px; }
+  /* Search open: the sync button steps aside so ⚙ stays on screen. */
+  .aas-topnav:has(#search:focus, #search:not(:placeholder-shown)) #syncbtn { display: none; }
+  #search:focus, #search:not(:placeholder-shown) { flex: 1 1 auto; width: auto; min-width: 0; }
+  /* Letter toolbar: seven 44px buttons fit 375px only with tight gaps. */
+  #rtools.aas-reader-tools { gap: 2px; padding: 6px 6px; overflow-x: auto; }
+  #rtools .aas-btn { padding: 5px 8px; }
+  /* Meeting «Участники» shares the attachment-chip class: a block here, not a row of three columns. */
+  details.aas-att { display: block; }
   /* Calendar: «+» sits in the header — a floating one would cover the «Итоги» cards. */
   body:has(#cal.on) #newbtn { position: static; width: 44px; height: 44px; box-shadow: none; }
 
