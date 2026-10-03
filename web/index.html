@@ -106,6 +106,7 @@ try {
       <button class="aas-btn aas-btn--icon" id="prev" title="Назад" aria-label="Назад"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><button class="aas-btn" id="today">Сегодня</button><button class="aas-btn aas-btn--icon" id="next" title="Вперёд" aria-label="Вперёд"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
       <h2 id="caltitle"></h2><span class="aas-spacer"></span>
       <div class="aas-calacc" id="calacc" hidden></div>
+      <button type="button" class="aas-btn aas-btn--sm" id="calstatsbtn" aria-pressed="false" title="Забавные итоги по календарю внизу сетки">Итоги</button>
       <button type="button" class="aas-btn aas-btn--sm" id="calboth" hidden aria-pressed="false" title="Встречи обоих ящиков в одной сетке">Оба календаря</button>
       <button type="button" class="aas-btn aas-btn--sm aas-btn--ghost" id="caloff" hidden title="Показать или свернуть часы вне рабочего дня">Всё время</button>
       <div class="aas-seg" id="calmode"><button data-m="day">День</button><button data-m="work">Раб. неделя</button><button data-m="week">Неделя</button></div>
@@ -113,6 +114,7 @@ try {
     <div id="weekwrap">
       <div id="weekhead"></div><div class="allday" id="allday"></div><div id="grid"></div>
     </div>
+    <div class="aas-calstats" id="calstats" hidden></div>
   </section>
 </main>
 <div id="ov"><div id="modal" class="aas-modal"></div></div>
@@ -821,7 +823,7 @@ function fmtRange(s, e, allDay = false, now = new Date()) {
 const icon = (name, size = 16) => `<svg class="aas-ic" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
 /* ---------- preferences (kept on the server) ---------- */
-let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 1, cal_view: 'week', links: [], favorite_folders: [], folders_collapsed: [], folders_hidden: [], folder_groups: {}, theme: 'system', mail_sound: 'notice14', mail_window: 5, mail_window_seller: 5, mail_sort: 'date_desc', mail_sort_seller: 'date_desc', update_mode: 'auto', unified_cal: false, cal_both: false, cal_new_acct: 'main', cal_last_acct: 'main', rooms: [], sched_cons: {not_before_10: true, lunch: true, fri_late: true, room: true}};
+let prefs = {signature: '', signature2: '', sig_replies: true, threads: true, auto_sync: 1, cal_view: 'week', links: [], favorite_folders: [], folders_collapsed: [], folders_hidden: [], folder_groups: {}, theme: 'system', mail_sound: 'notice14', mail_window: 5, mail_window_seller: 5, mail_sort: 'date_desc', mail_sort_seller: 'date_desc', update_mode: 'auto', unified_cal: false, cal_both: false, cal_new_acct: 'main', cal_last_acct: 'main', cal_stats: true, cal_stats_range: 'week', rooms: [], sched_cons: {not_before_10: true, lunch: true, fri_late: true, room: true}};
 /* Period and order are per-account (Bank ⇄ Seller keep their own): main on the base
    key, the Seller mailbox on the *_seller key — same split as signature/signature2. */
 const winKeyFor = a => a === 'main' ? 'mail_window' : 'mail_window_seller';
@@ -3479,8 +3481,153 @@ const loadCal = guard(async (quiet = false) => {
   if (j.truncated && view === 'cal' && calMoreTries++ < 30) calMoreT = setTimeout(() => { if (view === 'cal') loadCal(true); }, 5000);
   if (!j.truncated) calMoreTries = 0;
   $('#dot').className = 'aas-status-dot aas-status-dot--ok';
+  loadStats().catch(() => {});
 });
 let calMoreT = null, calMoreTries = 0;
+
+/* ---------- fun facts under the calendar: today, and last week / last 30 days ---------- */
+const durText = m => { m = Math.round(m); const h = Math.floor(m / 60), r = m % 60; return h ? `${h} ч${r ? ' ' + r + ' мин' : ''}` : `${r} мин`; };
+const DAILY_RX = /дейли|daily|стендап|stand-?up|статус/i;
+const DOW_IN = ['в воскресенье', 'в понедельник', 'во вторник', 'в среду', 'в четверг', 'в пятницу', 'в субботу'];
+/**
+ * Fun facts from meetings in [from, to): kind «day» speaks about today (now matters:
+ * what is still ahead), «week» / «month» about a finished period. `mine` = my addresses,
+ * so I'm never my own «неразлучник». Returns [{k, big, txt, sub}], never empty.
+ */
+function calFacts(list, kind, from, to, now = new Date(), mine = new Set()) {
+  const ws = prefs.work_start ?? 9, we = prefs.work_end ?? 18, day = kind === 'day';
+  const inR = list.filter(e => !e.is_all_day && e.s < to && e.e > from);
+  const live = inR.filter(e => !isCancelled(e) && e.busy_status !== 'free').sort((a, b) => a.s - b.s);
+  const mins = e => Math.max(0, (Math.min(e.e, to) - Math.max(e.s, from)) / 6e4);
+  const total = live.reduce((a, e) => a + mins(e), 0), n = live.length;
+  const hm = d => `${d.getHours()}:${pad(d.getMinutes())}`;
+  const out = [];
+  if (day) out.push(n ? {k: 'План на день', big: `${n} ${plural(n, 'встреча', 'встречи', 'встреч')}`, txt: `${durText(total)} во встречах`,
+    sub: total >= 300 ? 'Насыщенно. Берегите голос' : total <= 90 ? 'Лёгкий день' : 'Обычный рабочий ритм'}
+    : {k: 'План на день', big: 'Свободно', txt: 'ни одной встречи', sub: 'Редкий день — можно сделать что-то большое'});
+  else {
+    const days = Math.max(1, Math.round((to - from) / 864e5 * 5 / 7)), pct = Math.round(total / (days * (we - ws) * 60) * 100);
+    out.push({k: 'Во встречах', big: durText(total), txt: `${n} ${plural(n, 'встреча', 'встречи', 'встреч')}, ${pct}% рабочего времени`,
+      sub: pct >= 50 ? 'Работа случается между созвонами' : pct >= 25 ? 'Баланс почти найден' : 'Есть время и подумать'});
+  }
+  // The person in most of my meeting time (organizer or attendee, rooms aside).
+  const ppl = new Map();
+  live.forEach(e => {
+    const seen = new Set();
+    [e.organizer, ...(e.attendees || [])].forEach(a => {
+      const ad = (a?.address || '').toLowerCase();
+      if (!ad || seen.has(ad) || mine.has(ad) || a.type === 'resource') return;
+      seen.add(ad); const p = ppl.get(ad) || {name: a.name || a.address, m: 0, n: 0}; p.m += mins(e); p.n++; ppl.set(ad, p);
+    });
+  });
+  const buddy = [...ppl.values()].sort((a, b) => b.m - a.m)[0];
+  if (buddy && buddy.n >= 2) out.push({k: day ? 'Сегодня чаще всех' : 'Неразлучники', big: durText(buddy.m), txt: `вместе на встречах: ${buddy.name}`,
+    sub: day ? `${buddy.n} ${plural(buddy.n, 'встреча', 'встречи', 'встреч')} на двоих` : 'Не надоели ещё друг другу?'});
+  // Longest run without a 5-minute break.
+  let best = 0, bestAt = null, st = null, en = null;
+  live.forEach(e => {
+    if (st && e.s - en < 5 * 6e4 && e.s.toDateString() === st.toDateString()) en = new Date(Math.max(en, e.e));
+    else { st = e.s; en = e.e; }
+    if (en - st > best) { best = en - st; bestAt = st; }
+  });
+  if (best >= 90 * 6e4) out.push({k: 'Марафон без перерыва', big: durText(best / 6e4),
+    txt: day ? `подряд с ${hm(bestAt)}` : `подряд, ${bestAt.toLocaleDateString('ru-RU', {weekday: 'long', day: 'numeric', month: 'long'})}`, sub: 'Вода и печенька заслужены'});
+  if (day) {
+    // The longest free stretch still ahead in the working day.
+    const d0 = new Date(from), dEnd = new Date(from); d0.setHours(ws, 0, 0, 0); dEnd.setHours(we, 0, 0, 0);
+    let cur = new Date(Math.max(now, d0)), gap = 0, gapAt = null;
+    if (cur < dEnd) {
+      [...live, {s: dEnd, e: dEnd}].forEach(e => { if (e.s - cur > gap) { gap = e.s - cur; gapAt = cur; } if (e.e > cur) cur = e.e; });
+      if (gap >= 30 * 6e4) out.push({k: 'Окно для фокуса', big: durText(Math.min(gap, dEnd - gapAt) / 6e4), txt: `свободно с ${hm(gapAt)}`, sub: 'Самый длинный свободный кусок до конца дня'});
+    }
+    const last = live[live.length - 1];
+    if (last && last.e > now) out.push({k: 'Финишная прямая', big: hm(last.e), txt: 'закончится последняя встреча', sub: last.e.getHours() >= we ? 'Задержаться всё-таки придётся' : 'Дальше — свобода'});
+  } else {
+    const dl = live.filter(e => DAILY_RX.test(e.subject || '')), daily = dl.reduce((a, e) => a + mins(e), 0), wd = (we - ws) * 60;
+    if (daily) out.push({k: 'Дейлики и статусы', big: durText(daily), sub: 'Статус: всё под контролем',
+      txt: daily >= wd ? `это ${(daily / wd).toFixed(1).replace('.', ',')} рабочего дня` : `${dl.length} ${plural(dl.length, 'встреча', 'встречи', 'встреч')} про статус`});
+    const byDay = new Map(); live.forEach(e => { const k = e.s.toDateString(); byDay.set(k, (byDay.get(k) || 0) + 1); });
+    const [pk, pn] = [...byDay].sort((a, b) => b[1] - a[1])[0] || [];
+    if (pn >= 3) out.push({k: 'Самый плотный день', big: `${pn} ${plural(pn, 'встреча', 'встречи', 'встреч')}`,
+      txt: kind === 'week' ? DOW_IN[new Date(pk).getDay()] : new Date(pk).toLocaleDateString('ru-RU', {day: 'numeric', month: 'long'}), sub: 'Держитесь там'});
+    const org = live.filter(e => e.response_type === 'organizer').length;
+    if (n) out.push({k: 'Кто кого зовёт', big: `${org} из ${n}`, txt: 'встреч собрали вы', sub: org * 5 < n ? 'Остальные приходят к вам сами' : 'Вы — центр притяжения'});
+    const gift = inR.filter(isCancelled).reduce((a, e) => a + mins(e), 0);
+    if (gift) out.push({k: 'Подарок от отмен', big: durText(gift), txt: 'вернули вам отменённые встречи', sub: 'Лучшая встреча — та, что не случилась'});
+    const late = live.filter(e => e.s.getHours() >= we).length;
+    if (late) out.push({k: 'После работы', big: `${late} ${plural(late, 'раз', 'раза', 'раз')}`, txt: `звали на встречу после ${we}:00`, sub: 'Вечер — тоже рабочее время? Нет.'});
+    const short = live.filter(e => mins(e) <= 15 && !DAILY_RX.test(e.subject || '')).length;
+    if (short >= 2) out.push({k: 'Могло быть письмом', big: String(short), txt: plural(short, 'встреча на 15 минут и меньше', 'встречи на 15 минут и меньше', 'встреч на 15 минут и меньше'), sub: 'Письмо, кстати, тут рядом'});
+    const words = new Map(), STOP = new Set(['встреча', 'встречи', 'встречу', 'meeting']);
+    live.forEach(e => new Set((e.subject || '').toLowerCase().split(/[^а-яёa-z]+/)).forEach(w => { if (w.length > 3 && !STOP.has(w)) words.set(w, (words.get(w) || 0) + 1); }));
+    const [w, wn] = [...words].sort((a, b) => b[1] - a[1])[0] || [];
+    if (wn >= 3) out.push({k: 'Слово периода', big: `«${w}»`, txt: `${wn} ${plural(wn, 'раз', 'раза', 'раз')} в названиях встреч`, sub: 'Почти мантра'});
+  }
+  if (n >= 2) {
+    const online = live.filter(e => e._join).length, room = live.filter(e => (e.attendees || []).some(a => a.type === 'resource')).length;
+    if (online) out.push({k: 'Где встречаетесь', big: `${Math.round(online / n * 100)}%`, txt: 'встреч по ссылке', sub: room ? `${room} — в переговорке` : 'В переговорках не замечены'});
+  }
+  if (day) {
+    const pend = list.filter(e => e.response_type === 'not_responded' && e.s > now && !isCancelled(e)).length;
+    if (pend) out.push({k: 'Ждут ответа', big: String(pend), txt: plural(pend, 'приглашение ждёт вашего «да»', 'приглашения ждут вашего «да»', 'приглашений ждут вашего «да»'), sub: 'Или «нет» — тоже ответ'});
+  }
+  return out;
+}
+const statsIdx = {day: 0, past: 0};
+let statsCache = {key: '', at: 0, list: [], mine: new Set()};
+async function loadStats() {
+  const box = $('#calstats'), on = prefs.cal_stats !== false, btn = $('#calstatsbtn');
+  if (btn) { btn.setAttribute('aria-pressed', String(on)); btn.classList.toggle('on', on); }
+  if (!box) return;
+  box.hidden = !on; if (!on) return;
+  const key = calKey();
+  // Last month + two weeks ahead (pending invitations); answered from the app's calendar cache.
+  if (statsCache.key !== key || Date.now() - statsCache.at > 10 * 6e4) {
+    const t = startOfDay(new Date()), from = new Date(t), to = new Date(t);
+    from.setDate(from.getDate() - 31); to.setDate(to.getDate() + 15);
+    const ids = key === 'both' ? ['main', 'seller'] : [key];
+    const rs = await Promise.allSettled(ids.map(id => api('events', {action: 'list', start: isoDay(from), end: isoDay(to)}, id)));
+    const lists = rs.map((r, i) => r.status === 'fulfilled' ? (r.value.items || []).map(normEv(ids[i])) : []);
+    const list = key === 'both' ? mergeAccts(lists) : lists[0];
+    statsCache = {key, at: Date.now(), list, mine: new Set(ids.flatMap(id => [...myAddrs(id, list)]))};
+    if (key !== calKey()) return;
+  }
+  paintStats();
+}
+function paintStats() {
+  const box = $('#calstats'); if (!box || box.hidden) return;
+  const now = new Date(), t0 = startOfDay(now), t1 = new Date(t0.getTime() + 864e5);
+  const range = prefs.cal_stats_range === 'month' ? 'month' : 'week';
+  let p0, p1;
+  if (range === 'week') { p1 = mondayOf(now); p0 = new Date(p1); p0.setDate(p0.getDate() - 7); }
+  else { p1 = t0; p0 = new Date(t0); p0.setDate(p0.getDate() - 30); }
+  const {list, mine} = statsCache;
+  const sets = {day: calFacts(list, 'day', t0, t1, now, mine), past: calFacts(list, range, p0, p1, now, mine)};
+  const card = (id, title, extra) => {
+    const fs = sets[id], i = ((statsIdx[id] % fs.length) + fs.length) % fs.length, f = fs[i];
+    return `<section class="aas-stat aas-stat--${id}" data-st="${id}" aria-label="${title}">
+      <div class="aas-stat__head"><span class="aas-stat__title">${title}</span>${extra}<span class="aas-stat__nav">
+        <button type="button" data-sd="-1" aria-label="Предыдущий факт">‹</button><button type="button" data-sd="1" aria-label="Следующий факт">›</button></span></div>
+      <div class="aas-stat__body" aria-live="polite"><div class="aas-stat__k">${esc(f.k)}</div><div class="aas-stat__big">${esc(f.big)}</div>
+        <div class="aas-stat__txt">${esc(f.txt)}</div>${f.sub ? `<div class="aas-stat__sub">${esc(f.sub)}</div>` : ''}</div>
+      ${fs.length > 1 ? `<div class="aas-stat__dots" aria-hidden="true">${fs.map((_, j) => `<span class="${j === i ? 'on' : ''}"></span>`).join('')}</div>` : ''}</section>`;
+  };
+  box.innerHTML = card('day', 'Сегодня', '') +
+    card('past', range === 'week' ? 'Прошлая неделя' : 'Последние 30 дней', `<span class="aas-stat__range">${[['week', 'Неделя'], ['month', 'Месяц']].map(([v, t]) =>
+      `<button type="button" data-range="${v}" aria-pressed="${v === range}" class="${v === range ? 'on' : ''}">${t}</button>`).join('')}</span>`) +
+    `<button type="button" class="aas-calstats__x" data-stoff title="Скрыть итоги (вернуть — кнопкой «Итоги» над календарём)" aria-label="Скрыть итоги">${icon('x', 14)}</button>`;
+}
+$('#calstats').onclick = e => {
+  if (e.target.closest('[data-stoff]')) return setStats(false);
+  const r = e.target.closest('[data-range]');
+  if (r) { statsIdx.past = 0; savePrefs({cal_stats_range: r.dataset.range}); return paintStats(); }
+  const card = e.target.closest('[data-st]'); if (!card || e.target.closest('.aas-stat__range')) return;
+  statsIdx[card.dataset.st] += +(e.target.closest('[data-sd]')?.dataset.sd || 1);
+  paintStats();
+  $(`#calstats [data-st="${card.dataset.st}"] [data-sd="${e.target.closest('[data-sd]')?.dataset.sd || 1}"]`)?.focus();
+};
+async function setStats(on) { await savePrefs({cal_stats: on}); loadStats().catch(() => {}); }
+$('#calstatsbtn').onclick = () => setStats(prefs.cal_stats === false);
 
 /* ---------- unified view: month + day agenda beside the mail ---------- */
 let railMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1), railDay = startOfDay(new Date());

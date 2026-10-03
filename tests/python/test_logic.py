@@ -61,6 +61,10 @@ class PrefsTest(unittest.TestCase):
         self.assertEqual(out["cal_new_acct"], "last")
         self.assertEqual(out["cal_last_acct"], "main")  # «last» is a choice, not a mailbox
         self.assertEqual(webapp.update_prefs({"cal_new_acct": "other"})["cal_new_acct"], "last")
+        out = webapp.update_prefs({"cal_stats": False, "cal_stats_range": "year"})
+        self.assertIs(out["cal_stats"], False)
+        self.assertEqual(out["cal_stats_range"], "week")
+        self.assertEqual(webapp.update_prefs({"cal_stats_range": "month"})["cal_stats_range"], "month")
 
     def test_scheduler_prefs(self):
         out = webapp.update_prefs({"rooms": [{"name": "Байкал", "address": "baikal@x.ru"}, {"name": "x", "address": "nope"}, 5],

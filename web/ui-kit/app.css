@@ -2016,3 +2016,47 @@ body.unified .aas-rail {
 .aas-calacc__dot { width: 8px; height: 8px; border-radius: 2px; background: var(--acc-dot); }
 #calboth.on { background: var(--aas-accent-bg); color: var(--aas-accent-text); border-color: var(--aas-accent); }
 .aas-evacct button.on.aas-acct--main, .aas-evacct button.on.aas-acct--seller { background: var(--acc); color: var(--acc-fg); }
+
+/* Fun facts under the calendar grid: «Сегодня» (calm) and the last week / month (in the
+   mailbox colour, Wrapped-style). Each card flips through its facts. */
+.aas-calstats {
+  flex: none; position: relative; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px; padding: 10px 44px 12px 16px; border-top: 1px solid var(--aas-line); background: var(--aas-panel-2);
+}
+.aas-calstats[hidden] { display: none; }
+.aas-stat {
+  position: relative; overflow: hidden; display: flex; flex-direction: column; min-height: 118px;
+  padding: 10px 14px; border-radius: var(--aas-r-md); border: 1px solid var(--aas-line); background: var(--aas-panel); cursor: pointer;
+}
+.aas-stat--past { background: var(--aas-accent); border-color: var(--aas-accent); color: var(--aas-on-accent); }
+.aas-stat--past::after {
+  content: ""; position: absolute; right: -36px; top: -36px; width: 130px; height: 130px;
+  border-radius: 50%; background: rgb(255 255 255 / 9%); pointer-events: none;
+}
+.aas-stat__head { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; opacity: .75; }
+.aas-stat__title { flex: 1; }
+.aas-stat__nav { display: flex; gap: 2px; position: relative; z-index: 1; }
+.aas-stat__nav button, .aas-stat__range button {
+  border: 0; background: none; color: inherit; font: inherit; cursor: pointer; padding: 0 6px; border-radius: 4px; line-height: 18px;
+}
+.aas-stat__nav button { font-size: 15px; }
+.aas-stat__nav button:hover, .aas-stat__range button:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
+.aas-stat__range { display: inline-flex; gap: 2px; position: relative; z-index: 1; text-transform: none; letter-spacing: 0; }
+.aas-stat__range button.on { background: color-mix(in srgb, currentColor 20%, transparent); }
+.aas-stat__body { flex: 1; animation: aas-stat-in .35s var(--aas-ease); }
+.aas-stat__k { margin-top: 6px; font-size: 12px; opacity: .8; }
+.aas-stat__big { font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.aas-stat--past .aas-stat__big { font-size: 30px; }
+.aas-stat__txt { font-size: 13px; }
+.aas-stat__sub { font-size: 12px; opacity: .72; margin-top: 2px; }
+.aas-stat__dots { display: flex; gap: 4px; justify-content: center; margin-top: 8px; }
+.aas-stat__dots span { width: 5px; height: 5px; border-radius: 3px; background: currentColor; opacity: .25; transition: width var(--aas-dur) var(--aas-ease); }
+.aas-stat__dots span.on { width: 14px; opacity: .8; }
+.aas-calstats__x {
+  position: absolute; top: 10px; right: 12px; border: 0; background: none; color: var(--aas-muted);
+  cursor: pointer; padding: 4px; border-radius: 6px; display: grid;
+}
+.aas-calstats__x:hover { color: var(--aas-text); background: var(--aas-panel); }
+#calstatsbtn.on { background: var(--aas-accent-bg); color: var(--aas-accent-text); border-color: var(--aas-accent); }
+@keyframes aas-stat-in { from { opacity: 0; transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) { .aas-stat__body { animation: none; } }

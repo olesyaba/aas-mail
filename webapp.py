@@ -2651,6 +2651,9 @@ DEFAULT_PREFS = {
     "cal_both": False,
     "cal_new_acct": "main",
     "cal_last_acct": "main",
+    # Fun facts under the calendar grid (today + last week / 30 days), and that period.
+    "cal_stats": True,
+    "cal_stats_range": "week",
 }
 MAIL_SORTS = ("date_desc", "date_asc", "from", "subject")
 _prefs_lock = threading.Lock()
@@ -2721,6 +2724,8 @@ def update_prefs(patch: dict) -> dict:
             if k in ("mail_sort", "mail_sort_seller") and v not in MAIL_SORTS:
                 continue
             if k == "update_mode" and v not in ("auto", "manual"):
+                continue
+            if k == "cal_stats_range" and v not in ("week", "month"):
                 continue
             if k in ("cal_new_acct", "cal_last_acct") and v not in ("main", "seller", "last")[:3 if k == "cal_new_acct" else 2]:
                 continue

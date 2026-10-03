@@ -1,0 +1,211 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Забавная статистика</title>
+<link rel="stylesheet" href="../ui-kit/fonts.css">
+<link rel="stylesheet" href="../ui-kit/tokens.css">
+<style>
+body{margin:0;background:var(--aas-bg);color:var(--aas-text);font:14px/1.4 var(--aas-font)}
+.wrap{max-width:1300px;margin:0 auto;padding:24px 16px 60px}
+h1{margin:0 0 4px;font-size:22px} .lead{margin:0 0 20px;color:var(--aas-muted);max-width:80ch}
+.rails{display:grid;grid-template-columns:repeat(auto-fill,288px);gap:20px;justify-content:start}
+.variant h2{font-size:14px;margin:0 0 2px} .variant p{margin:0 0 10px;font-size:12px;color:var(--aas-muted);min-height:34px}
+.rail{width:288px;height:560px;display:flex;flex-direction:column;background:var(--aas-panel-2);border:1px solid var(--aas-line);border-radius:var(--aas-r-lg);overflow:hidden}
+.ag{padding:12px 14px;flex:1;overflow:hidden}
+.ag h3{margin:0 0 8px;font-size:13px}
+.mt{display:flex;gap:8px;padding:6px 0;font-size:12px;border-bottom:1px solid var(--aas-line)}
+.mt i{font-style:normal;color:var(--aas-muted);width:40px;flex:none}
+.slot{flex:none;margin:0 10px 10px}
+/* shared card */
+.st{border:1px solid var(--aas-line);border-radius:var(--aas-r-md);background:var(--aas-panel);padding:12px 14px;position:relative}
+.k{font-size:11px;color:var(--aas-muted);display:flex;justify-content:space-between;align-items:center}
+.big{font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.1;margin:6px 0 2px;font-variant-numeric:tabular-nums}
+.txt{font-size:13px;line-height:1.35}
+.sub{font-size:12px;color:var(--aas-muted);margin-top:4px}
+.nav{display:flex;gap:4px}
+.nav button{border:0;background:none;color:var(--aas-muted);cursor:pointer;font:inherit;padding:0 4px;border-radius:4px}
+.nav button:hover{color:var(--aas-text);background:var(--aas-panel-2)}
+.dots{display:flex;gap:4px;justify-content:center;margin-top:10px}
+.dots span{width:5px;height:5px;border-radius:50%;background:var(--aas-line-strong)}
+.dots span.on{background:var(--aas-accent);width:14px;border-radius:3px}
+.fade{animation:fd .35s var(--aas-ease)}
+@keyframes fd{from{opacity:0;transform:translateY(4px)}}
+@media (prefers-reduced-motion:reduce){.fade{animation:none}}
+/* B: tiles */
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{border:1px solid var(--aas-line);border-radius:var(--aas-r-md);background:var(--aas-panel);padding:8px 10px}
+.tile.w{grid-column:1/-1}
+.tile b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
+.tile span{font-size:11px;color:var(--aas-muted);line-height:1.25;display:block}
+.bar{display:flex;height:6px;border-radius:3px;overflow:hidden;margin:6px 0 4px}
+.bar i{display:block}
+.av{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--aas-accent-bg);color:var(--aas-accent-text);font-size:11px;font-weight:700;margin-right:8px;vertical-align:middle}
+/* C: wrapped */
+.wr{border-radius:var(--aas-r-md);padding:14px;color:#fff;background:var(--aas-accent);position:relative;overflow:hidden}
+.wr::after{content:"";position:absolute;right:-30px;top:-30px;width:120px;height:120px;border-radius:50%;background:rgb(255 255 255 / 10%)}
+.wr .k{color:rgb(255 255 255 / 75%)}
+.wr .big{font-size:34px}
+.wr .sub{color:rgb(255 255 255 / 80%)}
+.wr .nav button{color:rgb(255 255 255 / 80%)}
+.wr .nav button:hover{background:rgb(255 255 255 / 15%);color:#fff}
+.wr .dots span{background:rgb(255 255 255 / 35%)} .wr .dots span.on{background:#fff}
+/* D: ticker */
+.tk{display:flex;align-items:center;gap:8px;border-top:1px solid var(--aas-line);margin:0 -10px -10px;padding:10px 14px;font-size:12px;background:var(--aas-panel)}
+.tk .em{width:22px;height:22px;border-radius:6px;background:var(--aas-accent-bg);color:var(--aas-accent-text);display:grid;place-items:center;font-weight:700;font-size:11px;flex:none}
+.tk .t{flex:1;min-width:0}
+.facts{margin-top:40px}
+.facts h2{font-size:16px;margin:0 0 4px}
+table{border-collapse:collapse;width:100%;max-width:1100px;font-size:13px;margin-top:10px}
+td,th{text-align:left;padding:8px 10px;vertical-align:top}
+th{font-size:12px;color:var(--aas-muted);font-weight:600;border-bottom:1px solid var(--aas-line-strong)}
+tr+tr td{border-top:1px solid var(--aas-line)}
+td:first-child{white-space:nowrap;font-weight:600}
+td.live{color:var(--aas-text)} td.m{color:var(--aas-muted)}
+</style></head><body>
+<div class="wrap">
+  <h1>Забавная статистика календаря</h1>
+  <p class="lead">Прототип: карточка внизу мини-календаря у почты. Данные выдуманные, но каждый факт считается из встреч по-настоящему (код ниже переедет в приложение). Стрелки листают, клик по карточке даёт следующий факт.</p>
+  <div class="rails" id="rails"></div>
+  <div class="facts"><h2>Какие факты умеем (считаются из календаря)</h2>
+    <table id="facts"><tr><th>Факт</th><th>Как звучит на этих данных</th><th>Из чего считаем</th></tr></table></div>
+</div>
+<script>
+/* ---- mock month: organizer/attendees/subjects like a real Exchange calendar ---- */
+const ME = 'o.smirnova@alfabank.ru';
+const P = {ivan: 'Иван Петров', anna: 'Анна Ковалёва', maxim: 'Максим Орлов', elena: 'Елена Соколова', dmitry: 'Дмитрий Волков', kate: 'Екатерина Лебедева'};
+const TODAY = new Date(2026, 9, 2, 10, 48);
+const ev = [];
+let seed = 7; const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+for (let back = 0; back < 30; back++) {
+  const d = new Date(TODAY); d.setDate(d.getDate() - back); d.setHours(0, 0, 0, 0);
+  if (d.getDay() === 0 || d.getDay() === 6) continue;
+  const add = (h, m, dur, subject, who, org = 'ivan', extra = {}) => { const s = new Date(d); s.setHours(h, m); ev.push({s, e: new Date(s.getTime() + dur * 6e4), subject, who, org, ...extra}); };
+  add(10, 0, 15, 'Дейли', ['ivan', 'anna', 'maxim'], 'maxim', {rec: true});
+  if (d.getDay() === 1) add(11, 0, 60, 'Планирование спринта', ['ivan', 'maxim', 'elena', 'dmitry'], 'ivan', {rec: true});
+  if (d.getDay() === 3) add(16, 0, 30, '1:1 с руководителем', ['dmitry'], 'dmitry', {rec: true});
+  if (d.getDay() === 5) add(17, 0, 60, 'Статус по проекту', ['ivan', 'anna', 'kate'], 'kate', {rec: true});
+  if (rnd() < .6) add(12, 0, 60, 'Ревью дизайна', ['anna', 'kate'], 'anna', {room: 'Переговорная 4.12'});
+  if (rnd() < .5) add(14, 30, 90, 'Синк по релизу', ['ivan', 'anna'], ME, {online: true});
+  if (rnd() < .3) add(15, 30, 30, 'Созвон с партнёром', ['elena'], 'elena', {online: true, cancelled: rnd() < .4});
+  if (rnd() < .25) add(18, 30, 30, 'Быстрый вопрос', ['ivan'], 'ivan', {late: true});
+  if (rnd() < .15) add(9, 0, 30, 'Утренний синк', ['maxim'], 'maxim');
+}
+ev.forEach(e => { e.min = (e.e - e.s) / 6e4; if (rnd() < .12) e.pending = true; });
+const H = m => { const h = Math.floor(m / 60), mm = Math.round(m % 60); return h ? `${h} ч${mm ? ' ' + mm + ' мин' : ''}` : `${mm} мин`; };
+const plural = (n, a, b, c) => n % 10 === 1 && n % 100 !== 11 ? a : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? b : c;
+const weekStart = (() => { const d = new Date(TODAY); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d; })();
+const week = ev.filter(e => e.s >= weekStart && !e.cancelled), month = ev.filter(e => !e.cancelled);
+const DOW = ['воскресенье', 'понедельник', 'вторник', 'среду', 'четверг', 'пятницу', 'субботу'];
+const first = n => n.split(' ')[0];
+
+/* ---- the facts: each returns {k, big, txt, sub} or null when there's nothing fun to say ---- */
+const FACTS = {
+  buddy() {  // most shared meeting time this week
+    const t = {}; week.forEach(e => e.who.forEach(w => t[w] = (t[w] || 0) + e.min));
+    const [w, m] = Object.entries(t).sort((a, b) => b[1] - a[1])[0] || []; if (!w) return null;
+    return {k: 'Неразлучники недели', big: H(m), txt: `на встречах вместе: ${P[w]}`, sub: 'Не надоели ещё друг другу?', who: w};
+  },
+  daily() {
+    const m = month.filter(e => /дейли|daily|стендап|standup|статус/i.test(e.subject)).reduce((s, e) => s + e.min, 0);
+    return {k: 'Дейлики и статусы за месяц', big: H(m), txt: `это ${(m / 480).toFixed(1).replace('.', ',')} рабочего дня`, sub: m >= 360 ? 'За это время можно долететь до Сочи и обратно' : 'Коротко и по делу'};
+  },
+  share() {
+    const m = week.reduce((s, e) => s + e.min, 0), work = 5 * 9 * 60, pct = Math.round(m / work * 100);
+    return {k: 'Неделя во встречах', big: pct + '%', txt: `${H(m)} из 45 рабочих часов`, sub: pct > 50 ? 'Работа случается между созвонами' : 'Есть время и подумать', pct};
+  },
+  peak() {
+    const by = {}; week.forEach(e => { const k = e.s.getDay(); by[k] = (by[k] || 0) + 1; });
+    const [d, n] = Object.entries(by).sort((a, b) => b[1] - a[1])[0] || []; if (!d) return null;
+    return {k: 'Самый плотный день', big: `${n} ${plural(n, 'встреча', 'встречи', 'встреч')}`, txt: `в ${DOW[d]}`, sub: 'Держитесь там'};
+  },
+  chain() {  // longest back-to-back run (gaps under 5 min)
+    let best = 0, bestDay = null;
+    const days = {}; month.forEach(e => (days[e.s.toDateString()] ||= []).push(e));
+    Object.values(days).forEach(l => { l.sort((a, b) => a.s - b.s); let st = l[0].s, en = l[0].e;
+      l.slice(1).forEach(e => { if (e.s - en < 5 * 6e4) en = new Date(Math.max(en, e.e)); else { if (en - st > best) { best = en - st; bestDay = st; } st = e.s; en = e.e; } });
+      if (en - st > best) { best = en - st; bestDay = st; } });
+    return {k: 'Марафон без перерыва', big: H(best / 6e4), txt: `подряд, ${bestDay.toLocaleDateString('ru-RU', {day: 'numeric', month: 'long'})}`, sub: 'Вода и печенька заслужены'};
+  },
+  focus() {  // longest free stretch in working hours this week
+    let best = 0, at = null;
+    for (let i = 0; i < 5; i++) { const d0 = new Date(weekStart); d0.setDate(d0.getDate() + i); d0.setHours(9);
+      const d1 = new Date(d0); d1.setHours(18); let cur = d0;
+      week.filter(e => e.s.toDateString() === d0.toDateString()).sort((a, b) => a.s - b.s).concat([{s: d1, e: d1}]).forEach(e => {
+        if (e.s - cur > best) { best = e.s - cur; at = cur; } if (e.e > cur) cur = e.e; }); }
+    return {k: 'Окно для фокуса', big: H(best / 6e4), txt: `в ${DOW[at.getDay()]}, с ${at.getHours()}:${String(at.getMinutes()).padStart(2, '0')}`, sub: 'Самый длинный свободный кусок недели'};
+  },
+  mine() {
+    const n = month.filter(e => e.org === ME).length;
+    return {k: 'Кто кого зовёт', big: `${n} из ${month.length}`, txt: 'встреч за месяц собрали вы', sub: n < month.length / 5 ? 'Остальные приходят к вам сами' : 'Вы — центр притяжения'};
+  },
+  pending() {
+    const n = ev.filter(e => e.pending && e.s > TODAY).length; if (!n) return null;
+    return {k: 'Ждут ответа', big: String(n), txt: plural(n, 'приглашение ждёт вашего «да»', 'приглашения ждут вашего «да»', 'приглашений ждут вашего «да»'), sub: 'Или «нет» — тоже ответ', act: 'Показать'};
+  },
+  gift() {
+    const m = ev.filter(e => e.cancelled).reduce((s, e) => s + e.min, 0); if (!m) return null;
+    return {k: 'Подарок от отмен', big: H(m), txt: 'вернули вам отменённые встречи', sub: 'Лучшая встреча — та, что не случилась'};
+  },
+  late() {
+    const n = month.filter(e => e.s.getHours() >= 18).length; if (!n) return null;
+    return {k: 'После шести', big: `${n} ${plural(n, 'раз', 'раза', 'раз')}`, txt: 'за месяц вас звали на встречу вечером', sub: 'Чаще всего — «Быстрый вопрос»'};
+  },
+  online() {
+    const on = month.filter(e => e.online).length, room = month.filter(e => e.room).length, all = month.length;
+    return {k: 'Где встречаетесь', big: Math.round(on / all * 100) + '%', txt: 'встреч по ссылке', sub: `${room} в переговорке, остальное — по привычке`, split: [on, room, all - on - room]};
+  },
+  word() {
+    const c = {}; month.forEach(e => e.subject.toLowerCase().split(/[^а-яёa-z]+/).filter(w => w.length > 3).forEach(w => c[w] = (c[w] || 0) + 1));
+    const [w, n] = Object.entries(c).sort((a, b) => b[1] - a[1])[0];
+    return {k: 'Слово месяца', big: '«' + w + '»', txt: `${n} ${plural(n, 'раз', 'раза', 'раз')} в названиях встреч`, sub: 'Почти как мантра'};
+  },
+  short() {
+    const n = month.filter(e => e.min <= 15 && !/дейли/i.test(e.subject)).length + month.filter(e => /быстрый вопрос/i.test(e.subject)).length;
+    return n ? {k: 'Могло быть письмом', big: String(n), txt: plural(n, 'короткая встреча «на минутку»', 'короткие встречи «на минутку»', 'коротких встреч «на минутку»'), sub: 'Письмо, кстати, тут рядом'} : null;
+  },
+};
+const facts = Object.entries(FACTS).map(([id, f]) => ({id, ...f()})).filter(f => f.big);
+
+/* ---- variants ---- */
+const agenda = `<div class="ag"><h3>Встречи · пт, 2 октября</h3>${[['10:00', 'Дейли'], ['12:00', 'Ревью дизайна'], ['14:30', 'Синк по релизу']].map(([t, s]) => `<div class="mt"><i>${t}</i>${s}</div>`).join('')}</div>`;
+const rail = (id, title, desc) => `<div class="variant"><h2>${title}</h2><p>${desc}</p><div class="rail">${agenda}<div class="slot" id="${id}"></div></div></div>`;
+document.getElementById('rails').innerHTML =
+  rail('vA', 'A. Один факт, листается', 'Спокойная карточка в стиле приложения. Новый факт при каждом открытии дня, стрелки и клик листают.') +
+  rail('vB', 'B. Мини-сводка недели', 'Три-четыре цифры разом. Больше пользы, меньше шуток.') +
+  rail('vC', 'C. «Итоги» как в Wrapped', 'Яркая карточка в цвет ящика с одной большой цифрой. Для пятницы или конца месяца.') +
+  rail('vD', 'D. Строка-подсказка', 'Самое скромное: одна строка внизу, меняется раз в несколько минут.');
+
+function card(f, i, cls = 'st') {
+  return `<div class="${cls} fade" data-i="${i}"><div class="k">${f.k}<span class="nav"><button data-d="-1" aria-label="Предыдущий факт">‹</button><button data-d="1" aria-label="Следующий факт">›</button></span></div>
+    <div class="big">${f.big}</div><div class="txt">${f.txt}</div><div class="sub">${f.sub}</div>
+    <div class="dots">${facts.map((_, j) => `<span class="${j === i ? 'on' : ''}"></span>`).join('')}</div></div>`;
+}
+function carousel(id, cls) {
+  const box = document.getElementById(id); let i = 0;
+  const show = () => { box.innerHTML = card(facts[i], i, cls); };
+  box.onclick = e => { const d = +(e.target.closest('[data-d]')?.dataset.d || 1); i = (i + d + facts.length) % facts.length; show(); };
+  show();
+}
+carousel('vA', 'st');
+carousel('vC', 'wr');
+{ // B: tiles
+  const g = id => facts.find(f => f.id === id);
+  const sh = g('share'), b = g('buddy'), d = g('daily'), on = g('online');
+  document.getElementById('vB').innerHTML = `<div class="tiles">
+    <div class="tile w"><span>Неделя во встречах</span><b>${sh.big} <small style="font-size:12px;font-weight:400;color:var(--aas-muted)">${sh.txt}</small></b>
+      <div class="bar"><i style="width:${sh.pct}%;background:var(--aas-accent)"></i><i style="flex:1;background:var(--aas-line)"></i></div></div>
+    <div class="tile w"><span class="av">${P[b.who].split(' ').map(x => x[0]).join('')}</span><b style="display:inline;font-size:14px">${first(P[b.who])}: ${b.big}</b><span style="margin-top:4px">чаще всех рядом с вами на этой неделе</span></div>
+    <div class="tile"><b>${d.big}</b><span>дейликов и статусов за месяц</span></div>
+    <div class="tile"><b>${on.big}</b><span>встреч по ссылке</span></div></div>`;
+}
+{ // D: ticker
+  const box = document.getElementById('vD'); let i = 0;
+  const show = () => { const f = facts[i]; box.innerHTML = `<div class="tk fade"><span class="em">${f.big.length <= 3 ? f.big : 'i'}</span><span class="t"><b>${f.k}:</b> ${f.big} ${f.txt}</span></div>`; };
+  box.onclick = () => { i = (i + 1) % facts.length; show(); };
+  show(); setInterval(() => { i = (i + 1) % facts.length; show(); }, 6000);
+}
+/* ---- facts table ---- */
+const SRC = {buddy: 'участники встреч недели, суммарные минуты', daily: 'названия со словами дейли / daily / стендап / статус', share: 'сумма встреч / 45 ч рабочей недели', peak: 'число встреч по дням недели',
+  chain: 'встречи подряд с зазором меньше 5 минут', focus: 'самый длинный свободный отрезок 9–18', mine: 'организатор = я', pending: 'приглашения без ответа (response_type)', gift: 'отменённые встречи',
+  late: 'начало после 18:00', online: 'ссылка на встречу / переговорка в месте', word: 'частое слово в темах', short: 'встречи до 15 минут'};
+document.getElementById('facts').insertAdjacentHTML('beforeend', facts.map(f => `<tr><td>${f.k}</td><td class="live">${f.big} ${f.txt}. <span class="m">${f.sub}</span></td><td class="m">${SRC[f.id]}</td></tr>`).join(''));
+</script>
+</body></html>

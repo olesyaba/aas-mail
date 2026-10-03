@@ -934,3 +934,26 @@ test('mergeAccts: one card for a meeting in both mailboxes, clashes only across 
   assert.equal(by['daily:main']._clash, false);        // zero-length, touches nothing
   assert.equal(by['x:main']._clash, false);            // the other one is «free»
 });
+
+test('calFacts: today and a past week, never counting me as my own buddy', () => {
+  const {calFacts} = load(['calFacts'], {prefs: {work_start: 9, work_end: 18}});
+  const me = {name: 'Я', address: 'me@x.ru'}, ivan = {name: 'Иван Петров', address: 'ivan@x.ru'};
+  const ev = (day, h0, h1, subject, extra = {}) => ({s: new Date(`2026-10-${day}T${h0}:00`), e: new Date(`2026-10-${day}T${h1}:00`),
+    subject, organizer: me, attendees: [me, ivan], response_type: 'organizer', ...extra});
+  const list = [ev('02', '10:00', '10:15', 'Дейли'), ev('02', '10:15', '12:00', 'Планирование'), ev('02', '15:00', '16:00', 'Синк'),
+    ev('02', '17:00', '17:30', 'Отменено: созвон', {meeting_status: 'cancelled'}),
+    ev('05', '11:00', '12:00', 'Новое', {response_type: 'not_responded'})];
+  const t0 = new Date('2026-10-02T00:00'), t1 = new Date('2026-10-03T00:00'), now = new Date('2026-10-02T09:30');
+  const day = plain(calFacts(list, 'day', t0, t1, now, new Set(['me@x.ru'])));
+  const k = id => day.find(f => f.k === id);
+  assert.equal(day[0].big, '3 встречи');
+  assert.equal(k('Сегодня чаще всех').txt, 'вместе на встречах: Иван Петров');
+  assert.equal(k('Марафон без перерыва').big, '2 ч');         // 10:00–12:00, no 5-minute break
+  assert.equal(k('Окно для фокуса').big, '3 ч');               // 12:00–15:00
+  assert.equal(k('Финишная прямая').big, '16:00');             // the cancelled 17:00 doesn't count
+  assert.equal(k('Ждут ответа').big, '1');
+  const past = plain(calFacts(list, 'week', new Date('2026-09-28T00:00'), new Date('2026-10-05T00:00'), now, new Set(['me@x.ru'])));
+  assert.equal(past.find(f => f.k === 'Дейлики и статусы').big, '15 мин');
+  assert.equal(past.find(f => f.k === 'Подарок от отмен').big, '30 мин');
+  assert.equal(plain(calFacts([], 'day', t0, t1, now))[0].big, 'Свободно');
+});
