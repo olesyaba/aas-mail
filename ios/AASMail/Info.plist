@@ -18,24 +18,16 @@
 	<!-- Meeting links open the right app when it is installed. -->
 	<key>LSApplicationQueriesSchemes</key>
 	<array><string>ktalk</string><string>msteams</string><string>zoommtg</string><string>zoomus</string></array>
-	<!-- The server log is reachable from «Файлы» → На iPad → AAS mail. -->
+	<!-- The server log is reachable from «Файлы» → На iPad / На iPhone → AAS mail. -->
 	<key>UIFileSharingEnabled</key><true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key><false/>
 	<key>UILaunchScreen</key><dict/>
+	<!-- Push: background delivery when a remote notification arrives. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
-	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
 </dict>
 </plist>

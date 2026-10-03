@@ -15,7 +15,8 @@ struct WebView: UIViewRepresentable {
         let web = WKWebView(frame: .zero, configuration: cfg)
         web.navigationDelegate = context.coordinator
         web.uiDelegate = context.coordinator
-        web.allowsBackForwardNavigationGestures = false
+        // iPhone: a swipe from the left edge is «back» — history.back() closes the open letter.
+        web.allowsBackForwardNavigationGestures = UIDevice.current.userInterfaceIdiom == .phone
         web.isInspectable = true
         context.coordinator.web = web
         web.load(Coordinator.pageRequest(PyServer.base))

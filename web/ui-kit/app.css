@@ -2060,3 +2060,56 @@ body.unified .aas-rail {
 #calstatsbtn.on { background: var(--aas-accent-bg); color: var(--aas-accent-text); border-color: var(--aas-accent); }
 @keyframes aas-stat-in { from { opacity: 0; transform: translateY(4px); } }
 @media (prefers-reduced-motion: reduce) { .aas-stat__body { animation: none; } }
+
+/* ═══ iPhone (and the Fold cover screen): native phone patterns ═════════════
+   «Почта | Календарь» moves to a bottom tab bar so the header fits 375px;
+   the letter gets a back chevron (iOS has no system back); dialogs become
+   full-screen sheets; inputs stay ≥16px so iOS does not zoom on focus. */
+.aas-rt-back { display: none; }
+body.one-pane .aas-rt-back { display: inline-flex; padding: 5px 8px; }
+@media (max-width: 599px) {
+  html { -webkit-text-size-adjust: 100%; }
+  :root { --aas-tabbar: 50px; }
+  #sect {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 35; display: flex; gap: 0;
+    height: calc(var(--aas-tabbar) + env(safe-area-inset-bottom)); padding: 0 0 env(safe-area-inset-bottom);
+    border: 0; border-top: 1px solid var(--aas-line); border-radius: 0; background: var(--aas-panel);
+  }
+  #sect button { flex: 1; border-radius: 0; background: none; color: var(--aas-muted); font-weight: 600; }
+  #sect button.on { color: var(--aas-accent-text, var(--aas-accent)); box-shadow: inset 0 2px 0 var(--aas-accent); }
+  main { margin-bottom: var(--aas-tabbar); }
+  body.reading #sect { display: none; }
+  body.reading main { margin-bottom: 0; }
+  #newbtn { bottom: calc(16px + var(--aas-tabbar) + env(safe-area-inset-bottom)); }
+  #search:focus, #search:not(:placeholder-shown) { flex-basis: 150px; width: 150px; }
+  /* Calendar: «+» sits in the header — a floating one would cover the «Итоги» cards. */
+  body:has(#cal.on) #newbtn { position: static; width: 44px; height: 44px; box-shadow: none; }
+
+  /* Calendar: the title on its own line, the controls in one row that scrolls
+     sideways; the day/week switch is gone — a phone always shows one day. */
+  #calbar { flex-wrap: wrap; padding: 6px 10px; gap: 6px; }
+  #calbar h2 { order: -1; flex: 1 0 100%; margin: 0; font-size: 15px; }
+  #calbar .aas-spacer, #calmode { display: none; }
+  #calbar .aas-btn--sm { white-space: nowrap; }
+  .aas-calstats {
+    display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
+    padding: 8px 40px 8px 10px; gap: 8px;
+  }
+  .aas-calstats::-webkit-scrollbar { display: none; }
+  .aas-calstats > .aas-stat { flex: 0 0 86%; scroll-snap-align: start; min-height: 0; }
+  .aas-calstats__x { top: 6px; right: 6px; }
+
+  /* Settings tabs: one row that scrolls sideways instead of squeezing the labels. */
+  .aas-settings-tabs { overflow-x: auto; scrollbar-width: none; }
+  .aas-settings-tabs::-webkit-scrollbar { display: none; }
+  .aas-settings-tabs .aas-btn { flex: none; white-space: nowrap; }
+  /* Dialogs: a full-screen sheet instead of a floating box. */
+  #ov { padding: 0; }
+  #modal.aas-modal, #modal {
+    width: 100%; max-width: none; height: 100%; max-height: none; border-radius: 0; box-shadow: none;
+    padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+  }
+}
+@media (max-width: 599px) and (pointer: coarse) {
+  input, select, textarea, [contenteditable] { font-size: 16px; }
+}

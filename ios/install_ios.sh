@@ -7,7 +7,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 : "${AAS_IOS_TEAM:?set AAS_IOS_TEAM to the team id}"
-APP="ios/build/Build/Products/Release-iphoneos/AASMail.app"
 VER="$(python3 -c "import re;print(re.search(r'\"version\": \"([^\"]+)', open('webapp.py').read())[1])")"
 
 JSON="$(mktemp)"; trap 'rm -f "$JSON"' EXIT
@@ -19,16 +18,17 @@ for d in json.load(open(sys.argv[1]))["result"]["devices"]:
     # reality is empty for a phone seen over Wi-Fi: anything that is not a simulator.
     if hw.get("reality") != "simulated" and conn.get("pairingState") == "paired" \
             and d.get("deviceProperties", {}).get("bootState") == "booted":
-        print(hw["udid"], d["deviceProperties"].get("name", "?"), sep="\t")
+        print(hw["udid"], d["deviceProperties"].get("name", "?"), "AASMailPad" if hw.get("deviceType") == "iPad" else "AASMailPhone", sep="\t")
 EOF
 )"
 [ -n "$UDIDS" ] || { echo "Нет подключённых iPhone/iPad: подключите кабелем, разблокируйте, «Доверять»"; exit 1; }
 
-bash ios/build_ios.sh device >/dev/null   # stage + project once
-while IFS=$'\t' read -r UDID NAME; do
-  echo "==> $NAME ($UDID)"
+bash ios/build_ios.sh device both >/dev/null   # stage + project once
+while IFS=$'\t' read -r UDID NAME T; do
+  APP="ios/build/Build/Products/Release-iphoneos/$T.app"
+  echo "==> $NAME ($UDID): $T"
   # A build for this very device registers it in the profile (free team: Xcode does it).
-  if ! xcodebuild -quiet -project ios/AASMail.xcodeproj -scheme AASMail -configuration Release \
+  if ! xcodebuild -quiet -project ios/AASMail.xcodeproj -scheme "$T" -configuration Release \
       -destination "id=$UDID" -destination-timeout 30 -derivedDataPath ios/build -allowProvisioningUpdates \
       DEVELOPMENT_TEAM="$AAS_IOS_TEAM" MARKETING_VERSION="$VER" build 2>&1 | grep -E "error:|Developer Mode" | grep -v IDERunDestination; then :; fi
   if OUT="$(xcrun devicectl device install app --device "$UDID" "$APP" 2>&1)"; then echo "    установлено"
