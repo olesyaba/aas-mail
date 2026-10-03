@@ -22,6 +22,8 @@
 	<key>UIFileSharingEnabled</key><true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key><false/>
 	<key>UILaunchScreen</key><dict/>
+	<!-- Only standard HTTPS/TLS: TestFlight does not ask about export compliance. -->
+	<key>ITSAppUsesNonExemptEncryption</key><false/>
 	<!-- Push: background delivery when a remote notification arrives. -->
 	<key>UIBackgroundModes</key>
 	<array>
