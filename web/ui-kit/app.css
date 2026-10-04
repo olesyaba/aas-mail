@@ -2120,3 +2120,7 @@ body.one-pane .aas-rt-back { display: inline-flex; padding: 5px 8px; }
 @media (max-width: 599px) and (pointer: coarse) {
   input, select, textarea, [contenteditable] { font-size: 16px; }
 }
+
+/* Settings → Аккаунты: a failed login stays on screen beside the fields it is about. */
+.aas-acct-err { margin: 4px 0 8px; color: var(--aas-danger); font-size: var(--aas-t-sm); }
+.aas-card input[aria-invalid="true"] { border-color: var(--aas-danger); }

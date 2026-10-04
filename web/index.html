@@ -3340,23 +3340,33 @@ $('#setbtn').onclick = async () => {
   };
   $('#smailsound')?.addEventListener('change', playMailSound);
   $('#smailsound_preview')?.addEventListener('click', playMailSound);
+  // A wrong login keeps the dialog open with what was typed; an account saved
+  // meanwhile still needs the reload once the dialog closes.
+  let reloadOnClose = false;
   $('#scancel').onclick = closeModal;
   $('#ssave').onclick = guard(async () => {
     const threadsBefore = prefs.threads;
     const jobs = [];
+    document.querySelectorAll('#modal .aas-acct-err').forEach(e => e.remove());
+    document.querySelectorAll('#modal [aria-invalid]').forEach(e => e.removeAttribute('aria-invalid'));
     const mVals = {url: $('#m_url').value.trim(), username: $('#m_user').value.trim(), email: $('#m_email').value.trim(), password: $('#m_pass').value};
     if (mVals.url !== acctCfg.main.url || mVals.username !== acctCfg.main.username || mVals.email !== acctCfg.main.email || mVals.password)
-      jobs.push(api('account-config', {action: 'save', target: 'main', ...mVals}).then(r => ({acct: 'Alfa-Bank', r})));
+      jobs.push(api('account-config', {action: 'save', target: 'main', ...mVals}).catch(e => { e.p = 'm'; throw e; }).then(r => ({p: 'm', target: 'main', vals: mVals, acct: 'Alfa-Bank', r})));
     const sVals = {name: $('#s_name').value.trim(), url: $('#s_url').value.trim(), username: $('#s_user').value.trim(), email: $('#s_email').value.trim(), password: $('#s_pass').value};
     if (sVals.url && sVals.username && sVals.email &&
         (sVals.name !== (sellerBefore.name || 'Alfa-Seller') || sVals.url !== sellerBefore.url || sVals.username !== sellerBefore.username || sVals.email !== sellerBefore.email || sVals.password))
-      jobs.push(api('account-config', {action: 'save', target: 'seller', ...sVals}).then(r => ({acct: sVals.name || 'Alfa-Seller', r})));
-    let accountsChanged = false; const authIssues = [];
-    if (jobs.length) {
-      for (const res of await Promise.allSettled(jobs)) {
-        if (res.status === 'fulfilled') { accountsChanged = true; if (!res.value.r.login_ok) authIssues.push(`${res.value.acct}: ${res.value.r.message}`); }
-        else toast('Не удалось сохранить аккаунт: ' + (res.reason?.message || 'ошибка'), true);
-      }
+      jobs.push(api('account-config', {action: 'save', target: 'seller', ...sVals}).catch(e => { e.p = 's'; throw e; }).then(r => ({p: 's', target: 'seller', vals: sVals, acct: sVals.name || 'Alfa-Seller', r})));
+    let accountsChanged = false; const problems = [];
+    // Bad request (empty field) and a failed login both land beside the account's fields.
+    const settled = await Promise.allSettled(jobs.map(j => j.catch(e => ({p: e.p, err: e.message}))));
+    for (const {value: v} of settled) {
+      if (v.err !== undefined && !v.r) { problems.push({p: v.p, msg: 'Не удалось сохранить: ' + (v.err || 'ошибка')}); continue; }
+      accountsChanged = true;
+      if (!v.r.login_ok) { problems.push({p: v.p, msg: 'Не удалось войти: ' + (v.r.message || 'проверьте логин и пароль')}); continue; }
+      // Saved and logged in: this account is the new baseline, its password field empties.
+      if (v.target === 'main') Object.assign(acctCfg.main, {url: v.vals.url, username: v.vals.username, email: v.vals.email});
+      else Object.assign(sellerBefore, {name: v.vals.name, url: v.vals.url, username: v.vals.username, email: v.vals.email});
+      const pw = $('#' + v.p + '_pass'); if (pw) { pw.value = ''; pw.placeholder = 'не менять'; }
     }
     await savePrefs({signature: $('#ssig')?.value ?? prefs.signature, signature2: $('#ssig2') ? $('#ssig2').value : prefs.signature2,
       sig_replies: $('#ssigr') ? $('#ssigr').checked : prefs.sig_replies, threads: $('#sthr') ? $('#sthr').checked : prefs.threads,
@@ -3371,10 +3381,25 @@ $('#setbtn').onclick = async () => {
     const thrChanged = $('#sthr') && threadsBefore !== prefs.threads;
     if (allItems.length) renderList(!!nextCursor);
     if (thrChanged && curGroup) { curKey = null; showReaderEmpty(); }
-    calMode = prefs.cal_view; armAutoSync(); syncNativePrefs(); if (view === 'cal') loadCal(); closeModal();
-    if (accountsChanged) {
-      toast(authIssues.length ? 'Сохранено. Проблема входа — ' + authIssues.join('; ') : 'Настройки сохранены, переподключение…', authIssues.length > 0);
-      setTimeout(() => location.reload(), authIssues.length ? 4000 : 800);
+    calMode = prefs.cal_view; armAutoSync(); syncNativePrefs(); if (view === 'cal') loadCal();
+    if (problems.length) {
+      // Keep the dialog and everything typed: show the error on the account, open its tab, focus the password.
+      if (accountsChanged && !reloadOnClose) { reloadOnClose = true; onModalClose = () => location.reload(); }
+      for (const {p, msg} of problems) {
+        const card = $('#' + p + '_user')?.closest('.aas-card'); if (!card) continue;
+        card.querySelector('.aas-acct-title').insertAdjacentHTML('afterend', `<div class="aas-acct-err" role="alert">${esc(msg)}</div>`);
+        card.querySelector('.aas-acct-title .aas-pill')?.replaceWith(Object.assign(document.createElement('span'), {className: 'aas-pill aas-pill--danger', textContent: 'ошибка входа'}));
+        ['_user', '_pass'].forEach(f => $('#' + p + f)?.setAttribute('aria-invalid', 'true'));
+      }
+      document.querySelector('[data-sp="acct"]')?.click();
+      const pw = $('#' + problems[0].p + '_pass'); pw?.scrollIntoView({block: 'center'}); pw?.focus();
+      toast(problems.length > 1 ? 'Проверьте данные аккаунтов' : 'Проверьте логин и пароль', true);
+      return;
+    }
+    onModalClose = null; closeModal();
+    if (accountsChanged || reloadOnClose) {
+      toast('Настройки сохранены, переподключение…');
+      setTimeout(() => location.reload(), 800);
     } else toast('Настройки сохранены');
   });
 };
