@@ -3,13 +3,12 @@
 #   curl -fsSL https://raw.githubusercontent.com/olesyaba/aas-mail/main/install.sh | bash
 #   ./install.sh            — or from a clone of the repo
 # Needs only access to github.com (the repo is public). Later updates come from the app itself
-# (Настройки → Обновления: автоматически или по запросу).
+# (Настройки → О приложении: автоматически или по запросу).
 set -euo pipefail
 REPO="olesyaba/aas-mail"
 DEST="$HOME/Applications"
 APP="$DEST/AAS mail.app"
 
-[ "$(uname -m)" = "arm64" ] || { echo "AAS mail работает только на Mac с Apple Silicon (M1 и новее)."; exit 1; }
 
 # The repo is public: the latest release is fetched over plain HTTPS, no GitHub login.
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
@@ -22,11 +21,12 @@ curl -fL --retry 3 --progress-bar -o "$TMP/$ZIPNAME" "https://github.com/$REPO/r
   || { echo "Не удалось скачать $ZIPNAME с github.com."; exit 1; }
 # Check the archive against the SHA-256 GitHub publishes for it (when the API answers).
 # The release has several files (the Android APK comes first): take the digest of
-# this very archive — the one after its "name" in the asset list.
+# this very archive — the one after its "name" in the asset list. awk stops early, so tr
+# may die of SIGPIPE: «|| true» keeps pipefail from silently ending the install there.
 WANT="$(curl -fsS "https://api.github.com/repos/$REPO/releases/tags/$TAG" 2>/dev/null | tr ',{}' '\n\n\n' \
   | awk -v want="$ZIPNAME" '
       /^[[:space:]]*"name":/ { n=$0; sub(/^[^:]*: *"/, "", n); sub(/".*/, "", n) }
-      /^[[:space:]]*"digest": *"sha256:/ && n == want { d=$0; sub(/.*sha256:/, "", d); sub(/".*/, "", d); print d; exit }')"
+      /^[[:space:]]*"digest": *"sha256:/ && n == want { d=$0; sub(/.*sha256:/, "", d); sub(/".*/, "", d); print d; exit }' || true)"
 if [ -n "$WANT" ]; then
   GOT="$(shasum -a 256 "$TMP/$ZIPNAME" | cut -d' ' -f1)"
   [ "$GOT" = "$WANT" ] || { echo "Архив повреждён (контрольная сумма не совпала). Запустите install.sh ещё раз."; exit 1; }
